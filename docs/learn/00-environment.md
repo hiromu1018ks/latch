@@ -190,8 +190,8 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): **302件を約3秒**
-- integration テスト(実DB・実Redis・実サーバーでの組み合わせ試験): 72件を含め計 **374件を数秒**
+- unit テスト(部品単体の試験): **420件を約3秒**
+- integration テスト(実DB・実Redis・実サーバーでの組み合わせ試験): 82件を含め計 **502件を数秒**
 
 3秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
 「壊して試す」学習法(Lab 2)が気軽にできます。この速さ自体が、このプロジェクトの
@@ -234,7 +234,7 @@ latch/
 │   │   ├── core/          基盤部品(clock.py=時計, db.py=DB接続)
 │   │   ├── auth/          認証(トークン発行・検証・失効)
 │   │   ├── users/         ユーザー登録・本人参照のAPI(第4章)
-│   │   ├── intents/       自然文の構造化(Intent Parser)とparse API(第5章)
+│   │   ├── intents/       自然文の構造化(Intent Parser)・parse API・Intentの保存とCRUD(第5章・第6章)
 │   │   ├── llm/           AI(LLM)呼び出しの単一経路
 │   │   ├── geo/           地名⇔座標の変換(ジオコーディング)
 │   │   └── worker/        裏方プロセスの土台
@@ -255,7 +255,7 @@ latch/
 | `make ps` | 4サービスの状態一覧。`(healthy)` は健康診断合格の印 |
 | `make logs` | 4サービスのログを流し見る。Ctrl+Cで停止 |
 | `make lint` | コードの書式・静的検査(ruff)。コミット前に緑を確認 |
-| `make test` | unit テスト302件。約3秒。最もよく使う |
+| `make test` | unit テスト420件。約3秒。最もよく使う |
 | `make test-ci` | unit+integration。実DB・実Redisを使う |
 | `make migrate` | DB定義を最新版に更新(Alembic) |
 | `make geo-import` | 鹿児島の地物データをDBへ取り込み(数分) |
