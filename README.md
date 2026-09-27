@@ -20,6 +20,7 @@ LATCHは、ユーザーから「探す・募集する・誘う」という行動
 | [docs/09-verification-evaluation.md](docs/09-verification-evaluation.md) | 検証・評価計画書 | v0.3 | 5仮説×指標×判定基準、A/B設計、North Star測定定義 |
 | [docs/10-test-env-nfr.md](docs/10-test-env-nfr.md) | テスト環境・非機能検証計画書 | v0.2 | 試験環境、機能検証の実行計画、性能・縮退試験 |
 | [docs/11-release-plan.md](docs/11-release-plan.md) | リリース計画書 | v0.2 | フェーズ設計、密度要件、受け入れ手順、ロールバック基準 |
+| [docs/12-development-roadmap.md](docs/12-development-roadmap.md) | 開発ロードマップ | v0.1 | 実装工程(M0〜M4)、依存ハード制約、ゲート条件、並行トラック |
 
 レビュー記録(意思決定の経緯)は `docs/reviews/` にある。要件定義書v0.1単体レビューと、文書群全体の総括レビュー(final-review.md、FR-01〜51と対応記録)を含む。
 
