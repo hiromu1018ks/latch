@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **M1 ws-3(intents CRUD・draft→active・保存時検証)を実施中**。ws-4→ws-5が後続。T3草案(Parser/飲酒セット)をエージェントで並行作成中→ユーザー確認で確定
+- 次の着手: **M1 ws-4(レート制限)**。ws-5が後続。T3草案(docs/testassets/・5a28a0e)はユーザー確認待ち
 
 ## M0 作業単位
 
@@ -30,7 +30,7 @@
 |---|---|---|---|---|
 | ws-1 | users API: POST /v1/users(初回登録・birth_date必須・18歳未満422 UNDER_AGE)・GET /v1/users/me | M1-1 / 05 §5 | M0(usersスキーマ・認証) | 完了 |
 | ws-2 | Intent Parser(07 §2: 確定済みシステムプロンプト実装・アプリ層補完の単一規則・D-04連携ng_unverifiable→warnings)+ POST /v1/intents/parse(同期LLM・timeout 10秒・再試行なし・503 LLM_UNAVAILABLE/422 VALIDATION_ERROR切替 D-17) | M1-2, M1-3 / 07 §2・05 §5 | M0(LLM Gateway) | 完了 |
-| ws-3 | intents CRUD: POST(active/draft)・GET・PATCH・DELETE・pause/resume・draft→active遷移(全検証通過後に受理・初回MatchEvent発行)。ジオコーディング正転の保存組み込み・alcohol_involvedのサーバ側確定・時刻検証(過去不可・+7日上限・active時のみ) | M1-4, M1-5 / 05 §5〜§6 | ws-1・ws-2 | 未着手 |
+| ws-3 | intents CRUD: POST(active/draft)・GET・PATCH・DELETE・pause/resume・draft→active遷移(全検証通過後に受理・初回MatchEvent発行)。ジオコーディング正転の保存組み込み・alcohol_involvedのサーバ側確定・時刻検証(過去不可・+7日上限・active時のみ) | M1-4, M1-5 / 05 §5〜§6 | ws-1・ws-2 | 完了 |
 | ws-4 | レート制限: Active 5件・作成20件/日・更新6回/時・API 60req/分(Redis・JST日付キー) | M1-6 / 08 §5.4・04 §5 | ws-3・M0(Redis) | 未着手 |
 | ws-5 | フロントエンド(prototype準拠): parse連携・条件リストの動的連結・有効期限の既定選択計算+disabled化・必須3フィールド催促・判定不能NG条件のNG行・注意表示・保存API接続(active/draft。03 第10節の既知差分解消) | M1-7 / 03 §3・§10 | ws-2〜ws-4 | 未着手 |
 
@@ -94,6 +94,14 @@
   - **T3ゴールドセットは「エージェント草案→ユーザー確認で確定」方式**(G1精度ゲート入力=Parser入力セット30件+・飲酒判定セット30件+)
   - **location.name格納=structured_data(JSONB)へlocation_nameキー追加**を承認。05 §2「structured_data保持キー」への同キー追記は次回のdocs改版に含める(ユーザー承認済み・ws-3設計§6-1)
   - §6-2(G1 02#4の期限経過確認はexpiry_sweeperがM3-3のため、G1では保存時検証+Clock操作による期限切れ値保存での代替とするか)は**G1判定時にあらためてユーザー承認**とする
+
+- ws-3 / マージ f222416(設計 cdf313a・計画 0b44582・実装は934849fまで・13+3コミット)/ docs/plans/M1/ws-3-report.md / 2026-09-28
+  - スーパーバイザー独立検験(実HTTP test-ci)で2欠陥を発見しagent3に修正させた:
+    (1) store.pyの `:geo_lon::float8` をSQLAlchemy text()のbind param正規化が認識せずリテラル落ち→INSERT構文エラーで全保存系が503(unit 416緑でも検出不能。CAST(:x AS float8)へ修正+実dialect compileによる回帰試験 test_store_sql.py・eeb5263。あわせて503ラップ時のログに例外クラス名のみ残す運用改善)
+    (2) test_7_deleteがmatch_events検証をイベント種で絞らず.one()(active intentはcreated+deletedの2行が正当)→テスト側を修正(6835d9b)
+  - 修正後: worktree基準502 passed(test_intents_crud_api 10件込み)。マージ後main基準でも502 passed・geo実データ復旧済み
+- T3部分資産(草案)/ 5a28a0e / docs/testassets/(README・g1-parser-struct.yaml 35件・g1-alcohol.yaml 36件=true24/false12)/ 2026-09-28
+  - エージェント草案→ユーザー確認方式(同日承認)。要確認フラグ7件(セット1=5件・セット2=2件)。**確定までG1入力として未使用**
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
