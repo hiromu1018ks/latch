@@ -50,8 +50,10 @@ class IdPVerifier:
         cfg = self._configs.get(provider)
         if cfg is None:
             raise ValueError(f"unknown idp provider: {provider!r}")
-        key = await self._resolve_key(cfg, idp_token)
         try:
+            # 鍵解決もdecode側の例外網に含める(get_unverified_header は
+            # 形式不正トークンで InvalidTokenError を投げる → 401が正)
+            key = await self._resolve_key(cfg, idp_token)
             payload = pyjwt.decode(
                 idp_token,
                 key.key,
