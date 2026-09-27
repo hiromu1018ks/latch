@@ -1,0 +1,519 @@
+# ==========================================================================
+# LATCH G1ゲート Parser構造化精度 入力セット(草案)
+#
+# - ステータス: draft — 2026-09-28作成・ユーザー確認待ち(G1入力として未確定)
+# - 出典: 09 §4.3(構造化精度の検証手順)/ 07 D-17(精度基準)/ 10 §2(共有資産)
+# - 測定対象フィールド: category.primary / time.start / location.name /
+#   participants(min・max)/ budget.max(07 D-17)
+# - 期待値はParser出力段階の値(アプリ層の補完前。README「共通の前提」参照)
+# - 基準日時: 2026-10-01(木)11:30 JST(相対表現の解決基準。{current_date}へ注入)
+#   今日=10-01(木)/ 明日=10-02(金)/ 明後日・土曜=10-03(土)/ 日曜=10-04 / 水曜=10-07
+# - 一致判定の粒度: location.name は地域一致で判定(表記の揺れは一致扱い、09 §4.3)
+# - needs_review: 期待値の判断が07 §2の明示規則から導けないもの。理由はファイル末尾
+# ==========================================================================
+
+meta:
+  status: draft
+  created: "2026-09-28"
+  confirmation: "ユーザー確認待ち(G1入力として未確定)"
+  current_datetime: "2026-10-01T11:30:00+09:00"
+  measured_fields:
+    - category.primary
+    - time.start
+    - location.name
+    - participants
+    - budget.max
+  case_count: 32          # 測定対象ケース数(error_casesを除く)
+  error_case_count: 3     # 422 VALIDATION_ERROR 期待の付帯ケース(一致率集計の対象外)
+
+cases:
+  # --- drinking(16件) -------------------------------------------------
+  - id: P-001
+    text: "今夜20時から天文館で軽く飲みたいです。ひとり3000円くらいで"
+    author_age: 26
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-01T20:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 3000}
+    needs_review: false
+    note: "「軽く」はsoft_constraints想定(測定対象外)"
+
+  - id: P-002
+    text: "明日の19時以降、呉服町あたりでビール飲めるお店を探してます。予算は4000円くらい"
+    author_age: 31
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-02T19:00:00+09:00", end: null}
+      location: {name: 呉服町}
+      participants: {min: null, max: null}
+      budget: {max: 4000}
+    needs_review: false
+    note: "「19時以降」→start=19:00, end=null(07規則2の丸め)"
+
+  - id: P-003
+    text: "土曜の夜、サワー飲みに行きたい!天文館界隈で、予算5000円まで"
+    author_age: 22
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-03T20:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 5000}
+    needs_review: true
+    note: "「夜」のみの時刻丸め→20:00(要確認1。10 §2の時間帯定義「夜20–23時」を根拠に20時開始とした)"
+
+  - id: P-004
+    text: "金曜21時から中央駅前で飲み。2人くらいで静かにやりたい"
+    author_age: 28
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-02T21:00:00+09:00", end: null}
+      location: {name: 鹿児島中央駅前}
+      participants: {min: 2, max: 2}
+      budget: {max: null}
+    needs_review: true
+    note: "「2人くらい」単独の丸め→min=2, max=2(要確認2。07規則2は「2〜4人くらい」「3人以上なら」のみ定義)"
+
+  - id: P-005
+    text: "お酒飲める方、今夜22時から高見馬場で飲みに行きませんか。3000円までで"
+    author_age: 24
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-01T22:00:00+09:00", end: null}
+      location: {name: 高見馬場}
+      participants: {min: null, max: null}
+      budget: {max: 3000}
+    needs_review: false
+    note: "「お酒飲める方」はsoft_constraints想定(参加者条件)"
+
+  - id: P-006
+    text: "夜8時に天文館で呑みましょう。2〜4人くらいでわいわいと"
+    author_age: 21
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-01T20:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: 2, max: 4}
+      budget: {max: null}
+    needs_review: false
+    note: "「2〜4人くらい」→min=2, max=4(07規則2の定義例そのまま)。「わいわい」はsoft想定"
+
+  - id: P-007
+    text: "明後日の夜、飲みに行きたいなあ。天文館で、ひとり4000円くらいまで"
+    author_age: 23
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-03T20:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 4000}
+    needs_review: true
+    note: "「夜」のみの時刻丸め→20:00(要確認1)"
+
+  - id: P-008
+    text: "土曜19時から、天文館の居酒屋でサッカー観戦しながら飲みたいです。3〜4人で。予算3500円"
+    author_age: 27
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-03T19:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: 3, max: 4}
+      budget: {max: 3500}
+    needs_review: false
+    note: "「3〜4人で」→min=3, max=4(幅表現。「2〜4人くらい」と同型の丸め)。「観戦しながら」はsoft想定。locationは「天文館の居酒屋」から地域名を抽出(店名ではない)"
+
+  - id: P-009
+    text: "明日20時半から天文館で日本酒飲みたい。ひとり4000円くらいで、どなたかどうですか"
+    author_age: 35
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-02T20:30:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 4000}
+    needs_review: false
+    note: "「20時半」→20:30"
+
+  - id: P-010
+    text: "ハイボールの飲み放題のお店ないかな。今夜21時から天文館で、予算3000円"
+    author_age: 20
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-01T21:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 3000}
+    needs_review: false
+    note: "「飲み放題」は飲酒を示す語(07規則7)"
+
+  - id: P-011
+    text: "0次会というか、ちょっとだけ飲んで帰りたい。今日の18時45分、天文館で"
+    author_age: 29
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-01T18:45:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: null}
+    needs_review: false
+    note: "分単位の時刻表現のパターン。「ちょっとだけ」はsoft想定"
+
+  - id: P-012
+    text: "今週末、天文館でバル巡りしたい!土曜の17時から、3人以上なら。予算6000円くらい"
+    author_age: 25
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-03T17:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: 3, max: 4}
+      budget: {max: 6000}
+    needs_review: false
+    note: "「3人以上なら」→min=3, max=4(07規則2の定義例)。「バル」はバー系の語(07規則7)。17時は「その他」時間帯のサンプル"
+
+  - id: P-013
+    text: "ワインをゆっくり飲めるお店で、明日19時から中央駅周辺で。ふたりで"
+    author_age: 33
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-02T19:00:00+09:00", end: null}
+      location: {name: 鹿児島中央駅周辺}
+      participants: {min: 2, max: 2}
+      budget: {max: null}
+    needs_review: false
+    note: "「ふたりで」→min=2, max=2(人数の明示。漢数字表記)"
+
+  - id: P-014
+    text: "酔うまで飲むつもりはないけど、今日18時から天文館でちょい飲み。仕事終わりに"
+    author_age: 30
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-01T18:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: null}
+    needs_review: false
+    note: "「酔うまで飲むつもりはない」はsoft_constraints想定"
+
+  - id: P-015
+    text: "金曜の夜23時から、中央駅前でしっぽり呑み。ひとり5000円まで"
+    author_age: 38
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-02T23:00:00+09:00", end: null}
+      location: {name: 鹿児島中央駅前}
+      participants: {min: null, max: null}
+      budget: {max: 5000}
+    needs_review: false
+    note: "「夜23時」は時刻明示のため丸め不要(「夜」修飾付き)。23時開始=夜枠の上限サンプル"
+
+  - id: P-016
+    text: "仕事終わりに一杯どうですか。今日20時から22時まで、天文館で"
+    author_age: 19
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-01T20:00:00+09:00", end: "2026-10-01T22:00:00+09:00"}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: null}
+    needs_review: false
+    note: "終了時刻の明示(「22時まで」)→end=22:00(07規則2「終了時刻は推測しない」の逆: 明示があれば使う)。author_age=19 × alcohol true は08 D-10動作試験(02 #27)への流用想定"
+
+  # --- meal(13件) ------------------------------------------------------
+  - id: P-017
+    text: "20時以降なら天文館で食事可能です"
+    author_age: 40
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-01T20:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: null}
+    needs_review: false
+    note: "01第6節の典型表現(そのまま収録)。「20時以降」→start=20:00, end=null"
+
+  - id: P-018
+    text: "今日ランチ、天文館のとんこつラーメンどうですか。12時半から30分くらいなら食べられます"
+    author_age: 37
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-01T12:30:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: null}
+    needs_review: true
+    note: "「30分くらいなら食べられる」は所要時間の言及と解し、end=null・soft側へ置く草案(要確認3。「終了時刻は推測しない」の適用線引き)"
+
+  - id: P-019
+    text: "カレーが食べたい。明日の昼、鹿児島中央駅周辺で、予算1000円くらい"
+    author_age: 22
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-02T12:00:00+09:00", end: null}
+      location: {name: 鹿児島中央駅周辺}
+      participants: {min: null, max: null}
+      budget: {max: 1000}
+    needs_review: false
+    note: "「昼」→12:00(10 §2の「昼12–13時」を根拠。断定できる丸めだが規則明示ではないため注記)"
+
+  - id: P-020
+    text: "明日の19時から天文館で焼肉!3人以上なら行きたいです。ひとり5000円くらい"
+    author_age: 26
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-02T19:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: 3, max: 4}
+      budget: {max: 5000}
+    needs_review: false
+    note: "01第6節の典型表現パターン(「3人以上なら焼肉」)に時刻・場所を与えた形。「3人以上なら」→min=3, max=4(07規則2)"
+
+  - id: P-021
+    text: "女子会でイタリアン!金曜19時、天文館で、予算3000円くらい"
+    author_age: 24
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-02T19:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 3000}
+    needs_review: false
+    note: "「女子会」から人数を読み取らない(推測で値を作らない、07規則1)。soft_constraints想定"
+
+  - id: P-022
+    text: "深夜のラーメン食べたい。今日23時半から天文館で、ひとり1500円"
+    author_age: 20
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-01T23:30:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 1500}
+    needs_review: false
+    note: "「深夜」は時刻明示(23時半)があるため丸め不要"
+
+  - id: P-023
+    text: "明日の朝9時に、中央駅のモーニングを食べたい。誰か一緒にどうですか"
+    author_age: 45
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-02T09:00:00+09:00", end: null}
+      location: {name: 鹿児島中央駅}
+      participants: {min: null, max: null}
+      budget: {max: null}
+    needs_review: false
+    note: "「その他」時間帯(朝)のサンプル"
+
+  - id: P-024
+    text: "土曜12時から天文館で海鮮丼ランチ。6000円くらいのいいやつを"
+    author_age: 32
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-03T12:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 6000}
+    needs_review: false
+
+  - id: P-025
+    text: "夕飯まだ決めてなくて。今日18時から天文館あたりでごはん。予算2000円くらい"
+    author_age: 21
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-01T18:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 2000}
+    needs_review: false
+    note: "「天文館あたり」→location.name=天文館(地域一致判定)"
+
+  - id: P-026
+    text: "おむらいす食べたい!明日12時から天文館で、2人でどうですか"
+    author_age: 18
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-02T12:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: 2, max: 2}
+      budget: {max: null}
+    needs_review: false
+    note: "「2人で」→min=2, max=2(人数の明示)"
+
+  - id: P-027
+    text: "ハンバーガー食べたい。日曜のお昼、天文館のバーガー屋で。1000円で"
+    author_age: 19
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-04T12:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 1000}
+    needs_review: false
+    note: "「日曜のお昼」→日曜=10-04、12:00(「昼」の丸めはP-019と同一解釈)"
+
+  - id: P-028
+    text: "焼肉でビールも飲みたいなあ。明日20時、天文館で、ひとり4000円まで"
+    author_age: 34
+    expected:
+      category: meal
+      alcohol_involved: true
+      time: {start: "2026-10-02T20:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 4000}
+    needs_review: false
+    note: "meal内の飲酒言及(「ビールも」)→alcohol_involved=true(07規則7)。primaryは食事中心のためmeal"
+
+  - id: P-029
+    text: "出張で鹿児島に来てます。水曜19時から天文館で黒豚しゃぶを。予算8000円くらい"
+    author_age: 42
+    expected:
+      category: meal
+      alcohol_involved: false
+      time: {start: "2026-10-07T19:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 8000}
+    needs_review: false
+    note: "曜日のみの相対表現(水曜=10-07、基準日から6日後。作成上限7日の内側)"
+
+  # --- activity(3件) ----------------------------------------------------
+  - id: P-030
+    text: "明日10時から城山で軽くハイキングしませんか。12時に解散のつもりです"
+    author_age: 36
+    expected:
+      category: activity
+      alcohol_involved: false
+      time: {start: "2026-10-02T10:00:00+09:00", end: "2026-10-02T12:00:00+09:00"}
+      location: {name: 城山}
+      participants: {min: null, max: null}
+      budget: {max: null}
+    needs_review: false
+    note: "「12時に解散のつもり」→end=12:00(解散時刻の明示)。「その他」時間帯(朝)のサンプル"
+
+  - id: P-031
+    text: "土曜の午後、天文館通りのカフェでのんびり読書したい。コーヒーを飲みながら"
+    author_age: 19
+    expected:
+      category: activity
+      alcohol_involved: false
+      time: {start: "2026-10-03T13:00:00+09:00", end: null}
+      location: {name: 天文館通り}
+      participants: {min: null, max: null}
+      budget: {max: null}
+    needs_review: true
+    note: "「午後」のみの時刻丸め→13:00草案(要確認4)。「コーヒーを飲む」はアルコールを指さない用法(07規則7)→false"
+
+  - id: P-032
+    text: "今夜20時から天文館でカラオケ!予算2000円くらい、4人で盛り上がりたい"
+    author_age: 23
+    expected:
+      category: activity
+      alcohol_involved: false
+      time: {start: "2026-10-01T20:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: 4, max: 4}
+      budget: {max: 2000}
+    needs_review: false
+    note: "「4人で」→min=4, max=4(人数の明示)。カラオケは軽いアクティビティ(01第6節)"
+
+# --- エラー付帯ケース(422 VALIDATION_ERROR 期待) -------------------------
+# 必須3フィールド(category / time.start / location.name、07 §2)が揃わない入力。
+# 一致率の集計対象外。Parserが正しく422を返すこと(フォームフォールバックの起動、
+# 07 D-17)を確認する。E-001・E-002は01第6節の典型表現そのもの。
+
+error_cases:
+  - id: E-001
+    text: "今日誰かと飲みたい"
+    author_age: null
+    expected:
+      error: "422 VALIDATION_ERROR"
+      missing: [time.start, location.name]
+      category_extractable: drinking
+    needs_review: false
+    note: "01第6節の典型表現(そのまま収録)。category・相対日付(今日)は読み取れるが、必須3フィールドが揃わないため422"
+
+  - id: E-002
+    text: "3人以上なら焼肉に行きたい"
+    author_age: null
+    expected:
+      error: "422 VALIDATION_ERROR"
+      missing: [time.start, location.name]
+      category_extractable: meal
+      participants_extractable: {min: 3, max: 4}
+    needs_review: false
+    note: "01第6節の典型表現(そのまま収録)。participantsは抽出可能(「3人以上なら」→min=3, max=4)だが保存には至らない"
+
+  - id: E-003
+    text: "金曜20時からハイボール飲みたい"
+    author_age: null
+    expected:
+      error: "422 VALIDATION_ERROR"
+      missing: [location.name]
+      category_extractable: drinking
+    needs_review: false
+    note: "場所の言及のみ欠けるパターン(時間・categoryは抽出可能)"
+
+# ==========================================================================
+# 要確認まとめ(needs_review: true の理由)
+#
+# 要確認1(P-003・P-007「夜」のみの時刻丸め)
+#   07 §2規則2は「20時以降」のような時刻を伴う表現の丸めのみ定義し、「夜」
+#   単独の開始時刻を定めていない。草案は10 §2の時間帯分布「夜20–23時」を
+#   根拠に20:00とした。19:00や「時間帯情報なし(422寄り)」という解釈も
+#   可能なため、確定時に方針を定めたい(「夜」=20:00を規則に明記するか)。
+#
+# 要確認2(P-004「2人くらい」単独の人数丸め)
+#   07 §2規則2の人数丸めは「2〜4人くらい」(幅)と「3人以上なら」(下限)の
+#   2形式のみ。「N人くらい」単独は未定義。草案は「くらい」の幅を実質1対1
+#   (min=2, max=2)と解したが、min=2, max=null(上限言及なし)または
+#   min=2, max=4(システム上限へ切る)も解釈として可能。
+#
+# 要確認3(P-018「30分くらいなら食べられる」のend扱い)
+#   「終了時刻は推測しない」(07規則2)の適用線引き。所要時間の言及を
+#   end=13:00へ反映する解釈もある。草案はend=nullとし所要時間をsoft側に
+#   置く(推測に当たる情報でhard側を強めない)。ソフト側の期待値は本セット
+#   の測定対象外のため、endの判定のみがこのケースの争点。
+#
+# 要確認4(P-031「午後」のみの時刻丸め)
+#   「午後」は12:00〜夕方までの幅で、10 §2の分布定義(昼12–13時/夕18–20時)
+#   のいずれにも収まらない。草案は13:00(昼枠の直後)としたが、14:00や
+#   15:00も解釈可能。「午後」の既定時刻を規則に定めるか、flexibility_minutes
+#   が有効化される将来まで測定対象から外すかの判断が残る。
+#
+# 共通の判断(フラグなし・参考)
+#   - 「昼」「ランチ」→12:00、「夜」→20:00 は10 §2の分布表現を根拠に
+#     草案している(要確認フラグを付けたのは「夜」と「午後」で、「昼」は
+#     P-019・P-027の注記にとどめた)
+#   - locationは地名・ランドマークをそのまま残す規則(07規則4)に基づき、
+#     「天文館の居酒屋」「天文館あたり」からは地域名を抽出した
+#   - E-002のparticipants抽出可否は、422応答のペイロード設計(05)の参照用
+# ==========================================================================

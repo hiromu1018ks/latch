@@ -1,0 +1,374 @@
+# ==========================================================================
+# LATCH G1ゲート 飲酒判定(alcohol_involved)精度 入力セット(草案)
+#
+# - ステータス: draft — 2026-09-28作成・ユーザー確認待ち(G1入力として未確定)
+# - 出典: 09 §4.3(alcohol_involvedの精度ゲート、FR-20)/ 07 §2規則7(判定規則)/
+#   10 §2(共有資産・境界表現の要求)
+# - 測定対象: alcohol_involved(boolean)。合格基準は recall 100%(正例の見逃し
+#   0件)・precision 下限90%(偽陽性2件まで許容)
+# - 判定規則(07 §2規則7): category.primary=drinking は常にtrue。他カテゴリでも
+#   飲酒を示す語(飲む・飲み・酒・呑む・バー・ビール・サワー等)があればtrue。
+#   アルコールを指さない用法(「コーヒーを飲む」等)はfalse
+# - 構成: 飲酒そのもの(カテゴリ drinking)12件 / 食事だが酒に言及 8件 /
+#   酒に触れない活動 10件 / 境界ケース 6件 → 計36件(true 24 / false 12)
+# - 基準日時: 2026-10-01(木)11:30 JST(g1-parser-struct.yamlと同一。
+#   時刻・場所はalcohol測定の対象外だが、実際のアプリ入力として自然な文にする
+#   ため含めている)
+# - category参考値は判定の一助とするもので、本セットの測定対象ではない
+# ==========================================================================
+
+meta:
+  status: draft
+  created: "2026-09-28"
+  confirmation: "ユーザー確認待ち(G1入力として未確定)"
+  current_datetime: "2026-10-01T11:30:00+09:00"
+  measured_fields:
+    - alcohol_involved
+  case_count: 36
+  true_count: 24
+  false_count: 12
+
+cases:
+  # --- A. 飲酒そのもの(category=drinking系・正例)12件 -------------------
+  - id: A-001
+    text: "今夜20時から天文館で飲みたい。ひとり3000円くらい"
+    author_age: 19
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "author_age=19 × true は08 D-10動作試験(02 #27、作成拒否422)への流用想定"
+
+  - id: A-002
+    text: "明日19時、天文館でビール飲みに行きたい人いますか"
+    author_age: 27
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "「ビール」「飲み」は07規則7の明示語彙"
+
+  - id: A-003
+    text: "土曜の夜、サワー飲み放題のお店でちょっと宴会!天文館で"
+    author_age: 24
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "「サワー」「飲み放題」"
+
+  - id: A-004
+    text: "日本酒をぬる燗でちびちびやりたい。明日の夜、天文館で"
+    author_age: 44
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "「日本酒」は酒の明示"
+
+  - id: A-005
+    text: "ワインバルでグラスワインを2杯くらい。金曜20時から天文館で"
+    author_age: 30
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "「ワイン」「バル(バー系)」"
+
+  - id: A-006
+    text: "今週末、呑んだくれてきます(笑)土曜19時から天文館で"
+    author_age: 23
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "「呑んだくれ」は「呑む」を含む"
+
+  - id: A-007
+    text: "ハイボール飲めるお店で、今日22時から。高見馬場あたりで"
+    author_age: 26
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+
+  - id: A-008
+    text: "ちょい飲みして帰りたい。今日18時半、天文館で"
+    author_age: 33
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+
+  - id: A-009
+    text: "0次会というか、軽く一杯だけ。今日18時、天文館で"
+    author_age: 29
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "「一杯」は飲酒の慣用としてtrue(「0次会」も飲酒文脈の語だが、語彙リスト外のため判定根拠は「一杯」側に置く)"
+
+  - id: A-010
+    text: "バル巡りしたい!土曜17時から天文館で、3人以上なら"
+    author_age: 25
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "「バル」はバー系の語"
+
+  - id: A-011
+    text: "今夜、中央駅前の立ち飲みで生ビール。21時から"
+    author_age: 41
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+
+  - id: A-012
+    text: "金曜の夜23時から、天文館でしっぽり日本酒。ひとり5000円まで"
+    author_age: 37
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+
+  # --- B. 食事だが酒に言及(meal内の言及・正例)8件 -----------------------
+  - id: A-013
+    text: "焼肉でビールも飲みたい。明日20時、天文館で。ひとり4000円まで"
+    author_age: 34
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+    note: "meal内の「ビール」言及(07規則7の「食事のついでに軽く飲む」型)"
+
+  - id: A-014
+    text: "ディナーのあと、ワインをちょっとだけ。明日19時から天文館で"
+    author_age: 31
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+
+  - id: A-015
+    text: "今日19時から天文館で、食事のついでに軽く飲みたい"
+    author_age: 28
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+    note: "07 §2規則7の例文に近い形(「食事のついでに軽く飲む」)"
+
+  - id: A-016
+    text: "唐揚げとハイボールが好きなんです。今日20時、天文館で"
+    author_age: 22
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+
+  - id: A-017
+    text: "ピザにビール!明日18時半から天文館で、2人で"
+    author_age: 20
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+
+  - id: A-018
+    text: "ワイン会に参加したい。明日20時、天文館のレストランで"
+    author_age: 36
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+    note: "09 §4.3・10 §2が境界表現の正例として挙げる「ワイン会」。食事の場を含むためcategory_refはmeal"
+
+  - id: A-019
+    text: "私は飲まないけど、みんなが飲めるお店で食事したい。明日19時、天文館で"
+    author_age: 39
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+    note: "本人は飲まない意図だが、場の飲酒を示す語(「飲む」「飲める」)があるため規則どおりtrue。飲酒を伴う場への18〜19歳の流入は08 D-10の趣旨で防ぐべきであるため、語検出を優先する設計と整合"
+
+  - id: A-020
+    text: "お酒なしの会じゃなくて、普通に飲める居酒屋で食事を。土曜19時、天文館で"
+    author_age: 45
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+    note: "「お酒なし」の否定を正しく解釈できるかを見る語彙の入れ子(「飲める」「居酒屋」でtrue)"
+
+  # --- C. 酒に触れない活動(負例)10件 ------------------------------------
+  - id: A-021
+    text: "コーヒーを飲みに行きたい。明日14時、天文館のカフェで"
+    author_age: 43
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+    note: "07規則7の負例そのもの(「コーヒーを飲む」)。カフェ用途のcategoryはmeal扱いが近い(参考)"
+
+  - id: A-022
+    text: "お茶しよう!今日15時、天文館の甘味処で"
+    author_age: 21
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+    note: "「お茶」はアルコールを指さない用法"
+
+  - id: A-023
+    text: "ランチでとんこつラーメン。明日12時、天文館で"
+    author_age: 25
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+
+  - id: A-024
+    text: "朝モーニングを食べたい。明日9時から中央駅のカフェで"
+    author_age: 18
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+    note: "author_age=18 × false(年齢上位の負例サンプル)"
+
+  - id: A-025
+    text: "カラオケ!今日21時から天文館で。ドリンクバーだけでいいです"
+    author_age: 24
+    expected:
+      alcohol_involved: false
+      category_ref: activity
+    needs_review: false
+    note: "「ドリンクバー」はソフトドリンクの慣用。カラオケ店の飲食物を伴うがアルコールの言及なし"
+
+  - id: A-026
+    text: "読書カフェでのんびりしたい。明日の午後、天文館で"
+    author_age: 29
+    expected:
+      alcohol_involved: false
+      category_ref: activity
+    needs_review: false
+
+  - id: A-027
+    text: "スムージーが飲みたい。今日16時、天文館通りで"
+    author_age: 20
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+    note: "「飲む」の語を含むがスムージーはアルコールを指さない用法(07規則7)"
+
+  - id: A-028
+    text: "お茶会しませんか。水曜14時、天文館の和菓子屋で"
+    author_age: 58
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+    note: "「お茶会」=茶会"
+
+  - id: A-029
+    text: "ミルクセーキを食べたい。明日15時、天文館の喫茶店で"
+    author_age: 19
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+
+  - id: A-030
+    text: "疲れたからアイスコーヒーが飲みたい。今日16時、天文館のカフェで"
+    author_age: 32
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+
+  # --- D. 境界ケース 6件 --------------------------------------------------
+  - id: A-031
+    text: "日本酒好きの集まりに参加したい。土曜18時、天文館で"
+    author_age: 38
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "09 §4.3・10 §2が境界表現の正例として挙げるもの(飲酒を明示しない表現の代表)"
+
+  - id: A-032
+    text: "金曜20時から天文館のバーで誕生日会。誰か一緒に"
+    author_age: 26
+    expected:
+      alcohol_involved: true
+      category_ref: meal
+    needs_review: false
+    note: "09 §4.3・10 §2が境界表現の正例として挙げるもの(「バー」の語でtrue)"
+
+  - id: A-033
+    text: "ノンアルコールビールを飲めるお店に行きたい。明日16時、天文館で"
+    author_age: 34
+    expected:
+      alcohol_involved: false
+      category_ref: activity
+    needs_review: true
+    note: "要確認1。「ビール」「飲める」の語彙を含むが、ノンアルコールビールはアルコールを指さない用法(「コーヒーを飲む」と同型)と解しfalse草案。規則の語彙検出を機械的に適用するとfalse陽性となる、precision測定の最難関負例"
+
+  - id: A-034
+    text: "barでコーラだけ飲むつもり。今日21時、天文館のbarで"
+    author_age: 29
+    expected:
+      alcohol_involved: true
+      category_ref: activity
+    needs_review: true
+    note: "要確認2。「バー」の語でtrue(07規則7の語彙検出どおり)。ただし本人はアルコールを摂らない意図であり、規則の語ベース判定と08 D-10の趣旨(未成年への飲酒機会)の間に緊張がある。バーという酒の場を含む点でtrue草案とした"
+
+  - id: A-035
+    text: "酔わない程度に付き合うので、飲み会に混ぜてください。土曜20時、天文館で"
+    author_age: 31
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "「酔う」「飲み(会)」の語でtrue。「酔う」は07規則7の明示リスト外だが「等」の趣旨(飲酒を示す語)に含む"
+
+  - id: A-036
+    text: "スパークリングジュースで乾杯したい。明日20時、天文館で"
+    author_age: 20
+    expected:
+      alcohol_involved: false
+      category_ref: meal
+    needs_review: false
+    note: "「乾杯」は飲酒を強く連想させる語だが、対象がジュースと明示されているためアルコールを指さない用法→false。語彙の手がかりに引きずられた偽陽性を検出する、precision測定の効く負例"
+
+# ==========================================================================
+# 要確認まとめ(needs_review: true の理由)
+#
+# 要確認1(A-033「ノンアルコールビール」)
+#   07 §2規則7は「飲酒を示す語(飲む・飲み・酒・呑む・バー・ビール・
+#   サワー等)があればtrue」「アルコールを指さない用法(コーヒーを飲む等)
+#   はfalse」という語彙検出と意味判断の混合規則。「ノンアルコールビール」
+#   は「ビール」の語を含むがアルコールを指さない。草案はfalse(意味優先)。
+#   true(語彙優先)とする場合、規則7の文言を「語の包含」に寄せて明記する
+#   必要がある。いずれにせよ規則の適用線引きを確定する代表ケース。
+#
+# 要確認2(A-034「barでコーラだけ」)
+#   語彙検出では「バー」によりtrue。一方で本人の飲酒意図はなく、08 D-10
+#   の保護目的(未成年への飲酒機会の提供)からは、酒を提供する場への流入
+#   をtrue側で抑えるのが安全という見方もある。草案は規則どおりtrue。
+#   falseとする判断も可能で、確定時に方針を定めたい。
+#
+# 判断に迷ったがフラグを見送った点(参考)
+#   - A-009「0次会」「一杯」: 「0次会」自体は語彙リスト外だが、同文中の
+#     「一杯」が飲酒の慣用として成立するためtrueとした
+#   - A-019「私は飲まないけど」: 本人の飲酒意図は否定だが、場の飲酒を
+#     示す語があり規則どおりtrue。18〜19歳の流入防止の趣旨とも整合
+#   - A-025「ドリンクバー」: ソフトドリンクの慣用としてfalse
+#   - A-036「乾杯」: 対象(ジュース)がアルコールを指さないためfalse。
+#     precision測定の効く負例として設計
+# ==========================================================================
