@@ -26,6 +26,8 @@ from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.core.deps import get_clock
 from latch.intents import IntentsError, make_intent_parse_service, parse_router
+from latch.intents.routes import intents_crud_router
+from latch.intents.service import make_intent_service
 from latch.settings import Settings
 from latch.users.errors import UsersError
 from latch.users.routes import users_router
@@ -42,7 +44,8 @@ async def _lifespan(app: FastAPI):
     build_auth = not hasattr(app.state, "auth_service")
     build_users = not hasattr(app.state, "users_service")
     build_intents = not hasattr(app.state, "intent_parse_service")
-    if not (build_auth or build_users or build_intents):
+    build_intents_crud = not hasattr(app.state, "intent_service")
+    if not (build_auth or build_users or build_intents or build_intents_crud):
         yield
         return
     settings: Settings = app.state.settings
@@ -75,6 +78,10 @@ async def _lifespan(app: FastAPI):
             settings=settings,
             user_lookup=user_lookup,
         )
+    if build_intents_crud:
+        app.state.intent_service = make_intent_service(
+            clock=app.state.clock, engine=engine
+        )
     try:
         yield
     finally:
@@ -94,6 +101,7 @@ def create_app(
     auth_service=None,
     users_service=None,
     intent_parse_service=None,
+    intent_service=None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.clock = clock if clock is not None else SystemClock()
@@ -104,6 +112,8 @@ def create_app(
         app.state.users_service = users_service
     if intent_parse_service is not None:
         app.state.intent_parse_service = intent_parse_service
+    if intent_service is not None:
+        app.state.intent_service = intent_service
 
     @app.get("/health")
     async def health(
@@ -115,6 +125,7 @@ def create_app(
     app.include_router(logout_router)
     app.include_router(users_router)
     app.include_router(parse_router)
+    app.include_router(intents_crud_router)
 
     @app.exception_handler(AuthError)
     async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:

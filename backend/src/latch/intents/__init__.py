@@ -1,4 +1,4 @@
-"""Intentドメイン(M1 ws-2)。Parser本体・補完規則・parse API。"""
+"""Intentドメイン(M1 ws-2・ws-3)。Parser本体・補完規則・parse/CRUD API。"""
 
 from latch.intents.completion import (
     DEFAULT_PARTICIPANTS,
@@ -19,8 +19,29 @@ from latch.intents.errors import (
     UnderAgeError,
     UnstructurableError,
 )
+from latch.intents.events import (
+    EVENT_CREATED,
+    EVENT_DELETED,
+    EVENT_EXPIRED,
+    EVENT_SCHEDULED,
+    EVENT_UPDATED,
+    insert_match_event,
+)
+from latch.intents.intent_input import (
+    IntentCreateRequest,
+    IntentPatchRequest,
+    StructuredIntentInput,
+)
+from latch.intents.mapping import (
+    ResolvedColumns,
+    columns_from_row,
+    differs_from_row,
+    resolve_for_active,
+    resolve_for_draft,
+    to_response_structured,
+)
 from latch.intents.prompt import PARSER_SYSTEM_PROMPT, format_parser_system_prompt
-from latch.intents.routes import parse_router
+from latch.intents.routes import intents_crud_router, parse_router
 from latch.intents.schema import (
     WARNING_MESSAGE_NG_DOWNGRADED,
     ParserBudget,
@@ -32,20 +53,33 @@ from latch.intents.schema import (
 )
 from latch.intents.service import (
     IntentParseService,
+    IntentService,
     ParseResult,
     ParseWarning,
     SupportsParseIntent,
     make_intent_parse_service,
+    make_intent_service,
 )
+from latch.intents.store import IntentRow, IntentStore, UserRow
 
 __all__ = [
     "DEFAULT_PARTICIPANTS",
     "DEFAULT_RADIUS_M",
     "DependencyUnavailableError",
+    "EVENT_CREATED",
+    "EVENT_DELETED",
+    "EVENT_EXPIRED",
+    "EVENT_SCHEDULED",
+    "EVENT_UPDATED",
     "ForbiddenError",
     "GeocodingFailedError",
+    "IntentCreateRequest",
     "IntentNotFoundError",
     "IntentParseService",
+    "IntentPatchRequest",
+    "IntentRow",
+    "IntentService",
+    "IntentStore",
     "IntentValidationError",
     "IntentsError",
     "InvalidTransitionError",
@@ -59,14 +93,25 @@ __all__ = [
     "ParserOutput",
     "ParserParticipants",
     "ParserTime",
+    "ResolvedColumns",
+    "StructuredIntentInput",
     "SupportsParseIntent",
     "UnderAgeError",
     "UnstructurableError",
+    "UserRow",
     "WARNING_MESSAGE_NG_DOWNGRADED",
+    "columns_from_row",
     "default_time_end",
+    "differs_from_row",
     "expires_at_candidates",
     "format_parser_system_prompt",
+    "insert_match_event",
+    "intents_crud_router",
     "make_intent_parse_service",
+    "make_intent_service",
     "nearest_expires_at",
     "parse_router",
+    "resolve_for_active",
+    "resolve_for_draft",
+    "to_response_structured",
 ]
