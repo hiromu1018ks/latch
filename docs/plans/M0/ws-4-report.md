@@ -98,3 +98,14 @@ aeb4fcc feat: 地物名称正規化(NFKC・記号除去・大字接頭辞・か�
    得る。必要ならbbox事前extractを検討)。また geo-verify → test-ci の順序が正しい
    (test-ciのfixtureフルリロードがgeofeaturesの実データを上書きするため — 本報告書の
    手順どおり)
+10. **レビューのdeferred minor(修正見送り・裁量判断の記録)**:
+    - 誤エンコーディングファイル(UTF-16等)が全行スキップの結果「0行取り込み・
+      exit 0」で黙って成功する(非空ファイル・0行の警告ガードが改善案)
+    - arch testの禁止トークンが `import X` 形式のみ(`from urllib.request import` 等
+      を検出できない。トークン追加はdesign §4-8・完了条件5のrg定義と合わせた
+      固定値のため、勝手に広げず見送り)
+    - test_geo.pyの正転試験がファイル実行順の暗黙の掃除に依存(単一試験実行・
+      並べ替えで前提が崩れ得る。`_import_isj` への明示掃除が改善案)
+    - 見送った裁量判断(いずれもdesign固定値どおりとして維持): 逆転SQLの全行距離
+      ソート・3857の緯度スケール(鹿児島で実効セル約850m)・relation除外・
+      ISJ CSVの全体メモリ読み・test_head_is_0002のversion一致断言
