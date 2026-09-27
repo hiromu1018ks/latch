@@ -779,3 +779,109 @@ async def test_patch_missing_intent_404():
             status=None,
             structured_intent=_active_input(),
         )
+
+
+# --- (e)(f)(g) pause・resume・delete(design §4.1-4e〜g・§2.8)---
+
+
+async def _transition(svc, intent_id):
+    return await svc.pause(
+        auth_provider="google", auth_subject="s", intent_id=intent_id
+    )
+
+
+async def test_pause_active_sets_paused_keeps_version_no_event():
+    row = _row(status="active")
+    svc, store, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await svc.pause(auth_provider="google", auth_subject="s", intent_id=row.id)
+    assert result.status == "paused"
+    assert result.version == 1  # 不変
+    assert _event_calls(uow_conn) == []  # 発行規定なし(§2.2表)
+    upd = store.status_updates[0]
+    assert upd["status"] == "paused"
+    assert upd["version"] == 1
+    assert upd["expected_status"] == "active"
+
+
+async def test_pause_draft_rejected():
+    row = _row(status="draft")
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(InvalidTransitionError):
+        await _transition(svc, row.id)
+    assert store.status_updates == []
+
+
+async def test_resume_paused_bumps_version_and_emits_updated():
+    """resume: version+1・updated Event(確定値15 — idempotencyキー衝突回避)。"""
+    row = _row(status="paused")
+    svc, store, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await svc.resume(
+        auth_provider="google", auth_subject="s", intent_id=row.id
+    )
+    assert result.status == "active"
+    assert result.version == 2
+    etype, params = _event_calls(uow_conn)[0]
+    assert etype == "updated"
+    assert json.loads(params["payload"]) == {"version": 2}
+    assert store.status_updates[0]["expected_status"] == "paused"
+
+
+async def test_resume_active_rejected():
+    row = _row(status="active")
+    svc, _, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(InvalidTransitionError):
+        await svc.resume(auth_provider="google", auth_subject="s", intent_id=row.id)
+
+
+async def test_delete_active_transitions_cancelled_with_deleted_event():
+    row = _row(status="active")
+    svc, store, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await svc.delete(
+        auth_provider="google", auth_subject="s", intent_id=row.id
+    )
+    assert result is None
+    upd = store.status_updates[0]
+    assert upd["status"] == "cancelled"
+    assert upd["version"] == 1  # 不変
+    etype, params = _event_calls(uow_conn)[0]
+    assert etype == "deleted"
+    assert json.loads(params["payload"]) == {"version": 1}
+
+
+async def test_delete_draft_and_paused_also_cancelled():
+    for status in ("draft", "paused"):
+        row = _row(status=status)
+        svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+        await svc.delete(auth_provider="google", auth_subject="s", intent_id=row.id)
+        assert store.status_updates[0]["status"] == "cancelled"
+
+
+async def test_delete_matched_rejected():
+    row = _row(status="matched")
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(InvalidTransitionError):
+        await svc.delete(auth_provider="google", auth_subject="s", intent_id=row.id)
+    assert store.status_updates == []
+
+
+async def test_delete_twice_second_rejected():
+    """Review Focus #3: cancelled行への再DELETEは422(遷移表にない)。"""
+    row = _row(status="cancelled")
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(InvalidTransitionError):
+        await svc.delete(auth_provider="google", auth_subject="s", intent_id=row.id)
+    assert store.status_updates == []
+
+
+async def test_pause_other_users_intent_forbidden():
+    row = _row(status="active", user_id=OTHER_USER_ID)
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(ForbiddenError):
+        await _transition(svc, row.id)
+    assert store.status_updates == []
+
+
+async def test_pause_missing_intent_404():
+    svc, _, _, _, _ = _service()
+    with pytest.raises(IntentNotFoundError):
+        await _transition(svc, uuid.uuid4())

@@ -35,6 +35,7 @@ from latch.intents.errors import (
 )
 from latch.intents.events import (
     EVENT_CREATED,
+    EVENT_DELETED,
     EVENT_UPDATED,
     insert_match_event,
 )
@@ -636,6 +637,99 @@ class IntentService:
     @staticmethod
     def _row_with_version(row: IntentRow, version: int) -> IntentRow:
         return replace(row, version=version)
+
+    # -- pause / resume / DELETE(§2.8・05 §6遷移表)--
+
+    async def pause(
+        self, *, auth_provider: str, auth_subject: str, intent_id: uuid.UUID
+    ) -> IntentRow:
+        return await self._transition(
+            auth_provider=auth_provider,
+            auth_subject=auth_subject,
+            intent_id=intent_id,
+            allowed_from=("active",),
+            new_status="paused",
+            version_delta=0,
+            event_type=None,  # 発行規定なし(pausedはLayer 1対象外)
+        )
+
+    async def resume(
+        self, *, auth_provider: str, auth_subject: str, intent_id: uuid.UUID
+    ) -> IntentRow:
+        return await self._transition(
+            auth_provider=auth_provider,
+            auth_subject=auth_subject,
+            intent_id=intent_id,
+            allowed_from=("paused",),
+            new_status="active",
+            version_delta=1,  # 確定値15: キー衝突回避のため必ず+1
+            event_type=EVENT_UPDATED,
+        )
+
+    async def delete(
+        self, *, auth_provider: str, auth_subject: str, intent_id: uuid.UUID
+    ) -> None:
+        await self._transition(
+            auth_provider=auth_provider,
+            auth_subject=auth_subject,
+            intent_id=intent_id,
+            allowed_from=("draft", "active", "paused"),
+            new_status="cancelled",  # 物理削除しない(05 §6・M3-8参照)
+            version_delta=0,
+            event_type=EVENT_DELETED,
+        )
+
+    async def _transition(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        intent_id: uuid.UUID,
+        allowed_from: tuple[str, ...],
+        new_status: str,
+        version_delta: int,
+        event_type: str | None,
+    ) -> IntentRow:
+        try:
+            user = await self._require_user(auth_provider, auth_subject)
+            now = self._clock.now()
+            async with self._uow() as conn:
+                row = await self._store.fetch_for_update(conn, intent_id)
+                if row is None:
+                    raise IntentNotFoundError("intent not found")
+                if row.user_id != user.id:
+                    raise ForbiddenError("not owner")
+                if row.status not in allowed_from:
+                    raise InvalidTransitionError("invalid status transition")
+                new_version = row.version + version_delta
+                count = await self._store.update_status(
+                    conn,
+                    intent_id,
+                    status=new_status,
+                    version=new_version,
+                    now=now,
+                    expected_status=row.status,
+                )
+                if count == 0:
+                    raise InvalidTransitionError("invalid status transition")
+                if event_type is not None:
+                    await insert_match_event(
+                        conn,
+                        event_type=event_type,
+                        intent_id=intent_id,
+                        version=new_version,
+                        now=now,
+                    )
+                return replace(
+                    row,
+                    status=new_status,
+                    version=new_version,
+                    updated_at=now,
+                )
+        except IntentsError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("intents dependency unavailable") from exc
 
 
 def make_intent_service(*, clock: Clock, engine: AsyncEngine) -> IntentService:
