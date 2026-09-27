@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci
+.PHONY: setup up down ps logs lint test test-ci migrate
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -24,3 +24,6 @@ test: ## unit試験(毎コミットの規律)
 test-ci: ## ci環境試験(compose起動 → unit+integration)
 	docker compose up -d --wait
 	cd backend && uv run pytest
+
+migrate: ## DBマイグレーションをheadまで適用(明示実行。API/Workerの起動時自動実行はしない)
+	cd backend && uv run alembic upgrade head

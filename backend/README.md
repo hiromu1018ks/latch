@@ -12,6 +12,13 @@ make up && make ps      # ci常設環境(db/redis/api/worker)
 make test-ci            # unit+integration
 ```
 
+## マイグレーション(ws-1)
+
+- `make migrate` — ci常設DBへマイグレーションを適用(`alembic upgrade head`)。**明示実行のみ**(API/Workerの起動時自動実行はしない)
+- 接続先は `LATCH_DATABASE_URL`(デフォルト `postgresql+asyncpg://latch:latch@127.0.0.1:5432/latch`)
+- 現行版の確認: `cd backend && uv run alembic current`
+- 新しいマイグレーション追加: `cd backend && uv run alembic revision -m "説明"`(0001_initial_schema は手作業で作成済み)
+
 ## 規律
 
 - 製品コード(`src/latch/`)で実時間を直接参照しない — すべて `latch.core.clock` 経由(C2)。
