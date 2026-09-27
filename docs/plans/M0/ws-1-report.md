@@ -86,4 +86,13 @@ e346c05 feat: DB系依存(sqlalchemy/asyncpg/alembic)とSettings.database_url
 - **TDD実績**: Task 1(2試験 RED→GREEN)/ Task 3(2試験 RED→GREEN)/ Task 4(9試験 RED — 7 FAIL 2 PASS → Task 5でGREEN)/ Task 5(実装)/ Task 6(16試験、DDL完成済みのため即GREEN想定どおり — ただしasyncpgバインド規約の不足で4+1件の試験コード修正が発生)
 - **毎コミット検査**: 全6コミットで `make lint && make test` green を確認(test-ci もTask 3・5・6で実施)
 - **マイグレーション実行**: `make migrate`(明示実行)のみ。API/Worker起動時自動実行なし・compose.yaml への `LATCH_DATABASE_URL` 注入なし(M1)
+- **最終レビュー**(別モデル・独立検証: psqlによる実カタログ突合・integration再実行・migration編集履歴確認): Critical 0 / Important 0 / 判定 **Ready to merge: Yes**。Minor 5件は後続単位への引継ぎ(下記)
+- **スーパーバイザーへの引継ぎ事項(レビュー勧告)**:
+  - **並列worktree×常設ci-dbのマイグレーションhead分岐** — ws-4等が別worktreeで 0002 を追加すると、共有ci-dbの `alembic_version` がworktree間で行き来し、他方のworktreeの `upgrade head`/conftest が "Can't locate revision" 系エラーで落下する可能性。マージ前に `alembic downgrade base` で揃える運用か、worktree毎のDB/スキーマ分離のいずれかをM0中に決定し開発READMEかSTATUSへの明記を推奨(ws-1単体では不発生)
+- **後続単位へのMinor引継ぎ**(fix pass対象外・計画書どおりの範囲):
+  1. `pytest.raises(IntegrityError)` に SQLSTATE(23505/23514)のピン留めなし(design §4.2が番号を明記。将来のスキーマdriftで偽陽性窓)→ M1で試験強化
+  2. arch test(`test_arch_no_direct_time.py`)のスキャン範囲は `src/latch` のみで `alembic/env.py` を含まない — env.py自体は現状クリーンだが、雛形既存試験は§5禁止のためws-1では触れられず。M1でスキャン対象追加を検討
+  3. 匿名化一貫CHECKの試験は latch_id 分岐のみ(intent_ids NOT NULL 分岐は未検証。design §4.2 #6の記載どおり)
+  4. `env.py` の `if connectable is None: raise RuntimeError` は到達不能(`async_engine_from_config` はNoneを返さない)— 計画書掲載コードのまま無害
+  5. DDLがスキーマ非修飾(`public.` なし)。ci環境(owner+search_path=public)で動作実証済み。M4の本番実行主体検討時にschema修飾/`search_path`明示を議論
 - **push なし・main へのコミットなし**(マージはスーパーバイザー待ち)
