@@ -6,11 +6,11 @@
 
 ## 現在
 
-- フェーズ: M0(開発基盤)
+- フェーズ: M1(Intentドメイン)
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **M1(Intentドメイン)はユーザー指示により見送り中**(2026-09-27 G0承認と同時に実装ストップ指示。再開はユーザーの言葉待ち)
+- 次の着手: **M1(Intentドメイン)を実施中**(2026-09-27 G0承認時の一時停止を同日ユーザー指示で解除。実行wave: (ws-1 ∥ ws-2) → ws-3 → ws-4 → ws-5)
 
 ## M0 作業単位
 
@@ -23,6 +23,27 @@
 | ws-4 | 地物データ取り込み(位置参照情報+OSM→PostGIS)・正転/逆転ジオコーディング | M0-6 / C5 | ws-1(PostGIS) | 完了 |
 
 実行wave: 雛形 → (ws-1 ∥ ws-2) → (ws-3 ∥ ws-4)
+
+## M1 作業単位
+
+| 単位 | 内容 | 出典(12) | 依存 | 状態 |
+|---|---|---|---|---|
+| ws-1 | users API: POST /v1/users(初回登録・birth_date必須・18歳未満422 UNDER_AGE)・GET /v1/users/me | M1-1 / 05 §5 | M0(usersスキーマ・認証) | 未着手 |
+| ws-2 | Intent Parser(07 §2: 確定済みシステムプロンプト実装・アプリ層補完の単一規則・D-04連携ng_unverifiable→warnings)+ POST /v1/intents/parse(同期LLM・timeout 10秒・再試行なし・503 LLM_UNAVAILABLE/422 VALIDATION_ERROR切替 D-17) | M1-2, M1-3 / 07 §2・05 §5 | M0(LLM Gateway) | 未着手 |
+| ws-3 | intents CRUD: POST(active/draft)・GET・PATCH・DELETE・pause/resume・draft→active遷移(全検証通過後に受理・初回MatchEvent発行)。ジオコーディング正転の保存組み込み・alcohol_involvedのサーバ側確定・時刻検証(過去不可・+7日上限・active時のみ) | M1-4, M1-5 / 05 §5〜§6 | ws-1・ws-2 | 未着手 |
+| ws-4 | レート制限: Active 5件・作成20件/日・更新6回/時・API 60req/分(Redis・JST日付キー) | M1-6 / 08 §5.4・04 §5 | ws-3・M0(Redis) | 未着手 |
+| ws-5 | フロントエンド(prototype準拠): parse連携・条件リストの動的連結・有効期限の既定選択計算+disabled化・必須3フィールド催促・判定不能NG条件のNG行・注意表示・保存API接続(active/draft。03 第10節の既知差分解消) | M1-7 / 03 §3・§10 | ws-2〜ws-4 | 未着手 |
+
+実行wave: (ws-1 ∥ ws-2) → ws-3 → ws-4 → ws-5
+
+## G1(完了条件 — 12 M1より)
+
+- [ ] 02#1(下書き経路含む)〜#4がci環境でグリーン(10 第3節の振り分け)
+- [ ] Parser構造化精度ゲート: 入力セット30件以上で category 85% / time.start 90% / location 90% / participants 80% / budget 90%(07 D-17)
+- [ ] alcohol_involved精度ゲート: recall 100%・precision下限90%(09 第4.3節)
+- [ ] プロンプト変更のたびに両ゲートを再実行できる状態(09 第4.3節)
+
+※G1精度ゲートはT3部分資産(Parser入力セット30件+・飲酒判定セット30件+)を入力とする。T3整備進め方はユーザー確認が必要
 
 ## G0(完了条件 — 12 M0より)
 
@@ -75,4 +96,4 @@
 
 - T1 LLMプロバイダ契約(D-14の6基準+契約5条件): 未着手
 - T2 初期エリアの最終指定(11 第2節の4基準でスコアリング): 未着手
-- T3 ゴールドセット整備(シード200〜300件・期待値表・飲酒判定セット): M1開始時に着手
+- T3 ゴールドセット整備(シード200〜300件・期待値表・飲酒判定セット): M1開始に伴い着手対象。G1判定までにParser入力セット30件+・飲酒判定セット30件+が最低必要(進め方はユーザーと協議)
