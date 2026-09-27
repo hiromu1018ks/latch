@@ -1,6 +1,6 @@
 """Clock基本試験(design §4.1・§4.2)。"""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -69,3 +69,17 @@ def test_fake_clock_thread_safe():
         t.join()
     # 8スレッド×100回のadvanceが1つもロストしない(決定性)
     assert clock.now() == datetime(2026, 9, 27, 0, 13, 20, tzinfo=UTC)
+
+
+def test_jst_date_boundary_at_midnight():
+    clock = FakeClock(datetime(2026, 9, 30, 14, 59, 59, tzinfo=UTC))
+    assert clock.jst_date() == date(2026, 9, 30)  # JST 23:59:59
+    clock.advance(timedelta(seconds=1))
+    assert clock.jst_date() == date(2026, 10, 1)  # JST 10-01 0:00(=UTC 09-30 15:00)
+
+
+def test_jst_date_month_start_is_not_utc_month_start():
+    # UTCの暦日付はまだ9月のまま、JST日付は10月 — TTL方式不採用の根拠となったずれ
+    clock = FakeClock(datetime(2026, 9, 30, 15, 0, 0, tzinfo=UTC))
+    assert clock.now().date() == date(2026, 9, 30)
+    assert clock.jst_date() == date(2026, 10, 1)
