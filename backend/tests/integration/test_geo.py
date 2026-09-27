@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from latch.geo.ingest import BBox, FeatureRow, import_features
 from latch.geo.isj import iter_isj_towns
+from latch.geo.service import GeoService
 
 pytestmark = pytest.mark.integration
 
@@ -181,3 +182,152 @@ async def test_import_reloads_only_same_source(db_engine, fake_clock):
             ).all()
         )
     assert counts == {"isj_town": 3, "osm_poi": 1}
+
+
+# --- design §4-5: 正転(fixture ISJ取り込み後。期待値は名称照合なので座標非依存) ---
+
+
+async def _import_isj(db_engine, fake_clock):
+    return await import_features(db_engine, fake_clock, _isj_fixture_rows(), "isj_town")
+
+
+async def test_forward_isj_town_name(db_engine, fake_clock):
+    await _import_isj(db_engine, fake_clock)
+    hit = await GeoService(db_engine).geocode_forward("伊敷町")
+    assert hit is not None
+    assert hit.source == "isj_town"
+    assert hit.kind == "town"
+    assert hit.city_name == "鹿児島市"
+    assert hit.pref_name == "鹿児島県"
+    assert hit.lon == pytest.approx(130.552)
+    assert hit.lat == pytest.approx(31.605)
+
+
+async def test_forward_full_city_name(db_engine, fake_clock):
+    """市区町村名連結(「鹿児島市○○」形式)でもfull_normalized_name経由でヒット。"""
+    await _import_isj(db_engine, fake_clock)
+    hit = await GeoService(db_engine).geocode_forward("鹿児島市天文館一丁目")
+    assert hit is not None
+    assert hit.name == "天文館一丁目"
+
+
+async def test_forward_normalizes_input(db_engine, fake_clock):
+    """入力の表記ゆれ(算用数字丁目)は正規化で吸収される(design §2.4)。"""
+    await _import_isj(db_engine, fake_clock)
+    hit = await GeoService(db_engine).geocode_forward("天文館1丁目")
+    assert hit is not None
+    assert hit.name == "天文館一丁目"
+
+
+async def test_forward_missing_returns_none(db_engine, fake_clock):
+    """該当なし=None。M1が422 GEOCODING_FAILEDへ写像する(05 第5節)。"""
+    await _import_isj(db_engine, fake_clock)
+    assert await GeoService(db_engine).geocode_forward("存在しない町") is None
+
+
+# --- design §4-6: 逆転(期待値を決定的にするため地物2行を直構築・遠隔配置) ---
+
+_REVERSE_ROWS = [
+    FeatureRow(
+        kind="town",
+        name="西之段町",
+        pref_name="鹿児島県",
+        city_name="鹿児島市",
+        source_code="46201007001",
+        lon=130.5450,
+        lat=31.5850,
+        attrs={},
+    ),
+    FeatureRow(
+        kind="town",
+        name="東之段町",
+        pref_name="鹿児島県",
+        city_name="鹿児島市",
+        source_code="46201008001",
+        lon=130.5720,
+        lat=31.6080,
+        attrs={},
+    ),
+]
+
+
+async def _import_reverse_rows(db_engine, fake_clock):
+    # 2行のみの状態を作る(osm_poiも消す — 試験ごとに状態を構築する原則)
+    async with db_engine.begin() as conn:
+        await conn.execute(text("DELETE FROM geofeatures"))
+    return await import_features(db_engine, fake_clock, _REVERSE_ROWS, "isj_town")
+
+
+async def test_reverse_returns_city_plus_name(db_engine, fake_clock):
+    """座標→「市区町村名+地物名」のarea_name(08 D-11の形式)。"""
+    await _import_reverse_rows(db_engine, fake_clock)
+    svc = GeoService(db_engine)
+    # 入力=地物そのものの座標。代表点(≤707m)への最近傍はもう一方(約3.6km先)ではない
+    assert await svc.reverse_geocode(130.5450, 31.5850) == "鹿児島市西之段町"
+    assert await svc.reverse_geocode(130.5720, 31.6080) == "鹿児島市東之段町"
+
+
+async def test_reverse_is_deterministic(db_engine, fake_clock):
+    """同一入力の反復実行で同一結果(決定性 — design §2.5)。"""
+    await _import_reverse_rows(db_engine, fake_clock)
+    svc = GeoService(db_engine)
+    results = [await svc.reverse_geocode(130.5500, 31.5900) for _ in range(3)]
+    assert len(set(results)) == 1
+
+
+async def test_reverse_grid_snap_within_1km_cell(db_engine, fake_clock):
+    """Review Focus #3: 丸めは3857へ落として約1km — 代表点と入力の距離は
+    1kmセルの対角の半分(≈707m)以内。4326のまま丸めると≈111km刻みになる。"""
+    await _import_reverse_rows(db_engine, fake_clock)
+    async with db_engine.connect() as conn:
+        distance_m = (
+            await conn.execute(
+                text("""
+                    WITH input AS (
+                      SELECT ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) AS g),
+                    grid AS (
+                      SELECT ST_Transform(ST_SnapToGrid(
+                        ST_Transform(input.g, 3857), 1000.0), 4326) AS g FROM input
+                      )
+                    SELECT ST_Distance(grid.g::geography, input.g::geography)
+                    FROM input, grid
+                """),
+                {"lon": 130.5500, "lat": 31.5900},
+            )
+        ).scalar()
+    assert distance_m is not None and distance_m < 750.0
+
+
+async def test_reverse_grid_cell_points_share_result(db_engine, fake_clock):
+    """(b) 同一の1kmグリッドセルに属す2点が同一のarea_name(design §4-6)。
+    入力Pとその代表点R=snap(P)は同じセルに属し、共通の代表点を持つ
+    (代表点自身は丸めで不動)→ 逆転結果も一致する。"""
+    await _import_reverse_rows(db_engine, fake_clock)
+    async with db_engine.connect() as conn:
+        snapped = (
+            await conn.execute(
+                text("""
+                    WITH input AS (
+                      SELECT ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) AS g),
+                    grid AS (
+                      SELECT ST_Transform(ST_SnapToGrid(
+                        ST_Transform(input.g, 3857), 1000.0), 4326) AS g FROM input
+                      )
+                    SELECT ST_X(grid.g::geometry), ST_Y(grid.g::geometry) FROM grid
+                """),
+                {"lon": 130.5500, "lat": 31.5900},
+            )
+        ).first()
+    assert snapped is not None
+    svc = GeoService(db_engine)
+    from_point = await svc.reverse_geocode(130.5500, 31.5900)
+    from_representative = await svc.reverse_geocode(snapped[0], snapped[1])
+    assert from_point is not None
+    assert from_point == from_representative
+
+
+async def test_reverse_empty_table_returns_none(db_engine):
+    """地物なし(未取り込み)=None(design §2.5)。"""
+    async with db_engine.begin() as conn:
+        await conn.execute(text("DELETE FROM geofeatures"))
+    assert await GeoService(db_engine).reverse_geocode(130.5585, 31.5965) is None
