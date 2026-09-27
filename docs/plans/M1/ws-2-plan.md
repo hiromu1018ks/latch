@@ -1941,32 +1941,32 @@ Expected: エラーなし
 **Files:**
 - Create: `docs/plans/M1/ws-2-report.md`(§5の形式)
 
-- [ ] **Step 1: 全体lint**
+- [x] **Step 1: 全体lint**
 
 Run: `make lint`
 Expected: エラーなし
 
-- [ ] **Step 2: 全体unit試験**
+- [x] **Step 2: 全体unit試験**
 
 Run: `make test`
 Expected: 既存209件+新規(test_errors 3・test_prompt 3・test_parser_output 18・test_completion 8・test_service 15・test_parse_routes 13)。**§0.6 の既知の既存失敗1件(test_token_payload_structure)を除いて全部 PASS**。件数は概算、失敗0(既知1件を除く)と総件数を報告ファイルへ記録する。既知1件については「git stash で ws-2 差分を外しても同一失敗」を確認して ws-2 起因でないことを示す(§0.6)
 
-- [ ] **Step 3: 時刻参照検査(完了条件5)**
+- [x] **Step 3: 時刻参照検査(完了条件5)**
 
 Run: `rg -n 'datetime\.now|utcnow|time\.time|time\.monotonic' backend/src`
 Expected: ヒットは `backend/src/latch/core/clock.py` のみ
 
-- [ ] **Step 4: 差分の範囲確認(完了条件6)**
+- [x] **Step 4: 差分の範囲確認(完了条件6)**
 
 Run: `git status --porcelain` と `git diff --stat`
 Expected: 差分は次の一覧のみ — `backend/src/latch/intents/`(新規7ファイル)・`backend/src/latch/main.py`・`backend/tests/unit/intents/`(新規6ファイル)・`backend/tests/integration/test_intents_parse_api.py`(新規)・`docs/plans/M1/ws-2-plan.md`(checkbox更新)・`docs/plans/M1/ws-2-report.md`(新規)。§3.1 の禁止領域に差分があれば、その時点で修正して再確認する
 
-- [ ] **Step 5: integration収集の最終確認**
+- [x] **Step 5: integration収集の最終確認**
 
 Run: `cd backend && uv run pytest --collect-only -q`
 Expected: unit+integration 全試験が収集される(importエラーなし)
 
-- [ ] **Step 6: 報告ファイルを作成する**
+- [x] **Step 6: 報告ファイルを作成する**
 
 `docs/plans/M1/ws-2-report.md` を §5 の形式で作成する。特に:
 - 「test-ci=スーパーバイザー検証待ち(STATUS運用ルール)」と明記する
@@ -1974,7 +1974,7 @@ Expected: unit+integration 全試験が収集される(importエラーなし)
 - 完了条件 §4 の7項目それぞれにコマンドと出力抜粋を貼る
 - 逸脱・判断があれば「計画からの逸脱・判断」へ書く(なければ「なし」)
 
-- [ ] **Step 7: 計画書のcheckboxを更新する**
+- [x] **Step 7: 計画書のcheckboxを更新する**
 
 本計画書(docs/plans/M1/ws-2-plan.md)の実行済みステップの `- [ ]` を `- [x]` へ更新する。
 
