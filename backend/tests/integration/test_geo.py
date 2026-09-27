@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from latch.geo.ingest import BBox
+from latch.geo.ingest import BBox, FeatureRow, import_features
+from latch.geo.isj import iter_isj_towns
 
 pytestmark = pytest.mark.integration
 
@@ -84,3 +85,99 @@ async def test_geofeatures_created_at_has_no_db_default(db_engine):
             """)
         )
         assert result.scalar() is None
+
+
+# --- design §4-4: 取り込みと冪等 ---
+
+
+def _isj_fixture_rows():
+    return list(
+        iter_isj_towns(
+            FIXTURES / "isj_sample.csv",
+            city_codes=DEFAULT_CODES,
+            bbox=DEFAULT_BBOX,
+        )
+    )
+
+
+async def test_import_rejects_unknown_source(db_engine, fake_clock):
+    with pytest.raises(ValueError, match="source"):
+        await import_features(db_engine, fake_clock, _isj_fixture_rows(), "nominatim")
+
+
+async def test_import_isj_fixture(db_engine, fake_clock):
+    engine = db_engine
+    count = await import_features(engine, fake_clock, _isj_fixture_rows(), "isj_town")
+    assert count == 3  # 伊敷町・天文館一丁目・大字草牟田
+    async with engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    "SELECT name, normalized_name, full_normalized_name, city_name, "
+                    "attrs, created_at FROM geofeatures WHERE source = 'isj_town' "
+                    "ORDER BY name"
+                )
+            )
+        ).all()
+    assert [r[0] for r in rows] == ["伊敷町", "大字草牟田", "天文館一丁目"]
+    # normalized_name(大字接頭辞は除去される)/ full_normalized_name(ISJのみ)
+    by_name = {r[0]: r for r in rows}
+    assert by_name["大字草牟田"][1] == "草牟田"
+    assert by_name["伊敷町"][2] == "鹿児島市伊敷町"
+    # Review Focus #5: attrsはjsonbとして正しく入る(dict実読み取り)
+    assert by_name["伊敷町"][4]["source_material_code"] == "2"
+    # Review Focus #4: created_atはClock由来の明示値(FakeClock時刻と一致)
+    assert by_name["伊敷町"][5] == NOW
+
+
+async def test_import_is_idempotent(db_engine, fake_clock):
+    """フルリロードの冪等: 2回実行しても行数・内容が不変(design §4-4)。"""
+    engine = db_engine
+    first = await import_features(engine, fake_clock, _isj_fixture_rows(), "isj_town")
+    second = await import_features(engine, fake_clock, _isj_fixture_rows(), "isj_town")
+    assert first == second == 3
+
+    async def _snapshot():
+        async with engine.connect() as conn:
+            return (
+                await conn.execute(
+                    text(
+                        "SELECT source, name, normalized_name, source_code, "
+                        "ST_AsText(geom) FROM geofeatures ORDER BY source, name"
+                    )
+                )
+            ).all()
+
+    snap1 = await _snapshot()
+    snap2 = await _snapshot()
+    assert snap1 == snap2
+
+
+async def test_import_reloads_only_same_source(db_engine, fake_clock):
+    """source単位のリロード: OSM取り込みはISJ行を消さない(design §3.1)。"""
+    engine = db_engine
+    await import_features(engine, fake_clock, _isj_fixture_rows(), "isj_town")
+    await import_features(
+        engine,
+        fake_clock,
+        [
+            FeatureRow(
+                kind="bar",
+                name="バー宵待",
+                source_code="node/2",
+                lon=130.5575,
+                lat=31.5955,
+                attrs={"amenity": "bar"},
+            )
+        ],
+        "osm_poi",
+    )
+    async with engine.connect() as conn:
+        counts = dict(
+            (
+                await conn.execute(
+                    text("SELECT source, count(*) FROM geofeatures GROUP BY source")
+                )
+            ).all()
+        )
+    assert counts == {"isj_town": 3, "osm_poi": 1}

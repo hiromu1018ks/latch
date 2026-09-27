@@ -6,13 +6,16 @@ import_featuresはTask 5で追加する(フルリロード: DELETE→一括INSER
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from latch.core.clock import Clock
+from latch.geo.normalize import normalize_name
 
 
 class FeatureRow(BaseModel):
@@ -59,11 +62,56 @@ class BBox:
         )
 
 
+SOURCES = ("isj_town", "osm_poi")
+
+_INSERT = """
+    INSERT INTO geofeatures
+      (source, kind, name, normalized_name, full_normalized_name, pref_name,
+       city_name, source_code, attrs, geom, created_at)
+    VALUES
+      (:source, :kind, :name, :normalized_name, :full_normalized_name, :pref_name,
+       :city_name, :source_code, CAST(:attrs AS jsonb),
+       ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, :created_at)
+"""
+
+
 async def import_features(
     engine: AsyncEngine,
     clock: Clock,
     rows: Iterable[FeatureRow],
     source: str,
 ) -> int:
-    """sourceの行をフルリロードして件数を返す(Task 5で実装)。"""
-    raise NotImplementedError("Task 5で実装")
+    """sourceの行をフルリロード(DELETE WHERE source=... → 一括INSERT)し件数を返す。
+
+    冪等: 同一入力を再実行しても同一状態になる(設計§4-4で試験)。
+    normalized_nameはここで計算(design §2.4 — 入力と同じ関数)。
+    """
+    if source not in SOURCES:
+        raise ValueError(f"unknown source: {source!r} (must be one of {SOURCES})")
+    created_at = clock.now()
+    params = [
+        {
+            "source": source,
+            "kind": row.kind,
+            "name": row.name,
+            "normalized_name": normalize_name(row.name),
+            "full_normalized_name": (
+                normalize_name(f"{row.city_name}{row.name}") if row.city_name else None
+            ),
+            "pref_name": row.pref_name,
+            "city_name": row.city_name,
+            "source_code": row.source_code,
+            "attrs": json.dumps(row.attrs, ensure_ascii=False),
+            "lon": row.lon,
+            "lat": row.lat,
+            "created_at": created_at,
+        }
+        for row in rows
+    ]
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("DELETE FROM geofeatures WHERE source = :source"), {"source": source}
+        )
+        if params:
+            await conn.execute(text(_INSERT), params)
+    return len(params)
