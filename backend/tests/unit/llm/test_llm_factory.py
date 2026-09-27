@@ -91,3 +91,27 @@ def test_factory_rejects_unknown_mode(clock, monkeypatch):
     s = _clean_settings(monkeypatch, llm_mode="production")
     with pytest.raises(ValueError, match="llm_mode"):
         build_llm_gateway(clock, s)
+
+
+def test_public_api_reexports():
+    import latch.llm as api
+
+    for name in (
+        "LLMGateway",
+        "build_llm_gateway",
+        "Timeouts",
+        "TIMEOUT_PARSER_S",
+        "TIMEOUT_EMBEDDING_S",
+        "TIMEOUT_JEV_S",
+        "LLMError",
+        "LLMTimeoutError",
+        "LLMProviderError",
+        "ParserProvider",
+        "EmbeddingProvider",
+        "JevProvider",
+        "EMBEDDING_DIMENSIONS",
+        "StubLLM",
+        "SendRecord",
+        "send_log",
+    ):
+        assert getattr(api, name, None) is not None, name

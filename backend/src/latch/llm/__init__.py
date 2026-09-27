@@ -1,1 +1,41 @@
-"""LLM Gateway(M0 ws-2)。3系統集約・送信記録・プロバイダ抽象・スタブ。"""
+"""LLM Gateway(M0 ws-2)。3系統集約・送信記録・プロバイダ抽象・スタブ。
+
+M1/M2の呼び出し側はこのパッケージ越しにGatewayを利用する(design §3.1)。
+"""
+
+from latch.llm.errors import LLMError, LLMProviderError, LLMTimeoutError
+from latch.llm.gateway import (
+    TIMEOUT_EMBEDDING_S,
+    TIMEOUT_JEV_S,
+    TIMEOUT_PARSER_S,
+    LLMGateway,
+    Timeouts,
+    build_llm_gateway,
+)
+from latch.llm.providers import (
+    EMBEDDING_DIMENSIONS,
+    EmbeddingProvider,
+    JevProvider,
+    ParserProvider,
+)
+from latch.llm.records import SendRecord, send_log
+from latch.llm.stub import StubLLM
+
+__all__ = [
+    "EMBEDDING_DIMENSIONS",
+    "EmbeddingProvider",
+    "JevProvider",
+    "LLMError",
+    "LLMGateway",
+    "LLMProviderError",
+    "LLMTimeoutError",
+    "ParserProvider",
+    "SendRecord",
+    "StubLLM",
+    "TIMEOUT_EMBEDDING_S",
+    "TIMEOUT_JEV_S",
+    "TIMEOUT_PARSER_S",
+    "Timeouts",
+    "build_llm_gateway",
+    "send_log",
+]
