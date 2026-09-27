@@ -230,6 +230,47 @@ def test_classify_non_unique_violation_returns_none():
     )
 
 
+class _FakeDbapiWrapperError(Exception):
+    """SQLAlchemy 2.1 asyncpg dialectラッパーの偽装(実測の形・2026-09-27)。
+
+    IntegrityError.orig に実際に入るのは AsyncAdapt_asyncpg_dbapi.* ラッパーで、
+    sqlstate/pgcode は持つが constraint_name は持たない。生のasyncpg例外は
+    driver_exception (.orig) の先にある。
+    """
+
+    def __init__(self, sqlstate: str, constraint_name: str | None = None):
+        driver = _FakeAsyncpgError(sqlstate, constraint_name)
+        super().__init__(str(driver))
+        self.sqlstate = sqlstate
+        self.pgcode = sqlstate
+        self.driver_exception = driver
+        self.orig = driver
+
+
+def _wrapped_integrity_error(sqlstate: str, constraint_name: str | None = None):
+    return IntegrityError(
+        "INSERT INTO users ...", {}, _FakeDbapiWrapperError(sqlstate, constraint_name)
+    )
+
+
+def test_classify_sqlalchemy_asyncpg_wrapper_shape():
+    # スーパーバイザー検証で発見: 実経路の.origは dialectラッパーで
+    # constraint_name を持たず503化した。ラッパー経由でも409へ分類できること
+    err = classify_integrity_error(
+        _wrapped_integrity_error("23505", "uq_users_auth_provider_subject")
+    )
+    assert isinstance(err, UserExistsError)
+    assert err.http_status == 409
+
+
+def test_classify_wrapper_other_constraint_returns_none():
+    # ラッパー経由でも制約名不一致はNone(503扱い)のまま
+    assert (
+        classify_integrity_error(_wrapped_integrity_error("23505", "users_pkey"))
+        is None
+    )
+
+
 async def test_make_user_service_returns_service():
     # 実SQL関数の実行はintegrationが所有。unitでは構築がUserServiceを
     # 返すことのみ(engineの接続は呼び出し時まで発生しない)

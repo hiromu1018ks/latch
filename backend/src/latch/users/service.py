@@ -50,14 +50,28 @@ _USERS_SUBJECT_CONSTRAINT = "uq_users_auth_provider_subject"
 def classify_integrity_error(exc: IntegrityError) -> UsersError | None:
     """UNIQUE(auth_provider, auth_subject)違反のみ409 USER_EXISTSへ変換。
 
-    asyncpgの例外(exc.orig)は sqlstate と constraint_name 属性を持つ。
     sqlstate=23505(unique_violation)+ 対象制約名のときのみ UserExistsError。
     それ以外はNone(呼び出し側で再送出 → UserServiceが503へ包む — design §2.2)。
+
+    exc.orig に入る例外は2つの形がありうる(どちらも検査する):
+    - 生のasyncpg例外(sqlstate・constraint_name を直接持つ)
+    - SQLAlchemy 2.1 asyncpg dialect のDBAPIラッパー(AsyncAdapt_asyncpg_dbapi.*。
+      sqlstate は持つが constraint_name は持たず、生例外は driver_exception
+      の先にある — 2026-09-27 compose ci-DB実測。ラッパー直参照のみだと
+      重複登録が503化する)
     """
     orig = exc.orig
-    if getattr(orig, "sqlstate", None) != "23505":
+    sqlstate = getattr(orig, "sqlstate", None)
+    constraint_name = getattr(orig, "constraint_name", None)
+    if constraint_name is None:
+        driver = getattr(orig, "driver_exception", None)
+        if driver is not None:
+            constraint_name = getattr(driver, "constraint_name", None)
+            if sqlstate is None:
+                sqlstate = getattr(driver, "sqlstate", None)
+    if sqlstate != "23505":
         return None
-    if getattr(orig, "constraint_name", None) == _USERS_SUBJECT_CONSTRAINT:
+    if constraint_name == _USERS_SUBJECT_CONSTRAINT:
         return UserExistsError("user already registered")
     return None
 
