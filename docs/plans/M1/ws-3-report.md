@@ -125,3 +125,27 @@ SQLを解釈しないため見逃れた(SQLを解釈しない=design §4.1の限
   稼働中のため**(compose.yaml api は build型・ソースマウントなし)。
   **apiイメージの再ビルドがスーパーバイザー側で必要**。ホスト側の同等経路は
   上記スクリプトで全て通過済みのため、再ビルド後に10件全グリーンになる見込み
+
+## 8. 補足2: 再ビルド後の再検証で残った1件(test_7_delete・テスト側欠陥)
+
+スーパーバイザーがapiイメージを修正済みコードで再ビルド後に test-ci を実行した
+結果、501 passed・test_7_delete のみ `sqlalchemy.exc.MultipleResultsFound` で失敗。
+
+**原因(テスト側の誤り)**: match_events への問い合わせをイベント種で絞らず
+`.one()`(1行期待)で書いていた。active な intent は POST /v1/intents(active) 時点で
+created イベントが既に存在し、DELETE で deleted が追加されて2行になる —
+design §2.2表どおりの**正当な挙動**(draft は created なしの1行)。
+
+**修正**(コミット `6835d9b・test(intents): test_7_deleteのmatch_events検証をイベント種で絞る`):
+- deleted 検証は `AND event_type = 'deleted'` で絞って `.one()` する形へ修正
+- あわせて created の有無(active=1行・draft=0行)を検証に追加し、§2.2表の
+  「active作成確定はcreated発行・draft作成は発行なし」をピン留め
+- **同ファイルの `.one()` 点検**: test_3_draft_to_active の2箇所は
+  「draft作成(発行なし)→active化(created 1行)」の時点での検証で1行が確定する
+  ため正当(その時点でイベントがcreatedのみという設計意図のピン留めとして機能)。
+  修正不要と判断した
+
+**修正後のエビデンス**:
+- `cd backend && uv run --group geo pytest tests/integration/test_intents_crud_api.py -q`:
+  **10 passed**(api=修正済みコードのイメージで稼働中)
+- `make lint` クリーン・`make test` 420 passed(unit・回帰なし)
