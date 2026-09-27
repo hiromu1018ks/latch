@@ -40,3 +40,49 @@ class DependencyUnavailableError(IntentsError):
 
     http_status = 503
     code = "DEPENDENCY_UNAVAILABLE"
+
+
+class IntentValidationError(IntentsError):
+    """保存APIの入力検証422(必須3フィールド欠落・時刻範囲外・cursor不正)。
+
+    parse経路のUnstructurableError(LLM出力不正)と違い、保存経路のリクエスト
+    検証用(design §2.3)。
+    """
+
+    http_status = 422
+    code = "VALIDATION_ERROR"
+
+
+class UnderAgeError(IntentsError):
+    """20歳未満の飲酒Intent作成・更新(08 D-10)。"""
+
+    http_status = 422
+    code = "UNDER_AGE"
+
+
+class GeocodingFailedError(IntentsError):
+    """location.nameに該当する地物が存在しない(05 §5・04 §3)。"""
+
+    http_status = 422
+    code = "GEOCODING_FAILED"
+
+
+class IntentNotFoundError(IntentsError):
+    """対象Intentが存在しない。未登録JWT(User行なし)も同じ404(design §2.6)。"""
+
+    http_status = 404
+    code = "NOT_FOUND"
+
+
+class ForbiddenError(IntentsError):
+    """所有者以外の操作(05 §5)。存在秘匿の404ではなく403(design §6-5f)。"""
+
+    http_status = 403
+    code = "FORBIDDEN"
+
+
+class InvalidTransitionError(IntentsError):
+    """遷移表にない操作(draftのpause・matched行のDELETE・逆遷移等・design §6-5e)。"""
+
+    http_status = 422
+    code = "VALIDATION_ERROR"
