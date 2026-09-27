@@ -18,6 +18,8 @@ from latch.core.clock import Clock
 from latch.llm.errors import LLMError, LLMProviderError, LLMTimeoutError
 from latch.llm.providers import EmbeddingProvider, JevProvider, ParserProvider
 from latch.llm.records import SendRecord, SendStatus, SystemName, send_log
+from latch.llm.stub import StubLLM
+from latch.settings import Settings
 
 TIMEOUT_PARSER_S = 10.0  # 07 第1節(D-17)同期・再試行なし
 TIMEOUT_EMBEDDING_S = 2.0  # 07 第1節 非同期・再試行なし
@@ -149,3 +151,21 @@ class LLMGateway:
             )
         )
         return result
+
+
+def build_llm_gateway(clock: Clock, settings: Settings) -> LLMGateway:
+    """設定からGatewayを構築する(design §2.7)。
+
+    M0ではllm_mode="stub"のみ。T1確定後の実装追加で"real"を選択できるように
+    なるが、その分岐はこの関数に閉じる(呼び出し側はGateway IFのみを知る)。
+    """
+    if settings.llm_mode != "stub":
+        raise ValueError(
+            f"unknown llm_mode: {settings.llm_mode!r} (M0では 'stub' のみ)"
+        )
+    stub = StubLLM(
+        delay_parser_ms=settings.llm_stub_delay_parser_ms,
+        delay_embedding_ms=settings.llm_stub_delay_embedding_ms,
+        delay_jev_ms=settings.llm_stub_delay_jev_ms,
+    )
+    return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub)
