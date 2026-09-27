@@ -86,3 +86,42 @@
 ## 6. test-ci=スーパーバイザー検証待ち
 本単位の実装中は compose常設環境へ触れていない(計画§0.3)。integration試験は
 作成のみで未実行。
+
+## 7. 補足: スーパーバイザー検証で発見した503欠陥と修正(2026-09-28)
+
+**発見**: 検証(test-ci・apiイメージを本worktreeコードで再ビルド)で
+test_intents_crud_api.py の9件が失敗。POST /v1/intents が全て
+503 DEPENDENCY_UNAVAILABLE になった(201期待の正常系が全滅・489 passed)。
+apiログには原因例外の情報がなく切り分け不能だった。
+
+**原因**(一時スクリプトで compose DB へ直接接続し `make_intent_service` を
+実構築して特定・コミットなし): store.py `_GEO_CENTER_EXPR` の
+`:geo_lon::float8` は SQLAlchemy text() の bind param 正規表現が
+`:name` 直後の `:` を認識せず、`:geo_lon::float8` がリテラル文字列のまま
+PostgreSQL へ送られ INSERT が構文エラー。`create` の
+`except Exception` がこれを503へ包んだ。unit試験のスタブconn/FakeConnは
+SQLを解釈しないため見逃れた(SQLを解釈しない=design §4.1の限界)。
+
+**修正**(コミット `eeb5263・fix(intents): キャスト付きbind paramのリテラル落ちを修正し503を解消`):
+- `:geo_lon::float8` → `CAST(:geo_lon AS float8)`(store.py。`::geography` は
+  パラメータに隣接しないため問題なし)
+- **運用性改善(08 §2.4の範囲内)**: 503へ包む際のログに例外の**クラス名**のみ
+  残す(service.py `_wrap_unexpected`。メッセージ本文・ユーザー内容は出さない)
+- **unit試験の強化**: `test_store_sql.py`(新規3試験)はINSERT/UPDATEを実
+  postgresql dialect で compile し、未変換の `:name` が compiled 文字列に
+  残らないことを検証する。params集合の検査では同名パラメータの別箇所認識で
+  部分認識を見逃すため、文字列検査とした(今回の欠陥の本質)。
+  503ラップ時のログ検証(caplog)も test_intents_service.py へ追加
+
+**修正後のエビデンス**:
+- `make lint` クリーン・`make test` 420 passed(416+4: test_store_sql.py 3件・
+  ログ試験1件)
+- 一時スクリプトで compose DB 実接続によるCRUD全経路検証: active作成
+  (geo_center実値セット・created Event)・active更新(version 2・updated Event)・
+  pause/resume(version 3)・draft→active・delete(cancelled・deleted Event)・
+  list すべて成功。match_events の実行連 = created/updated/updated/deleted を確認
+- integration再検証(`uv run --group geo pytest tests/integration/test_intents_crud_api.py -q`):
+  9 failed, 1 passed — **apiコンテナ(127.0.0.1:8000)が修正前コードのイメージで
+  稼働中のため**(compose.yaml api は build型・ソースマウントなし)。
+  **apiイメージの再ビルドがスーパーバイザー側で必要**。ホスト側の同等経路は
+  上記スクリプトで全て通過済みのため、再ビルド後に10件全グリーンになる見込み
