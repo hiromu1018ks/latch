@@ -105,7 +105,12 @@ async def test_intents_indexes_exist_with_partial_where(db_engine):
     assert "status = 'active'" in defs["idx_intents_matching"]
     assert "status = 'active'" in defs["idx_intents_budget"]
     assert "status = 'active'" in defs["idx_intents_participants"]
-    assert "status IN ('draft'" in defs["idx_intents_expires"]
+    # PostgreSQL 17はINを ANY (ARRAY[...]) へdeparseするため両形式を受け入れる
+    expires_def = defs["idx_intents_expires"].replace(" ", "")
+    assert (
+        "statusIN('draft'" in expires_def
+        or "status=ANY(ARRAY['draft'::text" in expires_def
+    )
     # ops(pgvector)
     assert "vector_cosine_ops" in defs["idx_intents_embedding"]
 
