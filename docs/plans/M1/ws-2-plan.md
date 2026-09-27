@@ -303,7 +303,7 @@ Expected: エラーなし
 **Interfaces:**
 - Produces: `PARSER_SYSTEM_PROMPT: str`(07 §2全文・`{current_date}` プレースホルダ1箇所)・`format_parser_system_prompt(current_date: date) -> str`。将来の実プロバイダ(T1後)と精度ゲートharness(T3)が消費する。本単位のランタイム消費者はいない(design §2.6トレードオフどおり)。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_prompt.py` を作成:
 
@@ -351,12 +351,12 @@ def test_formatter_substitutes_iso_date():
 
 補足: `parents[4]` は `tests/unit/intents/test_prompt.py` から `backend/` を挟んでリポジトリルートへ至る経路(`parents[0]=intents, [1]=unit, [2]=tests, [3]=backend, [4]=リポジトリルート`)。worktree内でもリポジトリルートに `docs/` があるため成立する。
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_prompt.py -v`
 Expected: FAIL(ImportError: PARSER_SYSTEM_PROMPT がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/prompt.py` を作成。**下記をそのまま使う**(join形式の由来は §「実装メモ」参照。07 §2との値の一致はピン留め試験が強制する — 手で書き換えないこと):
 
@@ -438,12 +438,12 @@ def format_parser_system_prompt(current_date: date) -> str:
 
 **実装メモ(join形式の由来)**: 07 §2のプロンプトには東アジア幅で88字を超える行があり(例: 入力説明行・出力JSONスキーマの category/location 行)、ruffのE501は**東アジア文字幅ベース**で行長を測るため、三重引用符ブロックではlintが通らない。プロンプトの文字列値はdocsと1文字・改行位置まで一致が必須のため行の折返しはできず、pyproject.toml(per-file-ignores)は本単位の禁止領域 — よって**行リスト+`"\n".join`** とし、docs由来の長い行だけ隣接リテラル連結で物理行を分割する(連結後の値は元の行と同一。ピン留め試験が強制する)。この形は計画作成時に ruff format / ruff check / docs一致のすべてを実機検証済み。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_prompt.py -v`
 Expected: PASS 3件。**ピン留め試験(test_prompt_is_pinned_to_docs_07_section2)がFAILする場合は定数の値がdocsと1文字でも違う** — 手で書き換えず、Step 3 のコードをそのまま再適用すること(値の一致は試験が強制する)。
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし(prompt.py は Step 3 のコードが ruff format 安定形・全行88幅以内であることを計画作成時に実機検証済み)
