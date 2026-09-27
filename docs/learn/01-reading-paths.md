@@ -105,13 +105,15 @@ app = create_app()
 
 ### ステップ3: 組み立て工場 create_app
 
-`main.py` の中段、`def create_app(...)` から始まる関数が本体です。最初の5行だけ読みます。
+`main.py` の中段、`def create_app(...)` から始まる関数が本体です。最初の数行だけ読みます。
 
 ```python
 def create_app(
     clock: Clock | None = None,
     settings: Settings | None = None,
     auth_service=None,
+    users_service=None,
+    intent_parse_service=None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.clock = clock if clock is not None else SystemClock()
@@ -119,7 +121,8 @@ def create_app(
 
 `clock: Clock | None = None` は「時計(`clock`)を引数として渡せる。渡されなかったら `None`」という
 意味の型注釈つき引数です。そして次の行で、`None` のときは `SystemClock()`(実時間を返す普通の時計)を
-作って代わりに入れています。
+作って代わりに入れています。引数はこのあと `auth_service`・`users_service`・`intent_parse_service`
+と続きますが、どれも同じ形の「差し替え用の受け口」です(第4章・第5章で実際に使います)。
 
 ここで疑問を持つべきです。**なぜ `app = FastAPI()` して `clock` を直接作らず、わざわざ関数にして
 外から渡せるようにしているのか?** 答えは「差し替え可能にするため」です。本番では本物の時計、
@@ -230,7 +233,7 @@ transport = ASGITransport(app=app)
 ```
 
 このテストは**本物のサーバーを起動していません**。uvicornもポートも使わず、
-アプリの関数を直接呼び出してHTTPのやり取りを模擬しています。だから209件の試験が2秒で
+アプリの関数を直接呼び出してHTTPのやり取りを模擬しています。だから302件の試験が約3秒で
 終わるのです。テスト用の窓口を用意し直す必要がなく、本番と同じアプリを検査できる点も利点です。
 
 ### 全体を一枚にまとめると
@@ -258,12 +261,13 @@ transport = ASGITransport(app=app)
    `server_time` が進むことを観察する
 2. `docker compose logs api --tail 5` で、curl のたびにアクセスログが1行増えることを確認する
 3. `rg -n "Depends" backend/src` を実行し、DIが使われている場所を数える(認証のファイルにもあります)
-4. `git log --oneline -- backend/src/latch/main.py` で、このファイルが雛形→認証統合と
-   どう変化したかを一覧する。気になるコミットを `git show <ハッシュ>` で読む
+4. `git log --oneline -- backend/src/latch/main.py` で、このファイルが雛形→認証→users・
+   parse の統合とどう変化したかを一覧する。気になるコミットを `git show <ハッシュ>` で読む
 
-## 2.5 次のトレース(未着手)
+## 2.5 次のトレース(継続追加)
 
-実装の進行に合わせて追加されます。
+実装の進行に合わせて追加されます。**書き込みの経路(POST /v1/users)とparseの経路は、
+第4章・第5章として実現しました**(concepts/ 配下。この章のトレース1と同じ読み方です)。
 
 - トレース2 認証: テスト用トークン発行 → `/v1/auth/token` 交換 → refresh回転 → logout失効
 - トレース3 ジオコーディング: 「天文館」→座標→「鹿児島市泉町」のSQLの中身
