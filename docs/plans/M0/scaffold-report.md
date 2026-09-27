@@ -66,3 +66,17 @@ acfa77f test: JST日付境界(0時・月初・UTCとの9時間ずれ)の立証
 ### その他
 - 依存は fastapi / uvicorn / pydantic-settings + dev 4種(pytest / pytest-asyncio / httpx / ruff)のみ。スコープ外コード(DB接続・Gateway・認証等)は未作成。
 - unit試験は30件(全GREEN)、integration試験は3件(compose到達・docker権限回復後に `make test-ci` で実行)。
+
+## スーパーバイザー検証記録(2026-09-27、マージ d2b53d7 時点)
+
+実行ユーザーをdockerグループへ参加(usermod+セッション再起動)させた後、完了条件2・3を検証し、
+全6項目PASSとしてmainへマージした。上表のFAIL(検証不能)2項目はこの時点で解消済み。
+
+| # | 再検証結果 | 証拠 |
+|---|---|---|
+| 2 | **PASS** | `make up` → compose ps: db/redis/api `Up (healthy)`・worker `Up`。`curl 127.0.0.1:8000/health` → `{"status":"ok","server_time":"2026-09-27T06:06:31.063848+00:00"}`(tz-aware UTC)。判定はdesign/plan修正済み文言(5c11be1)による |
+| 3 | **PASS** | `make test-ci` → `33 passed in 0.10s`(unit 30 + integration 3) |
+
+- 1/4/5/6もスーパーバイザーがworktree・main両側で独立再実行しPASSを確認
+- 追加確認: `pg_available_extensions` で postgis 3.6.4 / vector 0.8.6 がdbイメージに同梱(PGDGパッケージ名の実解決を立証)
+- マージ後のmainから `make up`・`make test` を実行し、常設環境が正規位置から運用できることを確認(30 passed)
