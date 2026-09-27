@@ -37,6 +37,9 @@ services:
       context: backend
     # 単一プロセス = API 1インスタンス(10 第1節)
     command: uvicorn latch.main:app --host 0.0.0.0 --port 8000
+    environment:
+      LATCH_DATABASE_URL: postgresql+asyncpg://latch:latch@db:5432/latch
+      LATCH_REDIS_URL: redis://redis:6379/0
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

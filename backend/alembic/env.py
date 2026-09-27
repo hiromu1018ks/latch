@@ -11,7 +11,10 @@ from latch.settings import Settings
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: 既定Trueだと収集済みimportの latch.* ロガーが
+    # 無効化され、integration試験(conftestのalembic upgrade後)のcaplogが空になる
+    # (スーパーバイザー検証のtest-ci失敗2。明示許可を受けてws-3で修正)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = None
 
