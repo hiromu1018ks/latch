@@ -30,3 +30,6 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Geospatial source data (ws-4)
+backend/data/
