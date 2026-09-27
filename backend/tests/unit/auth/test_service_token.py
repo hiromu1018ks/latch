@@ -9,7 +9,7 @@ import pytest
 
 from latch.auth.errors import DependencyUnavailableError, InvalidIdpTokenError
 from latch.auth.idp import IdPVerifier, IdPVerifyConfig
-from latch.auth.service import AuthService
+from latch.auth.service import AuthService, make_user_lookup
 from latch.auth.sessions import SessionStore
 from latch.auth.testkeys import DEFAULT_KID, load_private_key
 from latch.auth.tokens import verify_access_token
@@ -149,3 +149,57 @@ async def test_token_redis_failure_is_503(clock):
     )
     with pytest.raises(DependencyUnavailableError):
         await svc.token(provider="google", idp_token=_idp_token())
+
+
+# --- make_user_lookup の行値変換(スーパーバイザー検証test-ci失敗1の回帰)---
+
+
+class _FakeResult:
+    def __init__(self, row):
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
+class _FakeConn:
+    def __init__(self, row):
+        self._row = row
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+    async def execute(self, stmt, params):
+        return _FakeResult(self._row)
+
+
+class _FakeEngine:
+    """asyncpgの行値型を模倣する最小engineスタブ(async_engine_from_config不要)。"""
+
+    def __init__(self, row):
+        self._row = row
+
+    def connect(self):
+        return _FakeConn(self._row)
+
+
+async def test_user_lookup_returns_uuid_instance_as_is():
+    # asyncpgはuuid列をUUID「インスタンス」で返す(uuid.UUID(row[0]) は
+    # AttributeError('UUID' object has no attribute 'replace') になる — 503の原因)
+    uid = uuid.uuid4()
+    lookup = make_user_lookup(_FakeEngine(row=(uid,)))  # type: ignore[arg-type]
+    assert await lookup("google", "sub-1") == uid
+
+
+async def test_user_lookup_builds_uuid_from_string_row_value():
+    uid = uuid.uuid4()
+    lookup = make_user_lookup(_FakeEngine(row=(str(uid),)))  # type: ignore[arg-type]
+    assert await lookup("google", "sub-1") == uid
+
+
+async def test_user_lookup_returns_none_when_no_row():
+    lookup = make_user_lookup(_FakeEngine(row=None))  # type: ignore[arg-type]
+    assert await lookup("google", "sub-1") is None

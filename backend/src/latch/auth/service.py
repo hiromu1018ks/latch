@@ -44,6 +44,20 @@ _USER_SELECT = text(
 )
 
 
+def _coerce_user_id(value: object) -> uuid.UUID | None:
+    """行のid値をUUIDへ正規化する。
+
+    asyncpgはuuid列をUUID「インスタンス」で返す(uuid.UUID(row[0]) は
+    AttributeErrorになる — スーパーバイザー検証のtest-ci失敗1)。UUIDは
+    そのまま返し、文字列など他型のみ uuid.UUID(str(value)) で構築する。
+    """
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    return uuid.UUID(str(value))
+
+
 def make_user_lookup(engine: AsyncEngine) -> UserLookup:
     """users表の読み取り専用lookup(行なければNone=初回登録待ち)。
 
@@ -56,7 +70,7 @@ def make_user_lookup(engine: AsyncEngine) -> UserLookup:
                 _USER_SELECT, {"provider": provider, "subject": subject}
             )
             row = result.first()
-            return uuid.UUID(row[0]) if row is not None else None
+            return _coerce_user_id(row[0]) if row is not None else None
 
     return user_lookup
 
