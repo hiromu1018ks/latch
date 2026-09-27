@@ -71,6 +71,30 @@ class LLMGateway:
             invoke=lambda: self._parser.complete_structured(text, current_date),
         )
 
+    async def embed_intent(self, *, text: str, intent_id: str) -> list[float]:
+        """07 第3節。正規化テキスト→768次元。timeout 2秒・再試行なし。"""
+        return await self._call(
+            system="embedding",
+            destination=self._embedding.name,
+            timeout_s=self._timeouts.embedding_s,
+            intent_ids=[intent_id],
+            user_id=None,
+            invoke=lambda: self._embedding.embed(text),
+        )
+
+    async def judge_pair(
+        self, *, intent_a: str, intent_b: str, intent_ids: list[str]
+    ) -> dict:
+        """07 第4節。2 Intent分の正規化テキスト→7設問JSON。timeout 6秒。"""
+        return await self._call(
+            system="jev",
+            destination=self._jev.name,
+            timeout_s=self._timeouts.jev_s,
+            intent_ids=intent_ids,
+            user_id=None,
+            invoke=lambda: self._jev.judge(intent_a, intent_b),
+        )
+
     async def _call(
         self,
         *,
