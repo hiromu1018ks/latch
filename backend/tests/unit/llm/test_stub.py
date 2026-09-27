@@ -1,9 +1,11 @@
 """StubLLM: ABC実装・決定性・デフォルト応答・次元(design §4-4)。"""
 
 from datetime import date
+from time import perf_counter  # 実時間計測はテストコードのみ(design §4)
 
 import pytest
 
+from latch.llm.errors import LLMProviderError
 from latch.llm.providers import (
     EMBEDDING_DIMENSIONS,
     EmbeddingProvider,
@@ -119,3 +121,45 @@ async def test_stub_response_override():
     assert await StubLLM(embedding_response=fixed).embed("t") == fixed
     bad_jev = {"would_a_accept_b": {}}  # M2の出力検証失敗再現の例
     assert await StubLLM(jev_response=bad_jev).judge("a", "b") == bad_jev
+
+
+async def test_stub_delay_injects_real_latency():
+    # design §2.6: 系統別の固定遅延。呼び出し前にasyncio.sleepする(時刻参照ではない)
+    stub = StubLLM(delay_jev_ms=50)
+    start = perf_counter()
+    await stub.judge("a", "b")
+    assert (perf_counter() - start) * 1000 >= 50
+
+
+async def test_stub_delay_is_per_system():
+    stub = StubLLM(delay_jev_ms=50)
+    start = perf_counter()
+    await stub.embed("t")  # embeddingは遅延なし → 即返る
+    elapsed_ms = (perf_counter() - start) * 1000
+    assert elapsed_ms < 50
+
+
+async def test_stub_zero_delay_by_default():
+    stub = StubLLM()
+    start = perf_counter()
+    await stub.complete_structured("t", date(2026, 1, 1))
+    await stub.embed("t")
+    await stub.judge("a", "b")
+    assert (perf_counter() - start) * 1000 < 50  # 既定は無効(10 第1節)
+
+
+async def test_stub_fail_flags_raise_provider_error():
+    # design §2.6 / 10 第4.5節: 100%エラー注入の再現
+    with pytest.raises(LLMProviderError):
+        await StubLLM(fail_parser=True).complete_structured("t", date(2026, 1, 1))
+    with pytest.raises(LLMProviderError):
+        await StubLLM(fail_embedding=True).embed("t")
+    with pytest.raises(LLMProviderError):
+        await StubLLM(fail_jev=True).judge("a", "b")
+
+
+async def test_stub_fail_is_per_system():
+    stub = StubLLM(fail_parser=True)
+    with pytest.raises(LLMProviderError):
+        await stub.complete_structured("t", date(2026, 1, 1))
+    assert len(await stub.embed("t")) == 768  # 他系統は影響を受けない
