@@ -16,13 +16,14 @@ from latch.geo.service import Geofeature
 from latch.intents import events as events_mod
 from latch.intents.errors import (
     DependencyUnavailableError,
+    ForbiddenError,
     GeocodingFailedError,
     IntentNotFoundError,
     IntentValidationError,
     UnderAgeError,
 )
 from latch.intents.intent_input import StructuredIntentInput
-from latch.intents.service import IntentService
+from latch.intents.service import IntentService, decode_cursor, encode_cursor
 from latch.intents.store import IntentRow, UserRow
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)  # JST 2026-09-27 21:00
@@ -465,3 +466,100 @@ async def test_raw_text_and_location_never_appear_in_logs_or_errors(caplog):
     assert secret_place not in caplog.text
     assert secret_raw not in str(ei.value)
     assert secret_place not in str(ei.value)
+
+
+# --- get・list・認可・cursor(design §4.1-4h・§2.10)---
+
+
+async def test_get_returns_own_intent_row():
+    row = _row(status="active")
+    svc, _, _, _, read_conn = _service(store=StubStore(rows={row.id: row}))
+    got = await svc.get(auth_provider="google", auth_subject="s", intent_id=row.id)
+    assert got.id == row.id
+
+
+async def test_get_other_users_intent_forbidden():
+    row = _row(user_id=OTHER_USER_ID)
+    svc, _, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(ForbiddenError) as ei:
+        await svc.get(auth_provider="google", auth_subject="s", intent_id=row.id)
+    assert ei.value.code == "FORBIDDEN"
+
+
+async def test_get_missing_intent_404():
+    svc, _, _, _, _ = _service()
+    with pytest.raises(IntentNotFoundError):
+        await svc.get(
+            auth_provider="google",
+            auth_subject="s",
+            intent_id=uuid.uuid4(),
+        )
+
+
+async def test_list_builds_next_cursor_when_more_rows_exist():
+    """limit+1件取得し、limit件返して余りがあればnext_cursorを組み立てる。"""
+    rows = [_row(status="active"), _row(status="draft")]
+    svc, store, _, _, _ = _service(store=StubStore(page=rows))
+    page = await svc.list(
+        auth_provider="google", auth_subject="s", status=None, cursor=None, limit=1
+    )
+    assert [r.id for r in page.rows] == [rows[0].id]  # created_at降順の先頭
+    assert page.next_cursor == encode_cursor(rows[0].created_at, rows[0].id)
+    assert store.list_calls[0]["limit"] == 2  # limit+1
+    assert store.list_calls[0]["before"] is None
+
+
+async def test_list_last_page_has_null_next_cursor():
+    rows = [_row()]
+    svc, _, _, _, _ = _service(store=StubStore(page=rows))
+    page = await svc.list(
+        auth_provider="google", auth_subject="s", status=None, cursor=None, limit=1
+    )
+    assert len(page.rows) == 1
+    assert page.next_cursor is None
+
+
+async def test_list_decodes_cursor_and_passes_before_to_store():
+    """cursor→(created_at, id)を復元しbeforeとして渡す(design §2.10)。"""
+    cursor = encode_cursor(NOW, USER_ID)
+    svc, store, _, _, _ = _service()
+    await svc.list(
+        auth_provider="google",
+        auth_subject="s",
+        status="draft",
+        cursor=cursor,
+        limit=20,
+    )
+    call = store.list_calls[0]
+    assert call["before"] == decode_cursor(cursor) == (NOW, USER_ID)
+    assert call["status"] == "draft"
+
+
+async def test_list_invalid_cursor_rejected_422():
+    """Review Focus #4と同型: 形式不正cursorは422(他人由来の正当な形式は通る)。"""
+    svc, _, _, _, _ = _service()
+    with pytest.raises(IntentValidationError):
+        await svc.list(
+            auth_provider="google",
+            auth_subject="s",
+            status=None,
+            cursor="!!!not-a-cursor!!!",
+            limit=20,
+        )
+
+
+async def test_list_with_foreign_before_returns_own_rows_normally():
+    """Review Focus #4: 他人のcursor位置でも自分の一覧が壊れない(user_id固定)。"""
+    from latch.intents.service import encode_cursor
+
+    foreign = encode_cursor(NOW, OTHER_USER_ID)  # 自分の行に存在しない位置
+    rows = [_row(status="draft")]
+    svc, _, _, _, _ = _service(store=StubStore(page=rows))
+    page = await svc.list(
+        auth_provider="google",
+        auth_subject="s",
+        status=None,
+        cursor=foreign,
+        limit=20,
+    )
+    assert [r.id for r in page.rows] == [rows[0].id]

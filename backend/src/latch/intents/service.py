@@ -23,6 +23,7 @@ from latch.core.clock import Clock
 from latch.geo.service import Geofeature
 from latch.intents.errors import (
     DependencyUnavailableError,
+    ForbiddenError,
     GeocodingFailedError,
     IntentNotFoundError,
     IntentsError,
@@ -199,6 +200,14 @@ def decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
         raise IntentValidationError("invalid cursor") from exc
 
 
+@dataclass(frozen=True)
+class PageResult:
+    """GET /v1/intents のページ結果(routesが応答へ変換 — design §2.10)。"""
+
+    rows: list[IntentRow]
+    next_cursor: str | None
+
+
 class IntentService:
     """intents CRUDユースケース(05 §5〜§6・design §2.2のEvent発行表)。
 
@@ -369,6 +378,55 @@ class IntentService:
         return self._row_from_cols(
             cols, intent_id=intent_id, user_id=user.id, status="draft", now=now
         )
+
+    # -- GET /v1/intents/{id} --
+
+    async def get(
+        self, *, auth_provider: str, auth_subject: str, intent_id: uuid.UUID
+    ) -> IntentRow:
+        try:
+            user = await self._require_user(auth_provider, auth_subject)
+            async with self._reader() as conn:
+                row = await self._store.fetch(conn, intent_id)
+            if row is None:
+                raise IntentNotFoundError("intent not found")
+            if row.user_id != user.id:
+                raise ForbiddenError("not owner")
+            return row
+        except IntentsError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("intents dependency unavailable") from exc
+
+    # -- GET /v1/intents --
+
+    async def list(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        status: str | None,
+        cursor: str | None,
+        limit: int,
+    ) -> PageResult:
+        try:
+            user = await self._require_user(auth_provider, auth_subject)
+            before = decode_cursor(cursor) if cursor else None
+            async with self._reader() as conn:
+                rows = await self._store.list_page(
+                    conn, user.id, status=status, before=before, limit=limit + 1
+                )
+            if len(rows) > limit:
+                last = rows[limit - 1]
+                return PageResult(
+                    rows=rows[:limit],
+                    next_cursor=encode_cursor(last.created_at, last.id),
+                )
+            return PageResult(rows=rows, next_cursor=None)
+        except IntentsError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("intents dependency unavailable") from exc
 
 
 def make_intent_service(*, clock: Clock, engine: AsyncEngine) -> IntentService:
