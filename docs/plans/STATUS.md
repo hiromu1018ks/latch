@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **M1(Intentドメイン)を実施中**(2026-09-27 G0承認時の一時停止を同日ユーザー指示で解除。実行wave: (ws-1 ∥ ws-2) → ws-3 → ws-4 → ws-5)
+- 次の着手: **M1 ws-3(intents CRUD・draft→active・保存時検証)**。ws-4→ws-5が後続。T3部分資産(G1精度ゲート入力)の扱いはws-3着手前にユーザーと協議
 
 ## M0 作業単位
 
@@ -28,8 +28,8 @@
 
 | 単位 | 内容 | 出典(12) | 依存 | 状態 |
 |---|---|---|---|---|
-| ws-1 | users API: POST /v1/users(初回登録・birth_date必須・18歳未満422 UNDER_AGE)・GET /v1/users/me | M1-1 / 05 §5 | M0(usersスキーマ・認証) | 未着手 |
-| ws-2 | Intent Parser(07 §2: 確定済みシステムプロンプト実装・アプリ層補完の単一規則・D-04連携ng_unverifiable→warnings)+ POST /v1/intents/parse(同期LLM・timeout 10秒・再試行なし・503 LLM_UNAVAILABLE/422 VALIDATION_ERROR切替 D-17) | M1-2, M1-3 / 07 §2・05 §5 | M0(LLM Gateway) | 未着手 |
+| ws-1 | users API: POST /v1/users(初回登録・birth_date必須・18歳未満422 UNDER_AGE)・GET /v1/users/me | M1-1 / 05 §5 | M0(usersスキーマ・認証) | 完了 |
+| ws-2 | Intent Parser(07 §2: 確定済みシステムプロンプト実装・アプリ層補完の単一規則・D-04連携ng_unverifiable→warnings)+ POST /v1/intents/parse(同期LLM・timeout 10秒・再試行なし・503 LLM_UNAVAILABLE/422 VALIDATION_ERROR切替 D-17) | M1-2, M1-3 / 07 §2・05 §5 | M0(LLM Gateway) | 完了 |
 | ws-3 | intents CRUD: POST(active/draft)・GET・PATCH・DELETE・pause/resume・draft→active遷移(全検証通過後に受理・初回MatchEvent発行)。ジオコーディング正転の保存組み込み・alcohol_involvedのサーバ側確定・時刻検証(過去不可・+7日上限・active時のみ) | M1-4, M1-5 / 05 §5〜§6 | ws-1・ws-2 | 未着手 |
 | ws-4 | レート制限: Active 5件・作成20件/日・更新6回/時・API 60req/分(Redis・JST日付キー) | M1-6 / 08 §5.4・04 §5 | ws-3・M0(Redis) | 未着手 |
 | ws-5 | フロントエンド(prototype準拠): parse連携・条件リストの動的連結・有効期限の既定選択計算+disabled化・必須3フィールド催促・判定不能NG条件のNG行・注意表示・保存API接続(active/draft。03 第10節の既知差分解消) | M1-7 / 03 §3・§10 | ws-2〜ws-4 | 未着手 |
@@ -76,6 +76,19 @@
 - マージ後main最終状態: lint クリーン・unit 209 passed・alembic 0002(head)・test-ci 270 passed。settings/README/pyprojectは両側追記保持で解消、uv.lockはuv lock再生成
 - 運用メモ: geo integration試験はgeofeaturesをfixtureでフルリロードするため、test-ci実行後に実データが失われる。実運用データは make geo-import 再実行で復旧(証拠採取はtest-ciの後に行うこと)
 
+### M1(2026-09-27〜)
+
+- ws-1 / マージ e5f830d(設計 2fe23fb・計画 de30cc8・実装は0895411まで・9コミット)/ docs/plans/M1/ws-1-report.md / 2026-09-27
+  - スーパーバイザー独立検証(実HTTP test-ci)で1欠陥を発見しagent3に修正させた: IntegrityError制約名分類がSQLAlchemy asyncpg dialectのドライバ例外ラップを認識できず(.orig直でなくdriver_exception先に生asyncpg例外)、重複登録が409 USER_EXISTSでなく503になる(test_4で発見・unitの合成エラーでは未検出。M0 ws-3と同系統)。修正0895411
+  - 修正後: worktree基準308 passed・test_users_api 6件全グリーン(初回登録フロー・UNDER_AGE・VALIDATION_ERROR・409・404・401)
+- タイムボム修正 / マージ 0ae0ec6(実装 30afa9a)/ 2026-09-27
+  - M0由来の既存欠陥: tests/unit/auth/test_tokens.py::test_token_payload_structure がFakeClock固定時刻(12:00 UTC)発行のJWT(exp=13:00 UTC)をシステム実刻で期限検証する構造で、2026-09-27 13:00 UTC以降必ず赤化。ws-1実装中に発見。decode時にverify_exp無効化で解消(verify_iat・verify_audと同型の最小修正・テスト意図はclaim構成検査のまま)
+- ws-2 / マージ 326ae51(設計 f48f577・計画 12bb7cc・9コミット)/ docs/plans/M1/ws-2-report.md / 2026-09-27
+  - worktree基準334 passed(当時main未反映のタイムボム1件のみdeselect)。実装は10分で完了(計画書がコードレベルまで詳細化されていたため)
+  - スーパーバイザー検証: test_intents_parse_api 5件グリーン(ハッピーパス・300字境界・形式不正・401・未登録subjectでの200)
+  - マージ時main.py競合は両側追記保持で解消(auth・users・intentsの3サービス独立スキップ判定へ統合)。**マージ後のみ顕在化したpytest basename衝突(users/intents両方のtest_service.py・__init__.pyなしのprepend mode)をusers側test_users_service.pyへ改名してマージコミットへ繰り込み**(個別worktreeでは検出不能な類)
+- マージ後main最終状態(2026-09-27): lintクリーン・unit 302 passed・**test-ci 374 passed(除外なし・users 6件+parse 5件integration込み)**・alembic 0002(マイグレーション追加なし)・geo実データ復旧済み(46+563行)
+
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
 共有ci-db(compose常設・名前付きボリューム)の `alembic_version` はworktree間で取り合う状態になる。
@@ -87,6 +100,8 @@
    報告ファイルに『test-ci=スーパーバイザー検証待ち』と記録してよい」ことを条件付ける
 2. スーパーバイザーは検証・マージ時にtest-ciを**直列**で実行する(古い単位→マイグレーション追加単位の順)
 3. マージ済みmainでのtest-ci実行がスキーマ状態の唯一の真実。worktreeでのDB状態は検証途中の経過とみなす
+4. make test-ci(compose up)はapiイメージを再ビルドしない(compose.yamlのapiはbuild型・ソースマウントなし)。コード変更後の検証では docker compose build api が先行必須(M1 ws-1で確定。各計画書の報告形式に検証手順として明記)
+5. backend/testsは__init__.pyなし(pytest prepend import mode)のため、テストファイルのbasenameはtests配下全体で一意にすること。並走単位のマージ時は `find backend/tests -name "test_*.py" | awk -F/ '{print $NF}' | sort | uniq -d` が空であることを確認(個別worktreeでは検出できない・M1 ws-2マージで実際に発生)
 
 ## ゲート承認
 
