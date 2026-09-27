@@ -1,10 +1,13 @@
-"""FastAPIアプリケーションファクトリ(M0 ws-3で認証・M1 ws-1でusers APIを統合)。
+"""FastAPIアプリケーションファクトリ。
+
+統合履歴: M0 ws-3 認証 / M1 ws-1 users API / M1 ws-2 parse API。
 
 /health は運用プローブ用でありv1 API契約の外に置く(C3の対象外)。
 server_time は get_clock() 由来 — Clock差し替えが全経路で効くことの生の消費者。
-lifespanでredis・db engine・AuthService・UserServiceを構築する。auth_service /
-users_service はcreate_app引数で注入済みなら該当サービスの構築を個別にスキップ
-する(サービスごとの独立判定 — M1 ws-1 design §2.5)。
+lifespanでredis・db engine・AuthService・UserService・IntentParseServiceを構築する。
+auth_service / users_service / intent_parse_service はcreate_app引数で注入済みなら
+該当サービスの構築を個別にスキップする(サービスごとの独立判定 — M1 ws-1 design §2.5・
+M1 ws-2 design §2.7)。engineは全サービスの共有資産、user_lookupはauthとintentsの共有。
 """
 
 import logging
@@ -22,6 +25,7 @@ from latch.auth.service import build_auth_service, make_user_lookup
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.core.deps import get_clock
+from latch.intents import IntentsError, make_intent_parse_service, parse_router
 from latch.settings import Settings
 from latch.users.errors import UsersError
 from latch.users.routes import users_router
@@ -29,35 +33,53 @@ from latch.users.service import make_user_service
 
 logger = logging.getLogger("latch.auth")
 users_logger = logging.getLogger("latch.users")
+intents_logger = logging.getLogger("latch.intents")
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    skip_auth = hasattr(app.state, "auth_service")
-    skip_users = hasattr(app.state, "users_service")
-    if skip_auth and skip_users:
-        # テスト注入済み(create_app 引数)— 依存リソースごと構築しない
+    # サービスごとの独立スキップ判定(テスト注入があれば構築しない)
+    build_auth = not hasattr(app.state, "auth_service")
+    build_users = not hasattr(app.state, "users_service")
+    build_intents = not hasattr(app.state, "intent_parse_service")
+    if not (build_auth or build_users or build_intents):
         yield
         return
     settings: Settings = app.state.settings
-    redis_client = aioredis.Redis.from_url(settings.redis_url, decode_responses=True)
-    engine = create_db_engine(settings)
-    app.state.db_engine = engine
-    if not skip_auth:
+    redis_client = None
+    if build_auth:
+        redis_client = aioredis.Redis.from_url(
+            settings.redis_url, decode_responses=True
+        )
+    # engine は auth・users・intents の共有資産
+    engine = getattr(app.state, "db_engine", None)
+    if engine is None:
+        engine = create_db_engine(settings)
+        app.state.db_engine = engine
+    # user_lookup は auth と intents の共有(索引済みSELECT 1本のファクトリ・純関数)
+    user_lookup = make_user_lookup(engine)
+    if build_auth:
         app.state.auth_service = build_auth_service(
             clock=app.state.clock,
             settings=settings,
             redis_client=redis_client,
-            user_lookup=make_user_lookup(engine),
+            user_lookup=user_lookup,
         )
-    if not skip_users:
+    if build_users:
         app.state.users_service = make_user_service(
             clock=app.state.clock, engine=engine
+        )
+    if build_intents:
+        app.state.intent_parse_service = make_intent_parse_service(
+            clock=app.state.clock,
+            settings=settings,
+            user_lookup=user_lookup,
         )
     try:
         yield
     finally:
-        await redis_client.aclose()
+        if redis_client is not None:
+            await redis_client.aclose()
         await engine.dispose()
 
 
@@ -71,6 +93,7 @@ def create_app(
     settings: Settings | None = None,
     auth_service=None,
     users_service=None,
+    intent_parse_service=None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.clock = clock if clock is not None else SystemClock()
@@ -79,6 +102,8 @@ def create_app(
         app.state.auth_service = auth_service
     if users_service is not None:
         app.state.users_service = users_service
+    if intent_parse_service is not None:
+        app.state.intent_parse_service = intent_parse_service
 
     @app.get("/health")
     async def health(
@@ -89,6 +114,7 @@ def create_app(
     app.include_router(public_router)
     app.include_router(logout_router)
     app.include_router(users_router)
+    app.include_router(parse_router)
 
     @app.exception_handler(AuthError)
     async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
@@ -101,6 +127,16 @@ def create_app(
     @app.exception_handler(UsersError)
     async def users_error_handler(request: Request, exc: UsersError) -> JSONResponse:
         users_logger.warning("users.error code=%s", exc.code)
+        return JSONResponse(
+            status_code=exc.http_status,
+            content=_error_body(exc.code, str(exc)),
+        )
+
+    @app.exception_handler(IntentsError)
+    async def intents_error_handler(
+        request: Request, exc: IntentsError
+    ) -> JSONResponse:
+        intents_logger.warning("intents.error code=%s", exc.code)
         return JSONResponse(
             status_code=exc.http_status,
             content=_error_body(exc.code, str(exc)),

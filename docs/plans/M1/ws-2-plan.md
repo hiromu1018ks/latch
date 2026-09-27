@@ -173,7 +173,7 @@ docs/plans/M1/ws-2-report.md   # 報告ファイル(§5参照)
 **Interfaces:**
 - Produces: `IntentsError`(基底・`http_status`/`code`属性)・`LLMUnavailableError`(503 LLM_UNAVAILABLE)・`UnstructurableError`(422 VALIDATION_ERROR)・`DependencyUnavailableError`(503 DEPENDENCY_UNAVAILABLE)。Task 6 のハンドラと Task 5 のサービスがこの型に依存する。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_errors.py` を作成:
 
@@ -209,12 +209,12 @@ def test_dependency_unavailable_is_503():
     assert exc.code == "DEPENDENCY_UNAVAILABLE"
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_errors.py -v`
 Expected: FAIL(ModuleNotFoundError: latch.intents がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/errors.py` を作成:
 
@@ -283,12 +283,12 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_errors.py -v`
 Expected: PASS 3件
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし
@@ -303,7 +303,7 @@ Expected: エラーなし
 **Interfaces:**
 - Produces: `PARSER_SYSTEM_PROMPT: str`(07 §2全文・`{current_date}` プレースホルダ1箇所)・`format_parser_system_prompt(current_date: date) -> str`。将来の実プロバイダ(T1後)と精度ゲートharness(T3)が消費する。本単位のランタイム消費者はいない(design §2.6トレードオフどおり)。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_prompt.py` を作成:
 
@@ -351,12 +351,12 @@ def test_formatter_substitutes_iso_date():
 
 補足: `parents[4]` は `tests/unit/intents/test_prompt.py` から `backend/` を挟んでリポジトリルートへ至る経路(`parents[0]=intents, [1]=unit, [2]=tests, [3]=backend, [4]=リポジトリルート`)。worktree内でもリポジトリルートに `docs/` があるため成立する。
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_prompt.py -v`
 Expected: FAIL(ImportError: PARSER_SYSTEM_PROMPT がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/prompt.py` を作成。**下記をそのまま使う**(join形式の由来は §「実装メモ」参照。07 §2との値の一致はピン留め試験が強制する — 手で書き換えないこと):
 
@@ -438,12 +438,12 @@ def format_parser_system_prompt(current_date: date) -> str:
 
 **実装メモ(join形式の由来)**: 07 §2のプロンプトには東アジア幅で88字を超える行があり(例: 入力説明行・出力JSONスキーマの category/location 行)、ruffのE501は**東アジア文字幅ベース**で行長を測るため、三重引用符ブロックではlintが通らない。プロンプトの文字列値はdocsと1文字・改行位置まで一致が必須のため行の折返しはできず、pyproject.toml(per-file-ignores)は本単位の禁止領域 — よって**行リスト+`"\n".join`** とし、docs由来の長い行だけ隣接リテラル連結で物理行を分割する(連結後の値は元の行と同一。ピン留め試験が強制する)。この形は計画作成時に ruff format / ruff check / docs一致のすべてを実機検証済み。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_prompt.py -v`
 Expected: PASS 3件。**ピン留め試験(test_prompt_is_pinned_to_docs_07_section2)がFAILする場合は定数の値がdocsと1文字でも違う** — 手で書き換えず、Step 3 のコードをそのまま再適用すること(値の一致は試験が強制する)。
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし(prompt.py は Step 3 のコードが ruff format 安定形・全行88幅以内であることを計画作成時に実機検証済み)
@@ -462,7 +462,7 @@ Expected: エラーなし(prompt.py は Step 3 のコードが ruff format 安�
 
 **検証方針(design §3.1の注釈どおり)**: 必須3フィールド(category / time.start / location.name)は必須・既定なし。alcohol_involved も必須(常にLLMが出力・補完なし)。budget・participants・3配列は省略時の既定で受理(規則1「抽出できるフィールドのみ」への寛容な解釈)。余分なキーは無視(07 §4の失敗分類=欠損・値域外・パース不能のみを失敗とする)。time.start は tz-aware 必須(オフセットはJSTに限定しない)。flexibility_minutes / location.flexibility は null のみ受容(03 D-19の固定扱い)。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_parser_output.py` を作成:
 
@@ -603,12 +603,12 @@ def test_rejects_non_dict_input():
         ParserOutput.model_validate('{"category": "broken"}')
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_parser_output.py -v`
 Expected: FAIL(ImportError: ParserOutput がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/schema.py` を作成:
 
@@ -691,12 +691,12 @@ WARNING_MESSAGE_NG_DOWNGRADED = (
 
 `backend/src/latch/intents/__init__.py` へ `ParserOutput`・`ParserCategory`・`ParserTime`・`ParserLocation`・`ParserBudget`・`ParserParticipants`・`WARNING_MESSAGE_NG_DOWNGRADED`(`from latch.intents.schema import ...`)を追記する。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_parser_output.py -v`
 Expected: PASS 18件(受付5件+定数1件+パラメータ化拒否11件+非dict1件。件数は目安、全緑であればよい)
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし
@@ -713,7 +713,7 @@ Expected: エラーなし
 
 **仕様の確定値(03 §3 FR-13・07 §2解釈規則)**: 4選択肢は「今夜23:30(当日JST 23:30)/ 明日12:00(翌日JST 12:00)/ 明日23:30(翌日JST 23:30)/ 3日後まで(now+72時間)」。現在より過ぎた候補は選択不可。既定=選択可能な候補のうち time.start+3時間に最も近い値(同点は最早)。`now` は tz-aware UTC(Clock契約)。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_completion.py` を作成:
 
@@ -799,12 +799,12 @@ def test_nearest_expires_at_with_past_time_start_returns_earliest_future():
     assert nearest_expires_at(time_start, now) == _jst(2026, 9, 28, 12, 0)
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_completion.py -v`
 Expected: FAIL(ImportError: completion の公開名がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/completion.py` を作成:
 
@@ -868,12 +868,12 @@ def nearest_expires_at(time_start: datetime, now: datetime) -> datetime:
 
 `backend/src/latch/intents/__init__.py` へ `DEFAULT_PARTICIPANTS`・`DEFAULT_RADIUS_M`・`default_time_end`・`expires_at_candidates`・`nearest_expires_at`(`from latch.intents.completion import ...`)を追記する。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_completion.py -v`
 Expected: PASS 8件
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし
@@ -891,7 +891,7 @@ Expected: エラーなし
 
 **例外処理の設計(design §2.2・§2.7を両立させる実装方針)**: `intents/` から `latch.llm` のimportは `make_intent_parse_service` 内の `build_llm_gateway` のみに限る。`parse_intent` の失敗はGateway契約上 `LLMTimeoutError` / `LLMProviderError`(共通基底 `LLMError`)のみであり、サービス本体は import なしで「`Exception` 全般 → `LLMUnavailableError`(503)」として受ける(ValidationError はこの呼び出しでは発生しない — 検証は後段)。unit試験で実Gatewayの両例外(§4.1-4c)が503へ替わることを立証する。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_service.py` を作成:
 
@@ -1142,12 +1142,12 @@ async def test_error_messages_contain_no_user_text():
 
 **import部について**: テストは `latch.llm` の `LLMGateway`/`Timeouts`/`StubLLM`/`DEFAULT_PARSER_RESPONSE` を import する(テストコードはllm/の利用者であり、Protocol構造適合の実証に実Gatewayを使う — design §2.2トレードオフ)。
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_service.py -v`
 Expected: FAIL(ModuleNotFoundError: latch.intents.service がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/service.py` を作成:
 
@@ -1297,12 +1297,12 @@ def make_intent_parse_service(
 
 `backend/src/latch/intents/__init__.py` へ `ParseResult`・`ParseWarning`・`SupportsParseIntent`・`IntentParseService`・`make_intent_parse_service`(`from latch.intents.service import ...`)を追記する。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_service.py -v`
 Expected: PASS 15件(ハッピー2+正規化1+503系2+422系4+lookup3+JST境界1+機微2。全緑であればよい)
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし
@@ -1323,7 +1323,7 @@ Expected: エラーなし
 
 **main.py の lifespan 変更は ws-1 との唯一の衝突点**(design §2.7・§6-6)。ws-1 の存在を前提としないコードを書く(マージ時の両側追記保持はスーパーバイザーが行う)。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_parse_routes.py` を作成:
 
@@ -1545,12 +1545,12 @@ async def test_text_never_appears_in_logs(caplog):
     assert secret not in caplog.text
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_parse_routes.py -v`
 Expected: FAIL(create_app が intent_parse_service を受け付けない TypeError、または /v1/intents/parse が404)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/routes.py` を作成:
 
@@ -1760,7 +1760,7 @@ intents_logger = logging.getLogger("latch.intents")
 
 (e) モジュールdocstringの「lifespanでredis・db engine・AuthServiceを構築する(design §2.6)。第3引数 auth_service 指定時は構築をスキップ(テスト注入)。」の文を「lifespanでredis・db engine・AuthService・IntentParseServiceを構築する。第3引数 auth_service / 第4引数 intent_parse_service 指定時は該当サービスの構築をスキップ(テスト注入・サービスごとの独立判定)。」へ更新する。
 
-- [ ] **Step 4: テストが通ること・既存unit試験が壊れていないことを確認**
+- [x] **Step 4: テストが通ること・既存unit試験が壊れていないことを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_parse_routes.py -v`
 Expected: PASS 13件(全緑であればよい)
@@ -1768,7 +1768,7 @@ Expected: PASS 13件(全緑であればよい)
 Run: `cd backend && uv run pytest -m "not integration"`
 Expected: 既存209件+新規全部 PASS(lifespan変更はASGITransportがlifespanを実行しないため既存試験に影響しない — design §4.3)
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch tests/unit/intents && uv run ruff check src/latch tests/unit/intents`
 Expected: エラーなし
@@ -1784,7 +1784,7 @@ Expected: エラーなし
 
 503/422の構造化不能経路はスタブの設定経路がcompose api にないためunit(design §4.1-4/5)で証明済みであり、integrationでは検証しない(M0 ws-3と同じ振り分け・design §4.2末尾)。
 
-- [ ] **Step 1: 試験ファイルを作成する**
+- [x] **Step 1: 試験ファイルを作成する**
 
 `backend/tests/integration/test_intents_parse_api.py` を作成:
 
@@ -1926,12 +1926,12 @@ async def test_5_unregistered_subject_can_parse(api_client):
     assert resp.json()["structured_intent"] == EXPECTED_STUB_INTENT
 ```
 
-- [ ] **Step 2: 収集確認(実行はしない)**
+- [x] **Step 2: 収集確認(実行はしない)**
 
 Run: `cd backend && uv run pytest --collect-only -q tests/integration/test_intents_parse_api.py`
 Expected: 5件の試験が収集され、importエラーがない
 
-- [ ] **Step 3: 書式確認**
+- [x] **Step 3: 書式確認**
 
 Run: `cd backend && uv run ruff format tests/integration/test_intents_parse_api.py && uv run ruff check tests/integration/test_intents_parse_api.py`
 Expected: エラーなし
@@ -1941,32 +1941,32 @@ Expected: エラーなし
 **Files:**
 - Create: `docs/plans/M1/ws-2-report.md`(§5の形式)
 
-- [ ] **Step 1: 全体lint**
+- [x] **Step 1: 全体lint**
 
 Run: `make lint`
 Expected: エラーなし
 
-- [ ] **Step 2: 全体unit試験**
+- [x] **Step 2: 全体unit試験**
 
 Run: `make test`
 Expected: 既存209件+新規(test_errors 3・test_prompt 3・test_parser_output 18・test_completion 8・test_service 15・test_parse_routes 13)。**§0.6 の既知の既存失敗1件(test_token_payload_structure)を除いて全部 PASS**。件数は概算、失敗0(既知1件を除く)と総件数を報告ファイルへ記録する。既知1件については「git stash で ws-2 差分を外しても同一失敗」を確認して ws-2 起因でないことを示す(§0.6)
 
-- [ ] **Step 3: 時刻参照検査(完了条件5)**
+- [x] **Step 3: 時刻参照検査(完了条件5)**
 
 Run: `rg -n 'datetime\.now|utcnow|time\.time|time\.monotonic' backend/src`
 Expected: ヒットは `backend/src/latch/core/clock.py` のみ
 
-- [ ] **Step 4: 差分の範囲確認(完了条件6)**
+- [x] **Step 4: 差分の範囲確認(完了条件6)**
 
 Run: `git status --porcelain` と `git diff --stat`
 Expected: 差分は次の一覧のみ — `backend/src/latch/intents/`(新規7ファイル)・`backend/src/latch/main.py`・`backend/tests/unit/intents/`(新規6ファイル)・`backend/tests/integration/test_intents_parse_api.py`(新規)・`docs/plans/M1/ws-2-plan.md`(checkbox更新)・`docs/plans/M1/ws-2-report.md`(新規)。§3.1 の禁止領域に差分があれば、その時点で修正して再確認する
 
-- [ ] **Step 5: integration収集の最終確認**
+- [x] **Step 5: integration収集の最終確認**
 
 Run: `cd backend && uv run pytest --collect-only -q`
 Expected: unit+integration 全試験が収集される(importエラーなし)
 
-- [ ] **Step 6: 報告ファイルを作成する**
+- [x] **Step 6: 報告ファイルを作成する**
 
 `docs/plans/M1/ws-2-report.md` を §5 の形式で作成する。特に:
 - 「test-ci=スーパーバイザー検証待ち(STATUS運用ルール)」と明記する
@@ -1974,7 +1974,7 @@ Expected: unit+integration 全試験が収集される(importエラーなし)
 - 完了条件 §4 の7項目それぞれにコマンドと出力抜粋を貼る
 - 逸脱・判断があれば「計画からの逸脱・判断」へ書く(なければ「なし」)
 
-- [ ] **Step 7: 計画書のcheckboxを更新する**
+- [x] **Step 7: 計画書のcheckboxを更新する**
 
 本計画書(docs/plans/M1/ws-2-plan.md)の実行済みステップの `- [ ]` を `- [x]` へ更新する。
 
