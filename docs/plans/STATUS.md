@@ -9,6 +9,7 @@
 - フェーズ: M0(開発基盤)
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
+- 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
 - 次の着手: **M1(Intentドメイン)はユーザー指示により見送り中**(2026-09-27 G0承認と同時に実装ストップ指示。再開はユーザーの言葉待ち)
 
 ## M0 作業単位
