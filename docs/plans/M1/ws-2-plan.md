@@ -1323,7 +1323,7 @@ Expected: エラーなし
 
 **main.py の lifespan 変更は ws-1 との唯一の衝突点**(design §2.7・§6-6)。ws-1 の存在を前提としないコードを書く(マージ時の両側追記保持はスーパーバイザーが行う)。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_parse_routes.py` を作成:
 
@@ -1545,12 +1545,12 @@ async def test_text_never_appears_in_logs(caplog):
     assert secret not in caplog.text
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_parse_routes.py -v`
 Expected: FAIL(create_app が intent_parse_service を受け付けない TypeError、または /v1/intents/parse が404)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/routes.py` を作成:
 
@@ -1760,7 +1760,7 @@ intents_logger = logging.getLogger("latch.intents")
 
 (e) モジュールdocstringの「lifespanでredis・db engine・AuthServiceを構築する(design §2.6)。第3引数 auth_service 指定時は構築をスキップ(テスト注入)。」の文を「lifespanでredis・db engine・AuthService・IntentParseServiceを構築する。第3引数 auth_service / 第4引数 intent_parse_service 指定時は該当サービスの構築をスキップ(テスト注入・サービスごとの独立判定)。」へ更新する。
 
-- [ ] **Step 4: テストが通ること・既存unit試験が壊れていないことを確認**
+- [x] **Step 4: テストが通ること・既存unit試験が壊れていないことを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_parse_routes.py -v`
 Expected: PASS 13件(全緑であればよい)
@@ -1768,7 +1768,7 @@ Expected: PASS 13件(全緑であればよい)
 Run: `cd backend && uv run pytest -m "not integration"`
 Expected: 既存209件+新規全部 PASS(lifespan変更はASGITransportがlifespanを実行しないため既存試験に影響しない — design §4.3)
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch tests/unit/intents && uv run ruff check src/latch tests/unit/intents`
 Expected: エラーなし

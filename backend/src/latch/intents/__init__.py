@@ -14,6 +14,7 @@ from latch.intents.errors import (
     UnstructurableError,
 )
 from latch.intents.prompt import PARSER_SYSTEM_PROMPT, format_parser_system_prompt
+from latch.intents.routes import parse_router
 from latch.intents.schema import (
     WARNING_MESSAGE_NG_DOWNGRADED,
     ParserBudget,
@@ -55,4 +56,5 @@ __all__ = [
     "format_parser_system_prompt",
     "make_intent_parse_service",
     "nearest_expires_at",
+    "parse_router",
 ]
