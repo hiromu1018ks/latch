@@ -36,13 +36,15 @@
 ## コミット一覧
 
 ```text
+aec2bda feat: users公開IFの再exportとintegration試験(作成のみ・実行はスーパーバイザー)
+09424e5 docs: M1 ws-1の実行報告(完了条件6項目の証拠・test-ciは検証待ち)
 b8fb984 feat: usersルータ(POST /v1/users・GET /v1/users/me)とmain統合
 ce497a5 feat: make_user_service(実SQL束ね・RETURNING id・制約名分類接続)
 942784a feat: UserService(register/get_me)とIntegrityError制約名分類
 2036c09 feat: users例外階層と満年齢純粋関数(JST暦日タプル比較)
 ```
 
-(本報告ファイルのdocsコミットがこの後に1件加わる)
+(本報告ファイル自体の更新コミットがこの後に1件加わる)
 
 ## 補足(詰まった点・判断した点)
 
