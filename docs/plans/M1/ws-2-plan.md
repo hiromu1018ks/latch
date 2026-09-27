@@ -173,7 +173,7 @@ docs/plans/M1/ws-2-report.md   # 報告ファイル(§5参照)
 **Interfaces:**
 - Produces: `IntentsError`(基底・`http_status`/`code`属性)・`LLMUnavailableError`(503 LLM_UNAVAILABLE)・`UnstructurableError`(422 VALIDATION_ERROR)・`DependencyUnavailableError`(503 DEPENDENCY_UNAVAILABLE)。Task 6 のハンドラと Task 5 のサービスがこの型に依存する。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_errors.py` を作成:
 
@@ -209,12 +209,12 @@ def test_dependency_unavailable_is_503():
     assert exc.code == "DEPENDENCY_UNAVAILABLE"
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_errors.py -v`
 Expected: FAIL(ModuleNotFoundError: latch.intents がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/errors.py` を作成:
 
@@ -283,12 +283,12 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_errors.py -v`
 Expected: PASS 3件
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし
