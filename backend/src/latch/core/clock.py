@@ -6,6 +6,7 @@ SystemClock以外の実装・テストコードはClockを経由して時刻を�
 
 from __future__ import annotations
 
+import threading
 from abc import ABC, abstractmethod
 from datetime import UTC, date, datetime, timedelta, timezone
 
@@ -30,3 +31,29 @@ class SystemClock(Clock):
 
     def now(self) -> datetime:
         return datetime.now(UTC)
+
+
+class FakeClock(Clock):
+    """テスト用。set()/advance() で決定的な時刻を再現する(10 第1節「時刻操作」)。"""
+
+    def __init__(self, initial: datetime) -> None:
+        if initial.tzinfo is None:
+            raise ValueError("FakeClock は tz-aware な初期時刻を要求する")
+        self._now = initial
+        self._lock = threading.Lock()
+
+    def set(self, when: datetime) -> None:
+        """任意時刻へ移動する(後退も可。「過去不可」境界試験の両方向に使用)。"""
+        if when.tzinfo is None:
+            raise ValueError("FakeClock.set は tz-aware な時刻を要求する")
+        with self._lock:
+            self._now = when
+
+    def advance(self, delta: timedelta) -> None:
+        """時刻を delta だけ前進させる(期限・debounce・バッチ周期の再現に使用)。"""
+        with self._lock:
+            self._now += delta
+
+    def now(self) -> datetime:
+        with self._lock:
+            return self._now
