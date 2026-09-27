@@ -11,6 +11,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+import redis.asyncio as aioredis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -19,8 +20,13 @@ from latch.auth.errors import (
     DependencyUnavailableError,
     UnauthenticatedError,
 )
-from latch.auth.idp import IdPVerifier
+from latch.auth.idp import IdPVerifier, IdPVerifyConfig
 from latch.auth.sessions import SessionStore
+from latch.auth.testkeys import (
+    TEST_ACCESS_SECRET,
+    TEST_AUDIENCE,
+    TEST_ISSUER_PREFIX,
+)
 from latch.auth.tokens import (
     ACCESS_TTL_S,
     AccessTokenClaims,
@@ -28,6 +34,7 @@ from latch.auth.tokens import (
     verify_access_token,
 )
 from latch.core.clock import Clock
+from latch.settings import Settings
 
 UserLookup = Callable[[str, str], Awaitable[uuid.UUID | None]]
 
@@ -183,3 +190,53 @@ class AuthService:
             raise
         except Exception as exc:
             raise DependencyUnavailableError("auth dependency unavailable") from exc
+
+
+def build_auth_service(
+    *,
+    clock: Clock,
+    settings: Settings,
+    redis_client: aioredis.Redis,
+    user_lookup: UserLookup,
+) -> AuthService:
+    """設定からAuthServiceを構築する(design §2.5-3)。
+
+    prod(app_env="prod")でテスト既定値(空secret・同梱JWKS・テストissuer/audience)
+    が残存する場合はValueErrorで拒否する(ws-2のllm_mode拒否と同一パターン)。
+    ci/stagingは既定値でそのまま動く。redis_client の生成・解体は呼び出し側
+    (main.py lifespan)の責務 — この関数は純粋な構築のみ行う。
+    """
+    if settings.app_env == "prod":
+        if (
+            not settings.auth_access_secret
+            or settings.auth_access_secret == TEST_ACCESS_SECRET
+        ):
+            raise ValueError(
+                "prod requires a dedicated auth_access_secret "
+                "(empty/test secret is not allowed)"
+            )
+        for provider in ("google", "apple"):
+            if not getattr(settings, f"auth_idp_jwks_url_{provider}"):
+                raise ValueError(f"prod requires auth_idp_jwks_url_{provider}")
+            if getattr(settings, f"auth_idp_issuer_{provider}").startswith(
+                TEST_ISSUER_PREFIX
+            ):
+                raise ValueError(f"prod requires a real issuer for {provider}")
+            if getattr(settings, f"auth_idp_audience_{provider}") == TEST_AUDIENCE:
+                raise ValueError(f"prod requires a real audience for {provider}")
+    secret = settings.auth_access_secret or TEST_ACCESS_SECRET
+    configs: dict[str, IdPVerifyConfig] = {}
+    for provider in ("google", "apple"):
+        url = getattr(settings, f"auth_idp_jwks_url_{provider}")
+        configs[provider] = IdPVerifyConfig(
+            issuer=getattr(settings, f"auth_idp_issuer_{provider}"),
+            audience=getattr(settings, f"auth_idp_audience_{provider}"),
+            jwks_url=url or None,
+        )
+    return AuthService(
+        clock=clock,
+        secret=secret,
+        sessions=SessionStore(redis_client),
+        idp=IdPVerifier(configs=configs),
+        user_lookup=user_lookup,
+    )
