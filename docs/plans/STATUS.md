@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **M1 ws-3(intents CRUD・draft→active・保存時検証)**。ws-4→ws-5が後続。T3部分資産(G1精度ゲート入力)の扱いはws-3着手前にユーザーと協議
+- 次の着手: **M1 ws-3(intents CRUD・draft→active・保存時検証)を実施中**。ws-4→ws-5が後続。T3草案(Parser/飲酒セット)をエージェントで並行作成中→ユーザー確認で確定
 
 ## M0 作業単位
 
@@ -88,6 +88,12 @@
   - スーパーバイザー検証: test_intents_parse_api 5件グリーン(ハッピーパス・300字境界・形式不正・401・未登録subjectでの200)
   - マージ時main.py競合は両側追記保持で解消(auth・users・intentsの3サービス独立スキップ判定へ統合)。**マージ後のみ顕在化したpytest basename衝突(users/intents両方のtest_service.py・__init__.pyなしのprepend mode)をusers側test_users_service.pyへ改名してマージコミットへ繰り込み**(個別worktreeでは検出不能な類)
 - マージ後main最終状態(2026-09-27): lintクリーン・unit 302 passed・**test-ci 374 passed(除外なし・users 6件+parse 5件integration込み)**・alembic 0002(マイグレーション追加なし)・geo実データ復旧済み(46+563行)
+- 学習資産追従: 12200b5(第4章「1本の書き込みの経路」・第5章「LLMという外部の協力者」新設・既存6ファイル更新)
+- ws-3 / 設計 cdf313a・計画(コード全文記載・事前検証416 passed)/ 2026-09-28実装着手
+- supervisor承認・ユーザー決定(2026-09-28):
+  - **T3ゴールドセットは「エージェント草案→ユーザー確認で確定」方式**(G1精度ゲート入力=Parser入力セット30件+・飲酒判定セット30件+)
+  - **location.name格納=structured_data(JSONB)へlocation_nameキー追加**を承認。05 §2「structured_data保持キー」への同キー追記は次回のdocs改版に含める(ユーザー承認済み・ws-3設計§6-1)
+  - §6-2(G1 02#4の期限経過確認はexpiry_sweeperがM3-3のため、G1では保存時検証+Clock操作による期限切れ値保存での代替とするか)は**G1判定時にあらためてユーザー承認**とする
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
