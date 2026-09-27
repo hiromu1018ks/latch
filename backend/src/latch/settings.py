@@ -8,3 +8,4 @@ class Settings(BaseSettings):
 
     app_env: str = "ci"  # ci / staging / prod(10 第1節の環境)
     log_level: str = "INFO"
+    database_url: str = "postgresql+asyncpg://latch:latch@127.0.0.1:5432/latch"

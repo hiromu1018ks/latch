@@ -24,3 +24,17 @@ def test_settings_non_prefixed_env_is_ignored(monkeypatch):
     monkeypatch.delenv("LATCH_APP_ENV", raising=False)
     s = Settings()
     assert s.app_env == "ci"
+
+
+def test_settings_database_url_default(monkeypatch):
+    monkeypatch.delenv("LATCH_DATABASE_URL", raising=False)
+    s = Settings()
+    assert s.database_url == "postgresql+asyncpg://latch:latch@127.0.0.1:5432/latch"
+
+
+def test_settings_database_url_env_override(monkeypatch):
+    monkeypatch.setenv(
+        "LATCH_DATABASE_URL", "postgresql+asyncpg://u:p@db.example.com:5432/latchdb"
+    )
+    s = Settings()
+    assert s.database_url == "postgresql+asyncpg://u:p@db.example.com:5432/latchdb"
