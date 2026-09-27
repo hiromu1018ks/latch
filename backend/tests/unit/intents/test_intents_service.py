@@ -20,6 +20,7 @@ from latch.intents.errors import (
     GeocodingFailedError,
     IntentNotFoundError,
     IntentValidationError,
+    InvalidTransitionError,
     UnderAgeError,
 )
 from latch.intents.intent_input import StructuredIntentInput
@@ -563,3 +564,218 @@ async def test_list_with_foreign_before_returns_own_rows_normally():
         limit=20,
     )
     assert [r.id for r in page.rows] == [rows[0].id]
+
+
+# --- (d) PATCH分岐(design §4.1-4d・§2.10・§2.7)---
+
+
+def _draft_row_of(inp: StructuredIntentInput, raw_text: str = "原文") -> IntentRow:
+    """resolve_for_draft(inp)と同一の保存列を持つdraft行(実質変更判定用)。"""
+    from latch.intents.mapping import resolve_for_draft
+
+    cols = resolve_for_draft(inp)
+    return _row(
+        raw_text=raw_text,
+        category_primary=cols.category_primary,
+        alcohol_involved=cols.alcohol_involved,
+        structured_data=cols.structured_data,
+        budget_max=cols.budget_max,
+        participants_min=cols.participants_min,
+        participants_max=cols.participants_max,
+        visibility=cols.visibility,
+        notification_level=cols.notification_level,
+        time_start=cols.time_start,
+        time_end=cols.time_end,
+        expires_at=cols.expires_at,
+        geo_radius_m=cols.geo_radius_m,
+    )
+
+
+async def _update(svc, row, *, raw_text="原文", status=None, structured=None):
+    return await svc.update(
+        auth_provider="google",
+        auth_subject="s",
+        intent_id=row.id,
+        raw_text=raw_text,
+        status=status,
+        structured_intent=structured,
+    )
+
+
+async def test_patch_draft_resave_bumps_version_without_event():
+    """draft再保存: version+1・Eventなし・ジオコーディングなし(確定値12)。"""
+    row = _draft_row_of(_active_input())
+    svc, store, geo, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await _update(svc, row, raw_text="下書き改", structured=_active_input())
+    assert result.status == "draft"
+    assert result.version == 2
+    assert result.raw_text == "下書き改"
+    assert _event_calls(uow_conn) == []
+    assert geo.calls == []
+    upd = store.updates[0]
+    assert upd["status"] == "draft"
+    assert upd["version"] == 2
+    assert upd["expected_status"] == "draft"
+
+
+async def test_patch_draft_resave_without_structured_keeps_columns():
+    """structured_intent省略=既存の構造データを保持しraw_textのみ更新。"""
+    row = _draft_row_of(_active_input(), raw_text="元の下書き")
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await _update(svc, row, raw_text="rawだけ変更", structured=None)
+    assert result.raw_text == "rawだけ変更"
+    cols = store.updates[0]["cols"]
+    assert cols.category_primary == "drinking"  # 保持されている
+    assert cols.structured_data == row.structured_data
+    assert cols.version == 1  # cols.versionはstore側で上書き(ここでは素の値)
+
+
+async def test_patch_draft_to_active_same_content_keeps_version_and_emits_created():
+    """同一内容のactive化: version据え置き・初回投入は作成種(確定値11・14)。"""
+    inp = _active_input()
+    row = _draft_row_of(inp)
+    svc, store, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await _update(svc, row, raw_text="原文", status="active", structured=inp)
+    assert result.status == "active"
+    assert result.version == 1  # 据え置き
+    evs = _event_calls(uow_conn)
+    assert len(evs) == 1
+    etype, params = evs[0]
+    assert etype == "created"
+    assert json.loads(params["payload"]) == {"version": 1}
+    upd = store.updates[0]
+    assert upd["status"] == "active"
+    assert upd["expected_status"] == "draft"
+    assert upd["cols"].geo_lon == TENMONKAN.lon  # active化でジオコーディング
+
+
+async def test_patch_draft_to_active_changed_content_bumps_version():
+    """内容変更を伴うactive化: version+1・created Event version=2(確定値11・14)。"""
+    inp = _active_input()
+    row = _draft_row_of(inp)
+    changed = _active_input(participants={"min": 3, "max": 4})
+    svc, _, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await _update(
+        svc, row, raw_text="原文", status="active", structured=changed
+    )
+    assert result.version == 2
+    etype, params = _event_calls(uow_conn)[0]
+    assert etype == "created"
+    assert json.loads(params["payload"]) == {"version": 2}
+
+
+async def test_patch_draft_to_active_failing_validation_keeps_draft():
+    """検証不通なら422でstatusはdraftのまま(確定値11)。store.update不呼び出し。"""
+    past = (NOW - timedelta(hours=1)).isoformat()
+    row = _row(status="draft")
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(IntentValidationError):
+        await _update(
+            svc,
+            row,
+            status="active",
+            structured=_active_input(time={"start": past}),
+        )
+    assert store.updates == []
+
+
+async def test_patch_draft_to_active_requires_full_structured():
+    """Review Focus #2: structured_intent省略のactive化は422(全量必須)。"""
+    row = _row(status="draft")
+    svc, _, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(IntentValidationError):
+        await _update(svc, row, status="active", structured=None)
+
+
+async def test_patch_active_content_update_bumps_version_and_emits_updated():
+    """active内容更新(全置換): version+1・updated Event(確定値13)。"""
+    row = _row(status="active")
+    svc, store, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await _update(
+        svc,
+        row,
+        raw_text="変更後",
+        structured=_active_input(location={"name": "天文館", "radius_m": 1500}),
+    )
+    assert result.status == "active"
+    assert result.version == 2
+    assert result.raw_text == "変更後"
+    etype, params = _event_calls(uow_conn)[0]
+    assert etype == "updated"
+    assert json.loads(params["payload"]) == {"version": 2}
+    assert store.updates[0]["expected_status"] == "active"
+
+
+async def test_patch_active_requires_structured_intent():
+    """active/paused更新でのstructured_intent省略は422(全置換契約・確定値6)。"""
+    row = _row(status="active")
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(IntentValidationError):
+        await _update(svc, row, structured=None)
+    assert store.updates == []
+
+
+async def test_patch_active_to_draft_rejected():
+    """逆遷移不可(確定値11)。"""
+    row = _row(status="active")
+    svc, _, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(IntentValidationError):
+        await _update(svc, row, status="draft", structured=_active_input())
+
+
+async def test_patch_paused_content_update_keeps_paused_and_emits_updated():
+    """paused行への内容更新はactiveと同一扱い(status は paused のまま)。"""
+    row = _row(status="paused")
+    svc, _, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await _update(svc, row, structured=_active_input())
+    assert result.status == "paused"
+    assert result.version == 2
+    assert _event_calls(uow_conn)[0][0] == "updated"
+
+
+async def test_patch_matched_intent_rejected():
+    """matched行へのPATCHは422 InvalidTransitionError(code=VALIDATION_ERROR)。"""
+    row = _row(status="matched")
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(InvalidTransitionError):
+        await _update(svc, row, structured=_active_input())
+    assert store.updates == []
+
+
+async def test_patch_category_change_to_drinking_under_age_rejected():
+    """Review Focus #1: meal→drinking変更+19歳=422 UNDER_AGE(確定値13)。"""
+    row = _row(status="active", category_primary="meal", alcohol_involved=False)
+    svc19, _, _, _, _ = _service(
+        store=StubStore(
+            user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 28)),
+            rows={row.id: row},
+        )
+    )
+    with pytest.raises(UnderAgeError):
+        await _update(
+            svc19,
+            row,
+            structured=_active_input(category={"primary": "drinking"}),
+        )
+
+
+async def test_patch_other_users_intent_forbidden():
+    row = _row(user_id=OTHER_USER_ID, status="active")
+    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
+    with pytest.raises(ForbiddenError):
+        await _update(svc, row, structured=_active_input())
+    assert store.updates == []
+
+
+async def test_patch_missing_intent_404():
+    missing = uuid.uuid4()
+    svc, _, _, _, _ = _service()
+    with pytest.raises(IntentNotFoundError):
+        await svc.update(
+            auth_provider="google",
+            auth_subject="s",
+            intent_id=missing,
+            raw_text="r",
+            status=None,
+            structured_intent=_active_input(),
+        )

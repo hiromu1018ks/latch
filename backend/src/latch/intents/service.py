@@ -28,17 +28,21 @@ from latch.intents.errors import (
     IntentNotFoundError,
     IntentsError,
     IntentValidationError,
+    InvalidTransitionError,
     LLMUnavailableError,
     UnderAgeError,
     UnstructurableError,
 )
 from latch.intents.events import (
     EVENT_CREATED,
+    EVENT_UPDATED,
     insert_match_event,
 )
 from latch.intents.intent_input import StructuredIntentInput
 from latch.intents.mapping import (
     ResolvedColumns,
+    columns_from_row,
+    differs_from_row,
     resolve_for_active,
     resolve_for_draft,
 )
@@ -427,6 +431,211 @@ class IntentService:
             raise
         except Exception as exc:
             raise DependencyUnavailableError("intents dependency unavailable") from exc
+
+    # -- PATCH /v1/intents/{id}(design §2.10のPATCH分岐・§2.7)--
+
+    async def update(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        intent_id: uuid.UUID,
+        raw_text: str,
+        status: str | None,
+        structured_intent: StructuredIntentInput | None,
+    ) -> IntentRow:
+        try:
+            return await self._update(
+                auth_provider=auth_provider,
+                auth_subject=auth_subject,
+                intent_id=intent_id,
+                raw_text=raw_text,
+                status=status,
+                structured_intent=structured_intent,
+            )
+        except IntentsError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("intents dependency unavailable") from exc
+
+    async def _update(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        intent_id: uuid.UUID,
+        raw_text: str,
+        status: str | None,
+        structured_intent: StructuredIntentInput | None,
+    ) -> IntentRow:
+        user = await self._require_user(auth_provider, auth_subject)
+        now = self._clock.now()
+        async with self._uow() as conn:
+            row = await self._store.fetch_for_update(conn, intent_id)
+            if row is None:
+                raise IntentNotFoundError("intent not found")
+            if row.user_id != user.id:
+                raise ForbiddenError("not owner")
+            target = status if status is not None else row.status
+            if row.status == "draft":
+                return await self._update_draft(
+                    conn,
+                    row=row,
+                    target=target,
+                    raw_text=raw_text,
+                    inp=structured_intent,
+                    user=user,
+                    now=now,
+                )
+            if row.status in ("active", "paused"):
+                return await self._update_active(
+                    conn,
+                    row=row,
+                    target=target,
+                    raw_text=raw_text,
+                    inp=structured_intent,
+                    user=user,
+                    now=now,
+                )
+            raise InvalidTransitionError("intent is not editable")
+
+    async def _update_active(
+        self,
+        conn,
+        *,
+        row: IntentRow,
+        target: str,
+        raw_text: str,
+        inp: StructuredIntentInput | None,
+        user: UserRow,
+        now: datetime,
+    ) -> IntentRow:
+        """active/paused行の内容更新(全置換・全検証・version+1・updated Event)。"""
+        if target == "draft":
+            raise IntentValidationError("active to draft is not allowed")
+        if inp is None:
+            raise IntentValidationError("structured_intent is required")
+        cols = self._resolve_active_or_raise(inp, now=now)
+        if cols.alcohol_involved:
+            self._require_age_20(user)
+        cols = await self._geocode_or_raise(inp.location.name, cols)
+        cols = replace(cols, raw_text=raw_text)
+        new_version = row.version + 1
+        count = await self._store.update(
+            conn,
+            row.id,
+            cols,
+            status=row.status,
+            version=new_version,
+            now=now,
+            expected_status=row.status,
+        )
+        if count == 0:
+            raise InvalidTransitionError("intent status changed")
+        await insert_match_event(
+            conn,
+            event_type=EVENT_UPDATED,
+            intent_id=row.id,
+            version=new_version,
+            now=now,
+        )
+        return self._row_with_version(
+            self._row_from_cols(
+                cols,
+                intent_id=row.id,
+                user_id=row.user_id,
+                status=row.status,
+                now=now,
+            ),
+            new_version,
+        )
+
+    async def _update_draft(
+        self,
+        conn,
+        *,
+        row: IntentRow,
+        target: str,
+        raw_text: str,
+        inp: StructuredIntentInput | None,
+        user: UserRow,
+        now: datetime,
+    ) -> IntentRow:
+        """draft再保存(検証なし)とdraft→active化(全検証 — design §2.10)。"""
+        if target != "active":
+            # 下書き再保存: structured_intent省略=既存保持・送れば全置換
+            if inp is None:
+                cols = replace(columns_from_row(row), raw_text=raw_text)
+            else:
+                cols = replace(resolve_for_draft(inp), raw_text=raw_text)
+            new_version = row.version + 1
+            count = await self._store.update(
+                conn,
+                row.id,
+                cols,
+                status="draft",
+                version=new_version,
+                now=now,
+                expected_status="draft",
+            )
+            if count == 0:
+                raise InvalidTransitionError("intent status changed")
+            return self._row_with_version(
+                self._row_from_cols(
+                    cols,
+                    intent_id=row.id,
+                    user_id=row.user_id,
+                    status="draft",
+                    now=now,
+                ),
+                new_version,
+            )
+        # draft→active化: 全量必須・全検証(不通なら422でdraft据え置き)
+        if inp is None:
+            raise IntentValidationError("structured_intent is required")
+        cols = self._resolve_active_or_raise(inp, now=now)
+        if cols.alcohol_involved:
+            self._require_age_20(user)
+        cols = await self._geocode_or_raise(inp.location.name, cols)
+        cols = replace(cols, raw_text=raw_text)
+        # version判定はdraft表現での列比較(§2.7): 補完込みで比較すると
+        # 同一内容でも常に相違となるため、リクエストをdraft用resolveした結果と比較
+        draft_cols = replace(resolve_for_draft(inp), raw_text=raw_text)
+        new_version = (
+            row.version + 1 if differs_from_row(draft_cols, row) else row.version
+        )
+        count = await self._store.update(
+            conn,
+            row.id,
+            cols,
+            status="active",
+            version=new_version,
+            now=now,
+            expected_status="draft",
+        )
+        if count == 0:
+            raise InvalidTransitionError("intent status changed")
+        await insert_match_event(
+            conn,
+            event_type=EVENT_CREATED,  # 初回投入は作成種(06 §9-0・確定値14)
+            intent_id=row.id,
+            version=new_version,
+            now=now,
+        )
+        return self._row_with_version(
+            self._row_from_cols(
+                cols,
+                intent_id=row.id,
+                user_id=row.user_id,
+                status="active",
+                now=now,
+            ),
+            new_version,
+        )
+
+    @staticmethod
+    def _row_with_version(row: IntentRow, version: int) -> IntentRow:
+        return replace(row, version=version)
 
 
 def make_intent_service(*, clock: Clock, engine: AsyncEngine) -> IntentService:
