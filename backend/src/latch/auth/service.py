@@ -14,10 +14,19 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from latch.auth.errors import AuthError, DependencyUnavailableError
+from latch.auth.errors import (
+    AuthError,
+    DependencyUnavailableError,
+    UnauthenticatedError,
+)
 from latch.auth.idp import IdPVerifier
 from latch.auth.sessions import SessionStore
-from latch.auth.tokens import ACCESS_TTL_S, issue_access_token
+from latch.auth.tokens import (
+    ACCESS_TTL_S,
+    AccessTokenClaims,
+    issue_access_token,
+    verify_access_token,
+)
 from latch.core.clock import Clock
 
 UserLookup = Callable[[str, str], Awaitable[uuid.UUID | None]]
@@ -115,3 +124,62 @@ class AuthService:
             user_id=user_id,
             profile_complete=user_id is not None,
         )
+
+    async def refresh(self, *, refresh_token: str) -> RefreshResult:
+        try:
+            return await self._refresh(refresh_token=refresh_token)
+        except AuthError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("auth dependency unavailable") from exc
+
+    async def _refresh(self, *, refresh_token: str) -> RefreshResult:
+        rotated = await self._sessions.rotate_refresh(
+            token=refresh_token, now=self._clock.now()
+        )
+        access = issue_access_token(
+            clock=self._clock,
+            secret=self._secret,
+            provider=rotated.provider,
+            subject=rotated.subject,
+            sid=rotated.sid,
+        )
+        return RefreshResult(
+            access_token=access,
+            token_type="Bearer",
+            expires_in=ACCESS_TTL_S,
+            refresh_token=rotated.token,
+        )
+
+    async def logout(self, *, claims: AccessTokenClaims) -> None:
+        try:
+            await self._logout(claims=claims)
+        except AuthError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("auth dependency unavailable") from exc
+
+    async def _logout(self, *, claims: AccessTokenClaims) -> None:
+        # 対象JWTをRedis失効リストへ(TTL=残り有効期限)+リフレッシュ族を全失効(05 第5節)
+        await self._sessions.revoke_access(
+            jti=claims.jti, exp=claims.exp, now=self._clock.now()
+        )
+        await self._sessions.revoke_family(sid=claims.sid)
+
+    async def authenticate(self, *, token: str) -> AccessTokenClaims:
+        """保護エンドポイント用: JWT検証(署名・iss・alg・exp手動)+失効リスト照会。
+
+        05 第5節「失効リスト掲載」を含む401 UNAUTHENTICATEDの判定点。
+        require_authenticated(deps)はこれを呼ぶだけ(design §2.3)。
+        """
+        try:
+            claims = verify_access_token(
+                clock=self._clock, secret=self._secret, token=token
+            )
+            if await self._sessions.is_revoked(jti=claims.jti):
+                raise UnauthenticatedError("access token revoked")
+            return claims
+        except AuthError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("auth dependency unavailable") from exc
