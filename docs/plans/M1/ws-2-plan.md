@@ -713,7 +713,7 @@ Expected: エラーなし
 
 **仕様の確定値(03 §3 FR-13・07 §2解釈規則)**: 4選択肢は「今夜23:30(当日JST 23:30)/ 明日12:00(翌日JST 12:00)/ 明日23:30(翌日JST 23:30)/ 3日後まで(now+72時間)」。現在より過ぎた候補は選択不可。既定=選択可能な候補のうち time.start+3時間に最も近い値(同点は最早)。`now` は tz-aware UTC(Clock契約)。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_completion.py` を作成:
 
@@ -799,12 +799,12 @@ def test_nearest_expires_at_with_past_time_start_returns_earliest_future():
     assert nearest_expires_at(time_start, now) == _jst(2026, 9, 28, 12, 0)
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_completion.py -v`
 Expected: FAIL(ImportError: completion の公開名がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/completion.py` を作成:
 
@@ -868,12 +868,12 @@ def nearest_expires_at(time_start: datetime, now: datetime) -> datetime:
 
 `backend/src/latch/intents/__init__.py` へ `DEFAULT_PARTICIPANTS`・`DEFAULT_RADIUS_M`・`default_time_end`・`expires_at_candidates`・`nearest_expires_at`(`from latch.intents.completion import ...`)を追記する。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_completion.py -v`
 Expected: PASS 8件
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし
