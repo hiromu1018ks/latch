@@ -54,7 +54,9 @@ def test_token_payload_structure(clock):
     # verify_iat無効化: PyJWT既定のiat検証はシステムクロック比較のため
     # FakeClock時刻(NOW)との取り合わせで非決定的になる。構成検査には不要。
     # verify_aud無効化: audience未指定decodeはtokenのaud存在だけで拒否される
-    decode_opts = {"verify_iat": False, "verify_aud": False}
+    # verify_exp無効化: exp検証もシステムクロック比較のため、NOW発行トークンは
+    # 実行実刻がexp通過すると必ず期限切れになる(タイムボム)。意図はclaim構成検査。
+    decode_opts = {"verify_iat": False, "verify_aud": False, "verify_exp": False}
     payload = pyjwt.decode(token, SECRET, algorithms=["HS256"], options=decode_opts)
     assert payload["iss"] == "latch-api"
     assert payload["aud"] == "latch-app"
