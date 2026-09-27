@@ -1,10 +1,15 @@
 # LATCH Jev・LLM利用仕様書
 
-- 文書バージョン: v0.3
+- 文書バージョン: v0.4
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27
-- 前提文書: 01 要件定義書 v0.2 / 02 スコープ合意書 v0.1 / 03 UX仕様書 v0.3 / 04 システムアーキテクチャ設計書 v0.2 / 05 データモデル・API仕様書 v0.3 / 06 マッチングパイプライン設計書 v0.3
+- 作成日: 2026-09-27(v0.3・v0.4更新: 同日)
+- 前提文書: 01 要件定義書 v0.4 / 02 スコープ合意書 v0.3 / 03 UX仕様書 v0.4 / 04 システムアーキテクチャ設計書 v0.4 / 05 データモデル・API仕様書 v0.4 / 06 マッチングパイプライン設計書 v0.4
+- v0.4の変更点(prototype整合): 下書き保存(05 v0.4)と02 v0.3 D-03再決定(公開設定 hidden_until_match / summary_only)を反映。主要変更は次のとおり。
+  - Embeddingの呼び出しタイミングを「active作成・active化(draft→active)・active更新後」へ明確化。下書き保存(status=draft)ではEmbeddingしない(第1節。06 v0.4)
+  - Parser入力に300字上限(raw_textのUI制限と同一値)のサーバ側検証を追加した(第2節。03 v0.4第3節)
+  - 補完規則のexpires_atを4選択肢の選択式に、visibilityを公開設定(hidden_until_match / summary_only、既定hidden_until_match)へ更新(第2節)
+  - 判定可能NGの例から「公開範囲」を除去(公開設定はLayer 1の判定対象ではない、06 v0.4)。Jevの正規化テキストから[hard] visibility行を除去し、social_fitの軸から「公開範囲」を除去した(第4節。表示制御であり意味判定の材料に含めない)
 - v0.3の変更点: 総括レビュー(docs/reviews/final-review.md)の指摘を反映。主要変更は次のとおり。
   - FR-10: JevとEmbeddingのtimeout値・再試行回数を確定(第1節)。06 v0.3第1節の層別予算配分(初期LATCH判定p95 10秒)と整合する値を根拠付きで決定。circuit breakerのしきい値初期値の確定は06 D-15側の改版事項として第7節に記録
   - FR-43: ParserのLLM障害(503 LLM_UNAVAILABLE、再試行ボタン)と構造化不能(422 VALIDATION_ERROR、フォームフォールバック)の応答区別を規定(第2節・D-17。05 v0.3のエラーcode列挙と整合)
@@ -18,7 +23,7 @@
 | 系統 | 呼び出しタイミング | 同期・非同期 | timeout | 再試行 | コスト位置づけ |
 |---|---|---|---|---|---|
 | Intent Parser | POST /v1/intents/parse(03第3節の確認フロー) | 同期(ユーザーが待つ) | 10秒(D-17) | なし(即フォールバックへ) | 1登録1回。件数は最も多いが単価は低い |
-| Embedding | Intentの作成・更新後(イベント駆動、06 v0.3第9節の第2段トリガー) | 非同期 | 2秒 | なし(失敗はD-15のバックフィル経路で回収) | 1 Intent 1回+失敗時のバックフィル(06 D-15) |
+| Embedding | Intentのactive作成・active化(draft→active)・active更新後(イベント駆動、06 v0.3第9節の第2段トリガー。**draft状態では呼び出さない** — POSTでの下書き保存・draft中のPATCH更新とも、06 v0.4第9節) | 非同期 | 2秒 | なし(失敗はD-15のバックフィル経路で回収) | 1 Intent 1回+失敗時のバックフィル(06 D-15) |
 | Jev | Layer 4(06、K_j=8回) | 非同期 | 6秒 | 出力検証失敗(JSON欠損等)のみ1回。timeoutは失敗として縮退(D-15)へ | 単価が最も高い。04 D-16の日次・月次上限で制御 |
 
 いずれもLLM Gateway(04)経由で呼び出し、送信先と送信データ種別を記録する(01第21節)。Jevの1実行回数は1候補(両方向を1呼び出しで判定)と数える(06第5節)。
@@ -38,7 +43,7 @@
 あなたはLATCHのIntent Parserである。ユーザーが書いた「条件付きの意思」を
 構造化データへ変換する。出力は指定のJSONのみとし、説明文を含めない。
 
-入力は日本語の自然文で、「今〜数日以内の食事・飲み・軽いアクティビティ」に
+入力は日本語の自然文で(最大300字。アプリ層で事前検証する)、「今〜数日以内の食事・飲み・軽いアクティビティ」に
 関する意思である。現在日付は {current_date} とする。
 
 規則:
@@ -78,16 +83,19 @@
 
 ### 解釈規則(03 D-19の実装)
 
+**入力長の検証(v0.4)。** parseリクエストのtextはraw_textの上限300字と同一値で検証し、超過は422 VALIDATION_ERRORを返す。UIはmaxlengthで入力を遮断し、文字数カウンタを表示する(03 v0.4第3節)ため、APIへの直接呼び出しに対する防御であり、切り詰めは行わない。
+
 Parserはフィールドの抽出のみを行い、デフォルトの補完はParser後のアプリ層で単一の規則として適用する。二重実装による不整合を防ぐためだ。
 
 | フィールド | Parserの出力 | アプリ層の補完(03 D-19) |
 |---|---|---|
 | time.end | null可 | nullなら time.start + 3時間 |
-| expires_at | Parserは出力しない | time.start + 3時間(確認画面で編集可、03 v0.3第3節) |
+| expires_at | Parserは出力しない | time.start + 3時間に最も近い選択肢(4値の選択式「今夜 23:30 / 明日 12:00 / 明日 23:30 / 3日後まで」。03 v0.4第3節) |
 | participants | null可 | min=2 / max=2 |
-| visibility | Parserは出力しない | public(確認画面で選択) |
+| visibility | Parserは出力しない | hidden_until_match(公開設定。「条件一致までは非公開 / 候補にだけ概要を表示」の2値。確認モーダルで選択、02 v0.3 D-03) |
+| notification_level | Parserは出力しない | proposals_only(お知らせ設定。「一致したときだけ / 近い候補も知らせる / 通知しない」の3値。預け方パネルで選択、03 v0.4第3節。v0.4新設) |
 | budget.max | null可 | nullのまま(制約なし) |
-| location.radius_m | null可 | nullなら1,000(既定半径)。確認画面で修正できる(03 v0.3のD-19表にも行がある) |
+| location.radius_m | null可 | nullなら1,000(既定半径)。条件リストで修正できる(03 v0.4のD-19表にも行がある) |
 
 必須3フィールド(category / time.start / location.name)が抽出できない場合と、LLM障害の場合とでは応答を区別する(FR-43)。
 
@@ -96,13 +104,13 @@ Parserはフィールドの抽出のみを行い、デフォルトの補完はPa
 
 time.flexibility_minutes / location.flexibilityはMVPでは常にnullとし、Parserは抽出しない(03 D-19のデフォルト=固定扱い)。06 Layer 1のflexibilityによる範囲拡張は、将来バージョンで抽出を有効化した時点で機能する。
 
-**negative_constraintsは常に空(FR-42)。** 規則5により、判定不能NGはng_unverifiableへ入れ、negative_constraintsには入れない。判定可能なNG(ブロック・公開範囲)は独立カラムとLayer 1(06第2節)で判定するため、structured_data.negative_constraints(05 v0.3)はMVPでは常に空配列である。空であることが正常系である旨を明示するものであり、実装者がLayer 1での照合を二重に実装したり、09の期待値表に正例を設けたりしないこと。
+**negative_constraintsは常に空(FR-42)。** 規則5により、判定不能NGはng_unverifiableへ入れ、negative_constraintsには入れない。判定可能なNG(ブロック)は独立カラムとLayer 1(06第2節)で判定するため、structured_data.negative_constraints(05 v0.3)はMVPでは常に空配列である(旧来「公開範囲」を判定可能NGの例としていたが、公開設定はLayer 1の判定対象ではないためv0.4で除去した。06 v0.4)。空であることが正常系である旨を明示するものであり、実装者がLayer 1での照合を二重に実装したり、09の期待値表に正例を設けたりしないこと。
 
 **alcohol_involvedの判定と伝播(08 D-10の実装)。** alcohol_involvedは常にtrue/falseを出力し、アプリ層での補完はない。規則はプロンプト規則7のとおり、category.primary=drinkingは常にtrue、「食事のついでに軽く飲む」のようなmeal内の言及を含め、飲酒を示す語(飲む・飲み・酒・呑む・バー・ビール・サワー等)の検出でもtrueとする。フラグは保存時にintents.alcohol_involved(05)へ格納され、保存時にcategory_primary=drinkingであればサーバ側でtrueを確定する(05 v0.3)。作成時の年齢検証(20歳未満のユーザーは飲酒を含むIntentを作成不可、05)とLayer 1の年齢条件(06第2節)がこのフラグを使う。
 
 ### D-04連携(判定不能NG条件)
 
-ng_unverifiableが空でない場合、応答のwarningsに `{code: "NG_CONDITION_DOWNGRADED", condition: ...}` を載せる(05第5節)。クライアントは確認画面に注意表示を出し(02 D-04)、保存時に同条件はstructured_dataのsoft側へ`downgraded_from_ng: true`のフラグ付きで格納される(05 v0.3のstructured_dataスキーマ)。Hard Filterの対象にはならない。
+ng_unverifiableが空でない場合、応答のwarningsに `{code: "NG_CONDITION_DOWNGRADED", condition: ...}` を載せる(05第5節)。クライアントは条件リストに注意表示を出し(02 D-04、03 v0.4第3節)、保存時に同条件はstructured_dataのsoft側へ`downgraded_from_ng: true`のフラグ付きで格納される(05 v0.3のstructured_dataスキーマ)。Hard Filterの対象にはならない。
 
 ## 3. Embedding仕様
 
@@ -118,7 +126,7 @@ Embedding対象テキストは、構造化データから次の形式で生成�
 
 ### 送信データの正規化テキスト形式
 
-2つのIntentを次の形式に正規化して送る(06)。hard/softの区別をタグで示す。
+2つのIntentを次の形式に正規化して送る(06)。hard/softの区別をタグで示す。**visibility(公開設定)は表示レベルの制御であり、成立可能性の意味判定の材料に含めないため、正規化テキストには含めない(v0.4)**。ついでにお知らせ設定(notification_level)も含めない(通知経路の設定であり判定材料ではない)。
 
 ```text
 Intent A:
@@ -127,7 +135,6 @@ Intent A:
 [hard] location: 天文館周辺 半径2km
 [hard] participants: 2–4人
 [hard] budget_max: 5000円
-[hard] visibility: public
 [soft] 軽く飲みたい
 [soft] 会社関係の人は避けたい(システムで判定不能)
 
@@ -152,7 +159,7 @@ Intent B:
 - purpose_fit: 目的・カテゴリの適合度(飲みたい×食べたいのズレ等)
 - mood_fit: 雰囲気・軽さの適合度(「軽く」×「がっつり」等)
 - timing_fit: 時間帯・所要時間の適合度
-- social_fit: 人数・公開範囲・関係性の適合度
+- social_fit: 人数・社会的文脈(立場・関係性)の適合度(v0.4で「公開範囲」を軸から除去。公開設定は表示制御であり判定材料に含めない)
 - latent_yes: どちらかが明示していないが、意図の範囲内でYESになり得る可能性
 
 判定規則:

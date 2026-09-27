@@ -1,10 +1,14 @@
 # LATCH マッチングパイプライン設計書
 
-- 文書バージョン: v0.3
+- 文書バージョン: v0.4
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27
-- 前提文書: 01 要件定義書 v0.2 / 02 スコープ合意書 v0.1 / 03 UX仕様書 v0.1 / 04 システムアーキテクチャ設計書 v0.2 / 05 データモデル・API仕様書 v0.3
+- 作成日: 2026-09-27(v0.3・v0.4更新: 同日)
+- 前提文書: 01 要件定義書 v0.4 / 02 スコープ合意書 v0.3 / 03 UX仕様書 v0.4 / 04 システムアーキテクチャ設計書 v0.4 / 05 データモデル・API仕様書 v0.4
+- v0.4の変更点(prototype整合): 02 v0.3 D-03再決定(visibilityを公開設定 hidden_until_match / summary_only の2値へ再定義、friendshipsは将来版へ)と下書き保存(05 v0.4)を反映。主要変更は次のとおり。
+  - Layer 1の判定対象から公開範囲を除外した(v0.4)。公開設定は絞り込み条件ではなく開示範囲(表示レベル)の制御であり、Layer 5のproposal生成分岐(第6節・05 v0.4)へ移した。friendships判定行は将来版扱いとして削除(第2節)
+  - 下書き(status=draft)のIntentはEmbeddingせず、Match Eventを発行しない(v0.4)。draft→active化(PATCH)のEventがパイプラインの初回投入となる(第3節・第9節)
+  - 初期LATCH判定p95 10秒の計測対象を「active作成またはdraft→active化の初回投入Event経由の初回提案」へ明確化(第1節)
 - v0.3の変更点: 総括レビュー(docs/reviews/final-review.md)の指摘を反映。主要変更は次のとおり。
   - FR-01(Critical): Embedding完了を第2段トリガーとする2段構成に確定。派生イベント`embedding_completed`の設計(idempotency key・version検査・embedding IS NULLの再検査)と、初期LATCH判定p95 10秒の層別予算配分(Embedding / Layer 1〜3 / Jev / 通知)+Jev・Embeddingのtimeout値(第1節・第9節)
   - FR-03(Critical): Jev予算(1Intent日次40回・1ユーザー日次120回)と同一Intent再評価の30分頻度制限、保留キュー再評価の差分化を追加(第5節・第10節)
@@ -52,7 +56,7 @@ embedding_completed(第2段トリガー、第9節)
 
 各層の上限Kは出力数の上限とする(第8節D-24)。ただしK_jは1イベント処理あたりの「Jev実行回数」の上限であり、1対1候補1件=1回、グループ集合は構成ペアごとに1回を数える(第5節)。どの層でもAIを全件探索には使わない(原則1)。Layer 4を通過した候補のみがLATCH Scoreを持ち、閾値0.80と比較される。
 
-**初期LATCH判定 p95 10秒の層別予算配分(01第20節)。** 本目標の計測対象は作成Event経由の初回提案とする。計測起点は「対象Intentの保存コミット時点」、終点は「提案通知の送信記録時点」とする。作成Eventはdebounce窓を持たず即時処理する(第9節)ため、起点から第1段が直接計時され、窓待ちが予算に乗らない。更新Event経由の再評価は10秒窓の統合を含むため対象外とし、別途計測する(窓込みで15秒以内を目安とする運用目標)。予算配分は次のとおり。
+**初期LATCH判定 p95 10秒の層別予算配分(01第20節)。** 本目標の計測対象は初回投入Event経由の初回提案とする(v0.4: 初回投入は、下書きを経ないactive作成Event、またはdraft→active化(PATCH)のEventのいずれか)。計測起点は「対象Intentのactive化の保存コミット時点」、終点は「提案通知の送信記録時点」とする。初回投入Eventはdebounce窓を持たず即時処理する(第9節)ため、起点から第1段が直接計時され、窓待ちが予算に乗らない。更新Event経由の再評価は10秒窓の統合を含むため対象外とし、別途計測する(窓込みで15秒以内を目安とする運用目標)。予算配分は次のとおり。
 
 | 区間 | 予算(p95) | 備考 |
 |---|---|---|
@@ -66,7 +70,7 @@ Embeddingのtimeout 2秒はEmbedding APIの典型的p95(数百ms〜1秒)に対�
 
 ## 2. Layer 1 Hard Filter
 
-時間・距離・予算・人数・公開範囲・ブロック・カテゴリ・年齢(飲酒)・自己除外を、SQLとIndex(PostGIS、05第3節)で判定する。判定はpass / failのみで、AIは使わない(原則2)。ペアの成立判定規則を次に確定する。
+時間・距離・予算・人数・ブロック・カテゴリ・年齢(飲酒)・自己除外を、SQLとIndex(PostGIS、05第3節)で判定する(v0.4で公開範囲を判定対象から除外。公開設定(visibility)は絞り込み条件ではなく開示範囲(表示レベル)の制御であり、Layer 5のproposal生成分岐(第6節・05 v0.4)が担う。02 v0.3 D-03再決定)。判定はpass / failのみで、AIは使わない(原則2)。ペアの成立判定規則を次に確定する。
 
 | 条件 | 判定規則 |
 |---|---|
@@ -75,11 +79,10 @@ Embeddingのtimeout 2秒はEmbedding APIの典型的p95(数百ms〜1秒)に対�
 | 距離 | ST_DWithin(center_a, center_b, r_a + r_b)。両者の許容圏の重なりが成立条件。正確な位置は相手へ表示しない(01第22節) |
 | 予算 | ペア予算 = min(budget_max_a, budget_max_b)(NULLは無視)。これが500円未満の場合のみfail。提案表示の予算上限はこのペア予算 |
 | 人数(1対1) | 2 ∈ [min_i, max_i] が双方で成立すること |
-| 公開範囲 | 片方でもfriends_onlyなら、friendships(05)に承認済み関係が必要 |
 | ブロック | blocks(05)に (A,B)(B,A) のいずれも存在しないこと |
 | カテゴリ | category_primaryの完全一致。secondaryは本層の対象外(意味的な差はLayer 2以降が担う) |
 | 年齢(飲酒) | ペアのいずれかのIntentがalcohol_involved=true(07 Parserの判定、05のカラム)の場合は、双方の作成者が20歳以上(users.birth_dateの自己申告値)であることを検査し、満たさなければfail。飲酒を含むIntentは20歳以上同士の間でのみ候補になる(08 D-10)。APIの作成・更新時検証(05)に対する二重防御である |
-| 絶対NG | 判定可能なもの(上記の公開範囲・ブロック)のみ。会社関係者の除外のような判定データを欠くNG条件は本層で除外しない |
+| 絶対NG | 判定可能なもの(上記のブロック)のみ。会社関係者の除外のような判定データを欠くNG条件は本層で除外しない。公開設定(visibility)は絞り込み条件ではないため本層の判定対象に含めない(v0.4。旧「公開範囲: 片方でもfriends_onlyならfriendshipsに承認済み関係が必要」の行は、02 v0.3 D-03再決定により将来版の条件として削除した) |
 
 **D-04降格条件の経路。** 判定不能なNG条件はSoft Constraintとしてstructured_dataに格納され(05、`downgraded_from_ng: true`)、Layer 3を素通りしたうえでLayer 4のJev入力のsoft_constraintsへ渡る。Jevが「このNG条件と相手の条件から成立し得るか」を意味判定し、would_*_accept_* に反映する。Cheap Judgeは埋め込み類似度ベースのためこの条件を扱わない。プロンプト上の扱いは07が定める。
 
@@ -87,7 +90,7 @@ Embeddingのtimeout 2秒はEmbedding APIの典型的p95(数百ms〜1秒)に対�
 
 Embedding対象を確定する。raw_text(非公開の原文、01第21節)は埋め込みに使わず、構造化データの正規化テキスト(category、時間帯、場所の地域名、人数、soft constraintsの文言)をembed対象とする。外部送信を判定に必要な最小限へ絞り(01第21節)、raw_textがEmbedding APIへ渡る経路を排除する。ANN SearchはpgvectorのHNSW(cosine、05第3節)で、起点Intentのembeddingをクエリに上位K_v件を取得する。
 
-embedding IS NULL(未完了または失敗)のIntentは、Layer 1〜2の生成元にも対象にもならない(05第2節のカラム説明と同趣旨)。未完了のIntentは第2段トリガー(第9節)のembedding_completedの到着でパイプラインへ投入され、失敗したIntentはD-15のバックフィル完了時のembedding_completedで投入される。D-15のembedding=NULLを「失敗」と扱う規定は、Embeddingの実行自体に失敗した場合に限定され、実行待ち(未完了)は本節の「対象外」として区別する。
+embedding IS NULL(未完了または失敗)のIntentは、Layer 1〜2の生成元にも対象にもならない(05第2節のカラム説明と同趣旨)。未完了のIntentは第2段トリガー(第9節)のembedding_completedの到着でパイプラインへ投入され、失敗したIntentはD-15のバックフィル完了時のembedding_completedで投入される。**下書き(status=draft)のIntentもEmbeddingしないため生成元にも対象にもならない(v0.4)** — draftはMatch Eventを発行せず、draft→active化(PATCH、05 v0.4)の検証通過時にembeddingを確定し、初回のパイプライン投入(作成Eventと同一の経路)を行う。D-15のembedding=NULLを「失敗」と扱う規定は、Embeddingの実行自体に失敗した場合に限定され、実行待ち(未完了)とdraftは本節の「対象外」として区別する。
 
 ## 4. Layer 3 Cheap Judge
 
@@ -135,7 +138,7 @@ H: Layer 1の判定時点の再検証(通過=1、不成立=0)
 C: 初期値1(Calibrationデータ蓄積後に調整、01第14節)
 ```
 
-L >= 0.80(D-01、検証は09)なら提案候補とする。提案化の前に03 D-08の上限(1ユーザー日6件、1Intent同時3件)を検査し、上限内なら直ちにproposedへ遷移させて通知する。超過分は保留キューへ置く(表現と提示時の処理は第10節)。提示順は03 D-08のとおり対象時刻昇順、タイブレークはLATCH Score降順。proposal(05第2節の正式構造)の生成はLayer 5が行う(表示用サマリのみ、08第2.3節)。競合制御・回答処理・期限切れ処理は次のとおり確定する。
+L >= 0.80(D-01、検証は09)なら提案候補とする。提案化の前に03 D-08の上限(1ユーザー日6件、1Intent同時3件)を検査し、上限内なら直ちにproposedへ遷移させて通知する。超過分は保留キューへ置く(表現と提示時の処理は第10節)。提示順は03 D-08のとおり対象時刻昇順、タイブレークはLATCH Score降順。proposal(05第2節の正式構造)の生成はLayer 5が行う(表示用サマリのみ、08第2.3節)。**生成内容は参加Intentのvisibilityで分岐する(v0.4、05 v0.4)** — summary_onlyでは全フィールドを生成し、hidden_until_matchではheadcountとmatch_levelのみとする(条件サマリ・表示名・プロフィールは成立まで表示しない、08 v0.4第2.2節)。**nearby_also(お知らせ設定、05 v0.4)が指定されたIntentについては、閾値未満の候補の発生時に、その存在の通知のみを送る(v0.4)** — 通知に条件サマリ・一致度・相手情報は含めず、当該候補はlatches.status=candidateのまま保持し(proposed遷移しない)、閾値超過時または後続の再評価で通常の提案判定に回る。nearby_alsoの存在通知もD-08の日次上限(日6件/ユーザー)に含める。同時進行上限(同時3件)はproposed数の上限であるため、candidateのままの存在通知には適用しない(v0.4)。mutedのIntentは提案通知を送らない。それ以外の挙動(proposed遷移・保留キュー・回答期限・競合クローズ)は通常どおりであり、latches.statusはproposedへ遷移する。提案自体はホームのLATCH候補一覧から確認できる(通知を送らないだけである)。muted提案もproposed遷移であるため、Mutual Latch Rateの分母(09第2.1節)に含まれる(v0.4)。競合制御・回答処理・期限切れ処理は次のとおり確定する。
 
 **回答処理の競合制御(FR-08)。** 回答APIは単一トランザクション内の条件付きUPDATEで直列化する。対象のlatches行をFOR UPDATEで排他してからstatus遷移を適用する。UPDATEのWHERE条件はstatusのみでなく期限比較を含める。
 
@@ -163,7 +166,7 @@ UPDATE latches SET ...
 全組み合わせ探索は行わない(01第15節)。候補Pool(同一時間Bucket・地域・カテゴリでLayer 3を通過したIntent群、上限は第8節D-24)から、次の貪欲法で集合を構成する。
 
 1. Pool内のIntentをcheap_score降順(タイブレークはintent_id昇順)に走査し、種となるIntentを選ぶ
-2. 種のparticipants.max >= 3 である場合、Hard互換(人数範囲の共通包含、時間・距離・可視性・年齢(飲酒、第2節)・自己除外 — 集合内のIntentの作成user_idは互いに異なること(第2節) — の成立)なIntentをcheap_score順に追加し、3〜4人の集合を構成する
+2. 種のparticipants.max >= 3 である場合、Hard互換(人数範囲の共通包含、時間・距離・年齢(飲酒、第2節)・自己除外 — 集合内のIntentの作成user_idは互いに異なること(第2節) — の成立。v0.4で可視性を条件から除外した。公開設定は絞り込み条件ではなく開示範囲の制御(第6節)のため)なIntentをcheap_score順に追加し、3〜4人の集合を構成する
 3. 構成した集合をgroup_candidates(05)へ記録し、全ペアのmatch_candidatesを評価世代付きで生成する。集合のJev判定は第5節の配分規則に従い、未判定ペアが残る集合はstatus=candidateのまま提案対象から外す
 
 集合Sの成立条件は |S| ≧ max(min_i) かつ |S| ≦ min(max_i)(全員の人数条件を満たす)。集約スコアと成立確定条件は第8節D-06で確定する。
@@ -199,6 +202,16 @@ UPDATE latches SET ...
 ```text
 Intent API → DB保存 → Match Event発行(payloadにIntent version)
   → Pub/Sub → Matching Worker(第1段)
+      0. draft対象外: draft状態のIntent(POSTでの下書き保存、および
+         draft中のPATCH更新、05 v0.4)はMatch Eventを発行しない
+         (v0.4)。Embeddingも行わない。draft→active化(PATCH、
+         05 v0.4)の検証通過時に、作成Eventと同一の即時処理で初回
+         投入する(Embedding要求のキックを含む)。この初回投入Eventは
+         作成種(create)を用いる — active化時に条件内容の実質変更を
+         伴いversionが+1となる場合でも作成種のままであり(draft保存
+         時にEventを発行していないためidempotencyキー
+         (create, source_intent_id, version)は常に空いている)、
+         debounceの窓統合(更新Eventのみ対象)の影響も受けない
       1. debounce: 作成Eventは窓を持たず即時処理する。更新Eventのみ、
          同一source_intent_idのEventを10秒のトレーリング窓で統合し、
          窓解放時の最新versionのみ処理する。窓内の統合後は1回の評価に
@@ -214,7 +227,7 @@ Intent API → DB保存 → Match Event発行(payloadにIntent version)
          (match_events.status=quarantined、05)
 ```
 
-**第2段トリガー(FR-01)。** Embeddingは非同期(07第1節)であるため、作成・更新Eventの処理はEmbedding要求のキックまでである。Embedding WorkerがLLM Gateway経由でEmbedding APIを呼び出し、intents.embeddingとembedding_modelを書き込んだうえで、派生イベント`embedding_completed`(match_eventsに記録、05)を発行する。これが第2段トリガーであり、Matching WorkerがCandidate Retrievalからパイプラインを実行する。
+**第2段トリガー(FR-01)。** Embeddingは非同期(07第1節)であるため、作成・更新Eventの処理はEmbedding要求のキックまでである(下書き保存はEvent自体を発行しないため対象外。v0.4)。Embedding WorkerがLLM Gateway経由でEmbedding APIを呼び出し、intents.embeddingとembedding_modelを書き込んだうえで、派生イベント`embedding_completed`(match_eventsに記録、05)を発行する。これが第2段トリガーであり、Matching WorkerがCandidate Retrievalからパイプラインを実行する。
 
 - idempotency key: (embedding_completed, source_intent_id, version)。第1段と同一のUNIQUE制約(05)で重複排除する
 - version検査: payload version = 現行versionのときのみパイプラインを実行する。payload version < 現行versionは破棄する(旧versionのembedding。新versionのEmbedding要求が窓統合後に投げられ、その完了イベントが処理を引き継ぐ)。payload version > 現行versionは再試行に回す(読み取り遅延。上限で隔離)
@@ -230,7 +243,7 @@ Intent API → DB保存 → Match Event発行(payloadにIntent version)
 **起点補償ジョブ(FR-18)。** 再評価の起点がMatch Event・Bucketのいずれかに偏ると、欠落した再評価が恒久に回収されない。よって次の2つの補償を設ける。
 
 - **resume時のEvent発行。** pause/resumeのうちresumeは、version+1の再評価Event(update種)を発行する(05第6節)。versionを+1するのは、idempotencyキー(UNIQUE(event_type, source_intent_id, version))が同一versionの再発行を許さないためであり(pause→resumeの繰り返しで同一キーが必ず衝突する)、resume後の再評価を「状態が変わった新たな評価世代」として扱う03 D-07の世代管理とも整合する。Embeddingはテキスト不変のため再実行せず、embedding IS NULLでなければ第2段相当のパイプライン投入へ直接進む(前項のキック分岐)。開始時刻のBucketが経過した後のresumeでも、このEventにより再評価・提案が発生し得る状態に復帰する
-- **期限前スキャン(catch-upスキャン)。** expiry_sweeper(第6節)と同一の60秒周期スケジューラで、`status='active'`かつ`expires_atまで2時間以内`かつ`直近の詳細評価の実施から30分以上経過`のIntentを抽出し、Candidate Retrievalからパイプラインを直接投入する(Eventを発行しない。起動経路がスキャンであるだけで処理内容は第2段と同一。Event発行方式だと同一versionのidempotencyキー衝突が生じるため)。Bucket到来Eventの遅延・欠落や、頻度制限・障害の復旧待ちで未評価のまま放置されたIntentを期限前に回収する。値の根拠 — 2時間はIntentの実効寿命(デフォルトexpires_at = time_start+3時間、03 D-19)の大半をカバーし、提案の通知打ち切り線である「対象開始時刻まで75分」(03 D-05)の前に最低2回の再評価機会(30分周期×2時間)を保障する。30分は第5節の頻度制限と同一周期とし、通常経路とcatch-upが二重に評価するのを防ぐ。60秒のスキャン周期はexpiry_sweeperと同一スケジューラで動かし、追加のジョブ管理を発生させない。embedding IS NULLのIntentは対象から除外する(embedding_completedの到着で回収される)
+- **期限前スキャン(catch-upスキャン)。** expiry_sweeper(第6節)と同一の60秒周期スケジューラで、`status='active'`かつ`expires_atまで2時間以内`かつ`直近の詳細評価の実施から30分以上経過`のIntentを抽出し、Candidate Retrievalからパイプラインを直接投入する(Eventを発行しない。起動経路がスキャンであるだけで処理内容は第2段と同一。Event発行方式だと同一versionのidempotencyキー衝突が生じるため)。Bucket到来Eventの遅延・欠落や、頻度制限・障害の復旧待ちで未評価のまま放置されたIntentを期限前に回収する。値の根拠 — 2時間はIntentの実効寿命(既定の有効期限はtime.start+3時間に最も近い選択肢であり、実質寿命は約3時間。03 v0.4第3節・D-19)の大半をカバーし、提案の通知打ち切り線である「対象開始時刻まで75分」(03 D-05)の前に最低2回の再評価機会(30分周期×2時間)を保障する。30分は第5節の頻度制限と同一周期とし、通常経路とcatch-upが二重に評価するのを防ぐ。60秒のスキャン周期はexpiry_sweeperと同一スケジューラで動かし、追加のジョブ管理を発生させない。embedding IS NULLのIntentは対象から除外する(embedding_completedの到着で回収される)
 
 debounceの10秒・retryの5回・頻度制限の30分は初期値とし、計測(Queue lag、01第20節)を見て調整する。
 
