@@ -9,8 +9,14 @@ from latch.intents.completion import (
 )
 from latch.intents.errors import (
     DependencyUnavailableError,
+    ForbiddenError,
+    GeocodingFailedError,
+    IntentNotFoundError,
     IntentsError,
+    IntentValidationError,
+    InvalidTransitionError,
     LLMUnavailableError,
+    UnderAgeError,
     UnstructurableError,
 )
 from latch.intents.prompt import PARSER_SYSTEM_PROMPT, format_parser_system_prompt
@@ -36,8 +42,13 @@ __all__ = [
     "DEFAULT_PARTICIPANTS",
     "DEFAULT_RADIUS_M",
     "DependencyUnavailableError",
+    "ForbiddenError",
+    "GeocodingFailedError",
+    "IntentNotFoundError",
     "IntentParseService",
+    "IntentValidationError",
     "IntentsError",
+    "InvalidTransitionError",
     "LLMUnavailableError",
     "PARSER_SYSTEM_PROMPT",
     "ParseResult",
@@ -49,6 +60,7 @@ __all__ = [
     "ParserParticipants",
     "ParserTime",
     "SupportsParseIntent",
+    "UnderAgeError",
     "UnstructurableError",
     "WARNING_MESSAGE_NG_DOWNGRADED",
     "default_time_end",
