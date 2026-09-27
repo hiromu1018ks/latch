@@ -12,8 +12,10 @@
 | 3 | 実時間参照がclock.pyのみ | PASS | `rg -n 'datetime\.now|utcnow|time\.time|time\.monotonic' backend/src` → `backend/src/latch/core/clock.py:33: return datetime.now(UTC)` の1行のみ。`uv run pytest tests/unit/test_arch_no_direct_time.py -v` → "1 passed" |
 | 4 | 依存追加3本のみ | PASS | `git diff main -- backend/pyproject.toml` → `+ "pyjwt[crypto]>=2.10"` `+ "redis>=5.2"`(dependencies)/ `+ "fakeredis>=2.26"`(dev)の3行のみ。`git diff --stat main -- backend/uv.lock` → "1 file changed, 183 insertions(+)"(依存解決差分のみ) |
 | 5 | alembic差分なし | PASS | `git diff --stat main -- backend/alembic` → 出力なし(空) |
-| 6 | 触るファイルがスコープどおり | PASS | `git diff --name-only main | sort` → §4の一覧と完全一致(auth配下15ファイル+tests/unit/auth 10ファイル+integration 2ファイル+pyproject/uv.lock/settings/main/README+compose.yaml+本報告書。core/・worker/・llm/・Makefile・docker/・docs 01-12・prototype に差分なし)。`git status --short` → 空 |
+| 6 | 触るファイルがスコープどおり | PASS | `git diff --name-only main | sort` → §4の一覧と完全一致(auth配下15ファイル+tests/unit/auth 10ファイル+integration 2ファイル+pyproject/uv.lock/settings/main/README+compose.yaml+本報告書。core/・worker/・llm/・Makefile・docker/・docs 01-12・prototype に差分なし)。`git status --short` → 空。**追記**: 59cd61b で `backend/alembic/env.py` が追加(スーパーバイザー明示許可 — 補足10参照) |
 | 7 | CLI発行トークンが検証できる | PASS | `uv run python -m latch.auth issue-idp-token --provider google --subject demo` → `eyJhbGciOi...`(JWT文字列・exit 0)。`test_cli_issue_token_verifies` → PASS(CLI出力→IdPVerifier検証のラウンドトリップ) |
+
+**追記(2026-09-27)**: スーパーバイザー検証(test-ci)で失敗2件を特定されたため、指示に従い修正(コミット 59cd61b)。修正後 `make lint` / `make test`(164 passed)グリーン。test-ci の再検証はスーパーバイザー実施待ち。
 
 ## 固定値の変更有無(design.md §6・本計画§8)
 - アクセストークンHS256(design §6-1): 変更なし
@@ -31,6 +33,7 @@
 
 ## コミット一覧
 ```
+59cd61b fix: test-ci失敗2件の修正(asyncpg UUID行値・alembic logger無効化)
 8af4c96 feat: latch.auth公開IF再export・integration試験(G0証拠)・README認証手順
 de9b3ef feat: 認証CLI(issue-idp-token・gen-keypair。10 第1節テスト用認証構成)
 ecaa8fa feat: 認証ルータ・require_authenticated・main lifespan統合(エラーenvelope)
@@ -55,3 +58,11 @@ fb5b071 feat: 認証依存(pyjwt/redis/fakeredis)とテスト鍵ペア・例外�
 5. **`test_tokens.py` のclaim構成検査で decode に `verify_iat/verify_aud: False` を渡すよう修正**(テスト側)。PyJWT既定のiat検証はシステムクロック比較のため実行時刻によって非決定的に失敗する( ImmatureSignatureError )。audience未指定decodeもtokenのaud存在だけで拒否される。構成検査に両検証は不要
 6. **`test_tools.py::test_cli_issue_token_verifies` に `--iat` を追加**(計画書Task 10注記の予見どおり)。CLI発行時刻(SystemClock=実行時刻)と検証側FakeClock(NOW=2026-09-27T12:00Z)の取り合わせで、実行時刻がNOWの1時間以上前だとexpired判定になるため、発行時刻をNOWに固定して決定的にした
 7. その他: 計画書テストコードの docstring/コメント行長(ruff E501 88字制限)を数件短縮、import順をruff isortに合わせて自動修正(`ruff check --fix`)。意味の変更なし
+
+### 追記(2026-09-27): スーパーバイザー検証フィードバックによる修正(コミット 59cd61b)
+
+スーパーバイザーのtest-ci検証で失敗2件の原因を特定していただき、**計画書外の修正指示**を受けた(修正対象はいずれも本単位の実装範囲内または明示許可済み)。指示内容と修正を以下に記録する:
+
+8. **test_2_token_with_inserted_user_row の503 — `make_user_lookup` のUUID変換**。asyncpg はuuid列をUUID「インスタンス」で返すため `uuid.UUID(row[0])` が `AttributeError('UUID' object has no attribute 'replace')` になり、`AuthService.token` のcatch-allで503に包まれていた。行が存在しない場合は変換が実行されないため test_1 だけ通っていた。unit試験はスタブlookupのためこの変換経路が実行されていなかった。**修正**: UUIDインスタンスはそのまま返し、文字列等其他型の場合のみ `uuid.UUID(str(value))` で構築する `_coerce_user_id` を導入。回帰試験として unit 3件(UUIDインスタンス・文字列・行なし)を `test_service_token.py` へ追加(修正前にREDを確認 — 指摘と同一のAttributeErrorで再現)
+9. **test_logs_contain_no_token_or_subject のcaplog空 — alembicの `fileConfig`**。`backend/alembic/env.py` の `fileConfig(config.config_file_name)` は既定で `disable_existing_loggers=True` であり、integration試験のconftestが `alembic upgrade` を実行した時点で収集済みimportの `latch.*` ロガーが無効化される。このため後続のunit試験でcaplogに何も入らなかった(make test 単体では通る・test-ciでのみ失敗)。**修正**: `fileConfig(config.config_file_name, disable_existing_loggers=False)` を渡す
+10. **`backend/alembic/env.py` は計画書§5の禁止欄に含まれるが、この修正はスーパーバイザーが明示的に許可した**(マイグレーション追加ではなくロギング設定の修正であるため)。`backend/alembic/versions/` への差分は引き続きなし(完了条件5は不変)。修正後 `make lint` / `make test`(164 passed・test_service_token 7→10件)グリーン。test-ci の再検証はスーパーバイザー実施待ち
