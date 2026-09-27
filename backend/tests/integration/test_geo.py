@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from latch.geo.ingest import BBox, FeatureRow, import_features
 from latch.geo.isj import iter_isj_towns
+from latch.geo.osm import iter_osm_pois
 from latch.geo.service import GeoService
 
 pytestmark = pytest.mark.integration
@@ -331,3 +332,63 @@ async def test_reverse_empty_table_returns_none(db_engine):
     async with db_engine.begin() as conn:
         await conn.execute(text("DELETE FROM geofeatures"))
     assert await GeoService(db_engine).reverse_geocode(130.5585, 31.5965) is None
+
+
+# --- design §4(OSM読み取り)+ §4-5(a)(e) ---
+
+
+def _osm_fixture_rows():
+    return list(iter_osm_pois(FIXTURES / "osm_sample.xml", bbox=DEFAULT_BBOX))
+
+
+async def test_osm_fixture_rows_extracted():
+    rows = _osm_fixture_rows()
+    by_code = {r.source_code: r for r in rows}
+    # 名称ありPOI+bbox内のみ(名称なし・東京駅は除外)
+    assert set(by_code) == {"node/1", "node/2", "node/5", "way/10"}
+    assert by_code["node/1"].kind == "district"
+    assert by_code["node/1"].name == "天文館"
+    assert by_code["node/2"].kind == "bar"
+    assert by_code["node/5"].kind == "district"
+    # 主要タグがattrsへ入る(Review Focus #5と同型の実読み取り)
+    assert by_code["node/2"].attrs == {"amenity": "bar"}
+
+
+async def test_osm_way_representative_point_is_node_average():
+    row = {r.source_code: r for r in _osm_fixture_rows()}["way/10"]
+    # wayの代表点=構成ノード座標の平均(閉ウェイの重複ノード含む — design §2.3)
+    assert row.lon == pytest.approx((130.5610 + 130.5615 + 130.5612 + 130.5610) / 4)
+    assert row.lat == pytest.approx((31.6040 + 31.6042 + 31.6041 + 31.6040) / 4)
+
+
+async def test_forward_osm_poi(db_engine, fake_clock):
+    """(a) osm_poiの名称がヒットし座標が返る(design §4-5)。"""
+    await _import_isj(db_engine, fake_clock)
+    await import_features(db_engine, fake_clock, _osm_fixture_rows(), "osm_poi")
+    hit = await GeoService(db_engine).geocode_forward("バー宵待")
+    assert hit is not None
+    assert hit.source == "osm_poi"
+    assert hit.kind == "bar"
+    assert hit.lon == pytest.approx(130.5460)
+    assert hit.lat == pytest.approx(31.5840)
+
+
+async def test_forward_same_name_prefers_osm(db_engine, fake_clock):
+    """(e) POIと町丁目の同名ではosm_poiが選ばれる(決定的順位 — design §2.4)。"""
+    await _import_isj(db_engine, fake_clock)
+    await import_features(db_engine, fake_clock, _osm_fixture_rows(), "osm_poi")
+    hit = await GeoService(db_engine).geocode_forward("伊敷町")
+    assert hit is not None
+    assert hit.source == "osm_poi"
+    assert hit.kind == "district"
+
+
+async def test_reverse_osm_poi_city_complemented(db_engine, fake_clock):
+    """逆転でOSM POIが最近傍のとき、市区町村名をISJから補完(design §2.5)。
+    「バー宵待」(130.5460, 31.5840)の入力に対し、グリッド丸め(≤707m移動)を
+    経ても最近傍がバー宵待のままになるよう、他地物は≥約1.8km離して配置。"""
+    await _import_isj(db_engine, fake_clock)
+    await import_features(db_engine, fake_clock, _osm_fixture_rows(), "osm_poi")
+    area = await GeoService(db_engine).reverse_geocode(130.5460, 31.5840)
+    assert area is not None
+    assert area == "鹿児島市バー宵待"
