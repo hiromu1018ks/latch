@@ -13,6 +13,8 @@ from sqlalchemy.exc import IntegrityError
 
 from latch.auth.tokens import AccessTokenClaims
 from latch.core.clock import FakeClock
+from latch.core.db import create_db_engine
+from latch.settings import Settings
 from latch.users.errors import (
     DependencyUnavailableError,
     UnderAgeError,
@@ -25,6 +27,7 @@ from latch.users.service import (
     UserRow,
     UserService,
     classify_integrity_error,
+    make_user_service,
 )
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)  # JST 2026-09-27 21:00
@@ -225,3 +228,14 @@ def test_classify_non_unique_violation_returns_none():
         )
         is None
     )
+
+
+async def test_make_user_service_returns_service():
+    # 実SQL関数の実行はintegrationが所有。unitでは構築がUserServiceを
+    # 返すことのみ(engineの接続は呼び出し時まで発生しない)
+    engine = create_db_engine(Settings(app_env="ci"))
+    try:
+        svc = make_user_service(clock=FakeClock(NOW), engine=engine)
+        assert isinstance(svc, UserService)
+    finally:
+        await engine.dispose()

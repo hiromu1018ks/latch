@@ -9,12 +9,15 @@ intents CRUD(ws-3 M1)に委ねる — design §2.1)。時刻列はClock由来の
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from latch.auth.tokens import AccessTokenClaims
 from latch.core.clock import Clock
@@ -180,3 +183,89 @@ class UserService:
             birth_date=row.birth_date,
             profile_complete=True,  # 行の存在=true(design §1.2-9)
         )
+
+
+def _coerce_user_id(value: object) -> uuid.UUID:
+    """行のid値をUUIDへ正規化する。
+
+    asyncpgはuuid列をUUID「インスタンス」で返す(uuid.UUID(row[0]) は
+    AttributeErrorになる — M0 ws-3検証のtest-ci失敗1と同じ落ち穴)。
+    auth/service.py と同じ対応(coreへ共有化せずauth不変を優先 — design §2.6)。
+    """
+    if isinstance(value, uuid.UUID):
+        return value
+    return uuid.UUID(str(value))
+
+
+# idはDEFAULT gen_random_uuid()に任せRETURNINGで受け取る(§2.5)。profileは
+# text()経由ではSQLAlchemyの型変換が入らないためJSON文字列で渡してCASTする
+_INSERT = text("""
+    INSERT INTO users
+        (display_name, profile, birth_date, auth_provider, auth_subject,
+         created_at, updated_at)
+    VALUES
+        (:display_name, CAST(:profile AS jsonb), :birth_date, :auth_provider,
+         :auth_subject, :created_at, :updated_at)
+    RETURNING id
+""")
+
+# auth_provider+auth_subject はUNIQUE(uq_users_auth_provider_subject)なので高々1行
+_SELECT = text("""
+    SELECT id, display_name, profile, birth_date
+    FROM users
+    WHERE auth_provider = :provider AND auth_subject = :subject
+""")
+
+
+def make_user_service(*, clock: Clock, engine: AsyncEngine) -> UserService:
+    """実SQL関数(text())を束ねてUserServiceを構築する(design §2.5)。
+
+    engineはクロージャで束縛する(UserService自身はengineを知らない)。
+    INSERT衝突はUNIQUE制約で検出し、対象制約のみUserExistsErrorへ変換
+    (それ以外のIntegrityErrorは再送出 → UserServiceが503へ包む — design §2.2)。
+    """
+
+    async def create_user(new_user: NewUser) -> uuid.UUID:
+        try:
+            async with engine.begin() as conn:
+                row_id = await conn.scalar(
+                    _INSERT,
+                    {
+                        "display_name": new_user.display_name,
+                        "profile": json.dumps(new_user.profile),
+                        "birth_date": new_user.birth_date,
+                        "auth_provider": new_user.auth_provider,
+                        "auth_subject": new_user.auth_subject,
+                        "created_at": new_user.created_at,
+                        "updated_at": new_user.updated_at,
+                    },
+                )
+                return _coerce_user_id(row_id)
+        except IntegrityError as exc:
+            classified = classify_integrity_error(exc)
+            if classified is not None:
+                raise classified from exc
+            raise
+
+    async def fetch_by_auth(provider: str, subject: str) -> UserRow | None:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                _SELECT, {"provider": provider, "subject": subject}
+            )
+            row = result.first()
+            if row is None:
+                return None
+            profile = row.profile
+            if isinstance(profile, str):
+                # Review Focus #3: asyncpgのjsonbはstrで返る場合がある
+                profile = json.loads(profile)
+            return UserRow(
+                id=_coerce_user_id(row.id),
+                display_name=row.display_name,
+                profile=profile,
+                birth_date=row.birth_date,
+            )
+
+    return UserService(
+        clock=clock, create_user=create_user, fetch_by_auth=fetch_by_auth
+    )
