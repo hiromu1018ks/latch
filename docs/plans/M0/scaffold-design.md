@@ -237,7 +237,7 @@ composeの構成(ci環境=10 第1節どおり):
 ## 5. 完了条件(この単位の受渡し判定。agent2の計画書が参照する)
 
 1. `make setup` → `make lint` `make test` がクリーンな環境で成功する
-2. `make up` 後、`docker compose ps` で4サービスがhealthy、`curl 127.0.0.1:8000/health` が `status:ok` を返す
+2. `make up` 後、`docker compose ps` で db・redis・api が healthy かつ worker が running、`curl 127.0.0.1:8000/health` が `status:ok` を返す(2026-09-27 supervisor裁定: workerは雛形スコープでプローブ表面を持たないためhealthcheckを定義しない。元文言「4サービスがhealthy」は§3.1のworker定義(healthcheckなし)と矛盾しており、実態に合わせて修正。G0(12 M0)はworker healthcheckを要求しない)
 3. `make test-ci`(unit+integration)がグリーン
 4. §4.2の6点再現性試験と§4.3のarch testが存在してグリーン(=C2が立証済み)
 5. `rg -n 'datetime\.now|utcnow|time\.time|time\.monotonic' backend/src` が `core/clock.py` のみにヒットする

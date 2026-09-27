@@ -110,8 +110,8 @@ docs/plans/M0/scaffold-report.md   (報告ファイル。Task 12で作成)
 
 1. **クリーンな環境で `make setup` → `make lint` `make test` が成功**
    検証: `rm -rf backend/.venv && make setup && make lint && make test` — すべてexit 0
-2. **`make up` 後、4サービスhealthy・`/health` がok**
-   検証: `make up && docker compose ps` のSTATUS列が4サービスとも `healthy`(`running (healthy)` 等を含む)。`curl -s http://127.0.0.1:8000/health` が `"status":"ok"` を含む
+2. **`make up` 後、db・redis・api が healthy・worker が running・`/health` がok**(2026-09-27 supervisor裁定による文言修正。workerは雛形スコープでプローブ表面を持たずhealthcheck定義なし。経緯はdesign.md §5を参照)
+   検証: `make up && docker compose ps` のSTATUS列が db・redis・api は `healthy`(`running (healthy)` 等を含む)、worker は `running`。`curl -s http://127.0.0.1:8000/health` が `"status":"ok"` を含む
 3. **`make test-ci`(unit+integration)がグリーン**
    検証: `make test-ci` — exit 0、出力末尾に `passed`
 4. **6点再現性試験とarch testが存在してグリーン(=C2立証)**
