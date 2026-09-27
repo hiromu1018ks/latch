@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 from datetime import date
 
@@ -75,11 +76,17 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
         fail_jev: bool = False,
     ) -> None:
         self.name = "stub"
-        self._parser_response = (
+        # 防御的コピー: 消費者が応答を書き換えてもデフォルト応答(モジュール定数)や
+        # 他インスタンスが汚染されない(決定性の前提。10 第1節)。
+        self._parser_response = copy.deepcopy(
             parser_response if parser_response is not None else DEFAULT_PARSER_RESPONSE
         )
-        self._embedding_response = embedding_response
-        self._jev_response = (
+        self._embedding_response = (
+            copy.deepcopy(embedding_response)
+            if embedding_response is not None
+            else None
+        )
+        self._jev_response = copy.deepcopy(
             jev_response if jev_response is not None else DEFAULT_JEV_RESPONSE
         )
         self._delay_parser_ms = delay_parser_ms
@@ -107,18 +114,19 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
         await self._apply_delay("intent_parser")
         if self._fail_parser:
             raise LLMProviderError("stub: fail_parser=True")
-        return self._parser_response
+        # 呼び出し毎に新しいコピーを返す(消費者の書き換えが内部状態を汚染しない)
+        return copy.deepcopy(self._parser_response)
 
     async def embed(self, text: str) -> list[float]:
         await self._apply_delay("embedding")
         if self._fail_embedding:
             raise LLMProviderError("stub: fail_embedding=True")
         if self._embedding_response is not None:
-            return self._embedding_response
+            return copy.deepcopy(self._embedding_response)
         return _stub_vector(text)
 
     async def judge(self, intent_a: str, intent_b: str) -> dict:
         await self._apply_delay("jev")
         if self._fail_jev:
             raise LLMProviderError("stub: fail_jev=True")
-        return self._jev_response
+        return copy.deepcopy(self._jev_response)

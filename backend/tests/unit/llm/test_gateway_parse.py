@@ -4,6 +4,7 @@
 こと(08 第2.4節)をこの系統で最も厳しく検証する。
 """
 
+import asyncio
 import json
 import logging
 from datetime import UTC, date, datetime, timedelta
@@ -148,3 +149,21 @@ async def test_parse_unexpected_exception_is_wrapped(clock, caplog):
     assert payload["status"] == "error"
     assert payload["error_code"] == "RuntimeError"  # 元例外のIDのみ(08 第2.4節)
     assert "provider crashed" not in caplog.text  # 例外メッセージ(自由文)は記録しない
+
+
+async def test_parse_cancellation_records_then_reraises(clock, caplog):
+    # 08 第3節の開示要件: プロバイダ呼び出し開始後にキャンセルされても
+    # 送信の事実は記録する(成否にかかわらず。design §3.1)。
+    # キャンセル自体は飲み込まない — CancelledError をそのまま伝播させる。
+    stub = StubLLM(delay_parser_ms=200)
+    gw = _gateway(clock, stub)
+    task = asyncio.create_task(gw.parse_intent(text="t", current_date=TODAY))
+    await asyncio.sleep(0.02)  # 呼び出し開始後まで待つ(数十msの実時間待機)
+    task.cancel()
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    (payload,) = _send_payloads(caplog)
+    assert payload["status"] == "error"
+    assert payload["error_code"] == "CancelledError"
+    assert payload["system"] == "intent_parser"

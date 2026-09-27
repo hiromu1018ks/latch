@@ -163,3 +163,30 @@ async def test_stub_fail_is_per_system():
     with pytest.raises(LLMProviderError):
         await stub.complete_structured("t", date(2026, 1, 1))
     assert len(await stub.embed("t")) == 768  # 他系統は影響を受けない
+
+
+async def test_stub_responses_are_not_shared_mutable():
+    # 消費者が応答を書き換えてもデフォルト応答(他インスタンス・他試験)が
+    # 汚染されない — 決定性(10 第1節)の前提を守る防御的コピー。
+    stub = StubLLM()
+    resp = await stub.complete_structured("t", date(2026, 1, 1))
+    resp["category"]["primary"] = "POLLUTED"
+    resp["time"]["start"] = None
+    # 同一インスタンスの再呼び出しも汚染されない
+    again = await stub.complete_structured("t", date(2026, 1, 1))
+    assert again["category"]["primary"] == "meal"
+    assert again["time"]["start"] == "2026-09-27T19:00:00+09:00"
+    # 他インスタンス・モジュール定数も汚染されない
+    fresh = await StubLLM().complete_structured("t", date(2026, 1, 1))
+    assert fresh["category"]["primary"] == "meal"
+    assert DEFAULT_PARSER_RESPONSE["category"]["primary"] == "meal"
+
+    jev_stub = StubLLM()
+    jev = await jev_stub.judge("a", "b")
+    jev["purpose_fit"] = 0.99
+    assert (await jev_stub.judge("a", "b"))["purpose_fit"] == 0.5
+
+    fixed = [0.25] * 768
+    embed_stub = StubLLM(embedding_response=fixed)
+    (await embed_stub.embed("t"))[0] = 0.99
+    assert (await embed_stub.embed("t"))[0] == 0.25

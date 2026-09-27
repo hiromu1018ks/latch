@@ -112,6 +112,22 @@ class LLMGateway:
         try:
             async with asyncio.timeout(timeout_s):
                 result = await invoke()
+        except asyncio.CancelledError:
+            # 外部キャンセルも「送信した」事実には変わりない(08 第3節の開示要件)。
+            # asyncio.timeout期限切れのキャンセルはここへ来る前にTimeoutErrorへ
+            # 変換済みのため二重計上しない。キャンセルは飲み込まず伝播させる。
+            send_log(
+                SendRecord(
+                    occurred_at=occurred_at,
+                    system=system,
+                    destination=destination,
+                    status="error",
+                    error_code="CancelledError",
+                    intent_ids=intent_ids,
+                    user_id=user_id,
+                )
+            )
+            raise
         except Exception as exc:
             if isinstance(exc, TimeoutError):
                 status: SendStatus = "timeout"
