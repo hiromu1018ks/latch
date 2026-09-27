@@ -51,6 +51,18 @@ def test_fake_clock_set_rejects_naive(fake):
         fake.set(datetime(2026, 9, 27, 12, 0, 0))
 
 
+def test_fake_clock_normalizes_non_utc_to_utc():
+    # Clock契約(design §2.4・計画書§2): now()はtz-aware UTC。JST等の非UTCを
+    # 渡しても同一instantのUTC表現へ正規化する(契約違反を黙って許容しない)。
+    jst_21 = datetime(2026, 9, 27, 21, 0, 0, tzinfo=JST)  # = 12:00 UTC
+    clock = FakeClock(jst_21)
+    assert clock.now().utcoffset() == timedelta(0)
+    assert clock.now() == datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
+    clock.set(jst_21)
+    assert clock.now().utcoffset() == timedelta(0)
+    assert clock.now() == datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
+
+
 def test_fake_clock_thread_safe():
     import threading
 

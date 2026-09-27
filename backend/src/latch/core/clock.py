@@ -39,7 +39,8 @@ class FakeClock(Clock):
     def __init__(self, initial: datetime) -> None:
         if initial.tzinfo is None:
             raise ValueError("FakeClock は tz-aware な初期時刻を要求する")
-        self._now = initial
+        # Clock契約(now()はtz-aware UTC)を守るため非UTC表現は正規化する。
+        self._now = initial.astimezone(UTC)
         self._lock = threading.Lock()
 
     def set(self, when: datetime) -> None:
@@ -47,7 +48,7 @@ class FakeClock(Clock):
         if when.tzinfo is None:
             raise ValueError("FakeClock.set は tz-aware な時刻を要求する")
         with self._lock:
-            self._now = when
+            self._now = when.astimezone(UTC)
 
     def advance(self, delta: timedelta) -> None:
         """時刻を delta だけ前進させる(期限・debounce・バッチ周期の再現に使用)。"""
