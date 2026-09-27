@@ -891,7 +891,7 @@ Expected: エラーなし
 
 **例外処理の設計(design §2.2・§2.7を両立させる実装方針)**: `intents/` から `latch.llm` のimportは `make_intent_parse_service` 内の `build_llm_gateway` のみに限る。`parse_intent` の失敗はGateway契約上 `LLMTimeoutError` / `LLMProviderError`(共通基底 `LLMError`)のみであり、サービス本体は import なしで「`Exception` 全般 → `LLMUnavailableError`(503)」として受ける(ValidationError はこの呼び出しでは発生しない — 検証は後段)。unit試験で実Gatewayの両例外(§4.1-4c)が503へ替わることを立証する。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_service.py` を作成:
 
@@ -1142,12 +1142,12 @@ async def test_error_messages_contain_no_user_text():
 
 **import部について**: テストは `latch.llm` の `LLMGateway`/`Timeouts`/`StubLLM`/`DEFAULT_PARSER_RESPONSE` を import する(テストコードはllm/の利用者であり、Protocol構造適合の実証に実Gatewayを使う — design §2.2トレードオフ)。
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_service.py -v`
 Expected: FAIL(ModuleNotFoundError: latch.intents.service がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/service.py` を作成:
 
@@ -1297,12 +1297,12 @@ def make_intent_parse_service(
 
 `backend/src/latch/intents/__init__.py` へ `ParseResult`・`ParseWarning`・`SupportsParseIntent`・`IntentParseService`・`make_intent_parse_service`(`from latch.intents.service import ...`)を追記する。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_service.py -v`
 Expected: PASS 15件(ハッピー2+正規化1+503系2+422系4+lookup3+JST境界1+機微2。全緑であればよい)
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし
