@@ -1,9 +1,10 @@
-"""FastAPIアプリケーションファクトリ(ws-3で認証を統合)。
+"""FastAPIアプリケーションファクトリ(M0 ws-3で認証・M1 ws-1でusers APIを統合)。
 
 /health は運用プローブ用でありv1 API契約の外に置く(C3の対象外)。
 server_time は get_clock() 由来 — Clock差し替えが全経路で効くことの生の消費者。
-lifespanでredis・db engine・AuthServiceを構築する(design §2.6)。
-第3引数 auth_service 指定時は構築をスキップ(テスト注入)。
+lifespanでredis・db engine・AuthService・UserServiceを構築する。auth_service /
+users_service はcreate_app引数で注入済みなら該当サービスの構築を個別にスキップ
+する(サービスごとの独立判定 — M1 ws-1 design §2.5)。
 """
 
 import logging
@@ -22,26 +23,37 @@ from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.core.deps import get_clock
 from latch.settings import Settings
+from latch.users.errors import UsersError
+from latch.users.routes import users_router
+from latch.users.service import make_user_service
 
 logger = logging.getLogger("latch.auth")
+users_logger = logging.getLogger("latch.users")
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    if hasattr(app.state, "auth_service"):
-        # テスト注入済み(create_app 第3引数)— 構築しない
+    skip_auth = hasattr(app.state, "auth_service")
+    skip_users = hasattr(app.state, "users_service")
+    if skip_auth and skip_users:
+        # テスト注入済み(create_app 引数)— 依存リソースごと構築しない
         yield
         return
     settings: Settings = app.state.settings
     redis_client = aioredis.Redis.from_url(settings.redis_url, decode_responses=True)
     engine = create_db_engine(settings)
     app.state.db_engine = engine
-    app.state.auth_service = build_auth_service(
-        clock=app.state.clock,
-        settings=settings,
-        redis_client=redis_client,
-        user_lookup=make_user_lookup(engine),
-    )
+    if not skip_auth:
+        app.state.auth_service = build_auth_service(
+            clock=app.state.clock,
+            settings=settings,
+            redis_client=redis_client,
+            user_lookup=make_user_lookup(engine),
+        )
+    if not skip_users:
+        app.state.users_service = make_user_service(
+            clock=app.state.clock, engine=engine
+        )
     try:
         yield
     finally:
@@ -58,12 +70,15 @@ def create_app(
     clock: Clock | None = None,
     settings: Settings | None = None,
     auth_service=None,
+    users_service=None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.clock = clock if clock is not None else SystemClock()
     app.state.settings = settings if settings is not None else Settings()
     if auth_service is not None:
         app.state.auth_service = auth_service
+    if users_service is not None:
+        app.state.users_service = users_service
 
     @app.get("/health")
     async def health(
@@ -73,10 +88,19 @@ def create_app(
 
     app.include_router(public_router)
     app.include_router(logout_router)
+    app.include_router(users_router)
 
     @app.exception_handler(AuthError)
     async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
         logger.warning("auth.error code=%s", exc.code)
+        return JSONResponse(
+            status_code=exc.http_status,
+            content=_error_body(exc.code, str(exc)),
+        )
+
+    @app.exception_handler(UsersError)
+    async def users_error_handler(request: Request, exc: UsersError) -> JSONResponse:
+        users_logger.warning("users.error code=%s", exc.code)
         return JSONResponse(
             status_code=exc.http_status,
             content=_error_body(exc.code, str(exc)),
