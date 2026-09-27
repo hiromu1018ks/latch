@@ -91,3 +91,19 @@ def test_effective_area_rejects_bad_bbox(monkeypatch):
     args = _parse(["import-osm", "--pbf", "x.pbf", "--bbox", "broken"])
     with pytest.raises(ValueError, match="bbox"):
         _effective_area(args, _settings(monkeypatch))
+
+
+def test_public_api_reexports():
+    import latch.geo as api
+
+    for name in (
+        "GeoService",
+        "Geofeature",
+        "FeatureRow",
+        "BBox",
+        "SOURCES",
+        "import_features",
+        "normalize_name",
+        "iter_isj_towns",
+    ):
+        assert getattr(api, name, None) is not None, name
