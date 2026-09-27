@@ -52,3 +52,38 @@ ce497a5 feat: make_user_service(実SQL束ね・RETURNING id・制約名分類接
 2. **テストファイル名の変更: `test_routes.py` → `test_users_routes.py`** — 計画書Task 4が作成を指定した `backend/tests/unit/users/test_routes.py` は、pytest の既定importモード(prepend)が `__init__.py` のないディレクトリのテストをbasenameでimportするため、既存の `tests/unit/auth/test_routes.py` とモジュール名が衝突し `make test` の収集が `import file mismatch` で落ちる(実測済み)。代替案のうち、`__init__.py` 作成は計画書§2(design §3.1一覧外+auth慣例=なし)違反、`pyproject.toml` への importmode 設定は§5禁止のため、ファイル名変更が最小の解とした。試験内容は計画書記載のものから一字一句変更していない。design.md §3.1のファイル構成から見た変更であるため、ここに「変更前: `test_routes.py` → 変更後: `test_users_routes.py` + 理由(上記)」を記録する。
 3. **ruff format / isort の整形差分** — Task 1〜3で計画書記載コードに整形差分が発生したため、計画書§0の規定どおり `uv run ruff format .` と `uv run ruff check --fix .` を適用した(§0が予定する手順の範囲内。論理変更なし)。
 4. **それ以外の計画書からの逸脱なし** — compose常設環境への操作(`make test-ci` / `docker compose` 系)は一切実行していない。`alembic/`・`auth/`・`core/`・`llm/`・`geo/`・`worker/`・`settings.py`・`pyproject.toml`・`uv.lock`・`compose.yaml`・`Makefile`・既存テスト・conftest類は無変更(完了条件4・5の検証どおり)。
+
+## 修正ラウンド(2026-09-27 スーパーバイザー検証後)
+
+### 発見された欠陥
+
+`tests/integration/test_users_api.py::test_4_duplicate_registration_409` が失敗: 同一subject再登録で409 USER_EXISTS を期待したところ **503 DEPENDENCY_UNAVAILABLE** が返った(他305件グリーン)。
+
+### 根本原因(compose ci-DB 実測・2026-09-27)
+
+`IntegrityError.orig` に実際に入るのは生のasyncpg例外ではなく、SQLAlchemy 2.1 の asyncpg dialect ラッパー `AsyncAdapt_asyncpg_dbapi.UniqueViolationError` だった。このラッパーは `sqlstate`(`'23505'`)を持つが **`constraint_name` 属性を持たない**。生の `asyncpg.exceptions.UniqueViolationError`(`sqlstate`・`constraint_name` ともに保有)はラッパーの `driver_exception` 属性の先にある。分類器が `.orig` 直の `constraint_name` 参照のみだったため常に None となり、対象制約違反が503へ誤変換されていた。unit試験は「`.orig` に生asyncpg例外を直接置く」合成エラーで作っていたため、この形の違いを拾えなかった。
+
+### 修正内容(コミット 0895411)
+
+`classify_integrity_error`(`backend/src/latch/users/service.py`)を拡張: `.orig` 直の属性に加え、`driver_exception` の先の生asyncpg例外からも `sqlstate`・`constraint_name` を検査する(いずれかの形で見つかれば採用)。既存の直接形は後方互換で維持し、判定基準(sqlstate=23505 + 制約名 `uq_users_auth_provider_subject` の2点検査)は不変。
+
+これは本計画§8-1(IntegrityErrorの制約名検査)の実装詳細変更に当たるため、§0の規定に従い記録する: 変更前「`.orig` 直の属性のみ検査」→ 変更後「`.orig` 直 + `driver_exception` 経由の両方を検査」+ 理由(実経路の例外形がラッパーであることが実測で判明したため)。
+
+### TDDの経緯
+
+1. ラッパー構造(`sqlstate`/`pgcode`/`driver_exception` を持ち `constraint_name` なし)を再現する偽装例外によるunit試験2件を `test_service.py` へ追加 → `test_classify_sqlalchemy_asyncpg_wrapper_shape` が赤(分類結果 None = 実障害と同一症状)を確認
+2. 分類器を修正 → 14件すべて緑(追加2件 + 既存の合成エラー3件は後方互換で緑のまま)
+
+### 検証エビデンス
+
+| 検証 | 結果 | 証拠の要点 |
+|---|---|---|
+| unit(test_service.py 全件) | PASS 14件 | `14 passed`(新規ラッパー形2件を含む) |
+| unit全体(deselect付き・補足1参照) | PASS 241件 | `241 passed, 68 deselected` |
+| `make lint` | PASS | `81 files already formatted` `All checks passed!` |
+| 実DB経路(worktreeプロセスから重複INSERT) | 409分類を確認 | 1本目 `registered id=5728d233-…` → 2本目 `UserExistsError(409分類) — 409 USER_EXISTS` |
+| integration(HTTP・`uv run --group geo pytest tests/integration/test_users_api.py -q`) | 5/6 PASS・test_4のみ503 | `1 failed, 5 passed` — **apiイメージが修正前コードのままのため**(apiはbuild型・ソースマウントなし) |
+
+### test_4のHTTP経路確認について(スーパーバイザーへの依頼)
+
+本修正はusers/配下の純Python変更だが、apiコンテナは `build: context: backend` のイメージで動作するため、**HTTP経路で test_4 が409になることの最終確認には `docker compose build api` による再ビルドが必要**(指示の「再ビルドが必要な変更になった場合は報告」のケース)。再ビルド後に `cd backend && uv run --group geo pytest tests/integration/test_users_api.py -q` を実行されたい(実DB経路・unitは上表のとおり検証済みで、HTTP経路も同じ分類コードを通る)。
