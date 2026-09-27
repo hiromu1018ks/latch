@@ -26,6 +26,9 @@ dev = [
     "ruff>=0.7",
     "fakeredis>=2.26",
 ]
+geo = [
+    "osmium>=4.3",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/latch"]

@@ -62,3 +62,29 @@ curl -s -i -X POST http://127.0.0.1:8000/v1/auth/logout \
 - prodは `LATCH_AUTH_ACCESS_SECRET`(HS256 secret)・`LATCH_AUTH_IDP_JWKS_URL_*`・
   `LATCH_AUTH_IDP_ISSUER_*`・`LATCH_AUTH_IDP_AUDIENCE_*` の実値が必須(未設定・テスト値は起動失敗)
 - アクセストークンを直接発行するツールは存在しない — 常に POST /v1/auth/token 経由で取得する
+
+## 地物データ(ws-4)
+
+ジオコーディング(正転・逆転)はPostGIS上の `geofeatures` テーブルで完結する
+(外部送信経路ゼロ — 04 第3節・08 D-11)。
+
+```bash
+make geo-download  # OSM九州extractを取得 + ISJ入手先を表示(手動配置)
+make geo-import    # settingsのエリア設定でISJ+OSMを取り込み(フルリロード・冪等)
+make geo-verify    # 正転・逆転のサンプル確認(名称・市区町村名のみ出力)
+```
+
+- エリアは設定で与える(`LATCH_GEO_ISJ_CITY_CODES` / `LATCH_GEO_OSM_BBOX`。
+  既定値=ci暫定エリア: 鹿児島市天文館周辺約3km四方)。初期エリアの最終指定はT2
+- ISJのCSVは解凍後 `backend/data/geo/isj.csv` へリネーム配置
+  (年度によりファイル名が異なるため)
+- 取り込みは `source` 単位のフルリロード(冪等)。エリア差し替えは設定変更+
+  再実行のみ
+
+### 出所・ライセンス
+
+- 位置参照情報(大字・町丁目レベル): 国土交通省「位置参照情報ダウンロード
+  サービス」(https://nlftp.mlit.go.jp/isj/)のデータを利用。利用約款に基づき
+  出所を明記する。取り込み時のデータ年度はgeo-importの実行記録に残す
+- OpenStreetMap: OpenStreetMap contributors による ODbL ライセンスのデータ
+  (Geofabrik extract: https://download.geofabrik.de/asia/japan.html)を利用

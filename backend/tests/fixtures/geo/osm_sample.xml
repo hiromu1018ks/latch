@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="latch-test-fixture">
+  <!-- 採用: place=neighbourhood(district) -->
+  <node id="1" lat="31.5962" lon="130.5590">
+    <tag k="name" v="天文館"/>
+    <tag k="place" v="neighbourhood"/>
+  </node>
+  <!-- 採用: amenity=bar(逆転試験の決定性のため他地物から≥約1.8kmへ配置) -->
+  <node id="2" lat="31.5840" lon="130.5460">
+    <tag k="name" v="バー宵待"/>
+    <tag k="amenity" v="bar"/>
+  </node>
+  <!-- 除外: 名称なし -->
+  <node id="3" lat="31.5960" lon="130.5580">
+    <tag k="amenity" v="restaurant"/>
+  </node>
+  <!-- 除外: bbox外(東京) -->
+  <node id="4" lat="35.6812" lon="139.7671">
+    <tag k="name" v="東京駅"/>
+    <tag k="railway" v="station"/>
+  </node>
+  <!-- 採用: place=quarter・ISJと同名(同名優先順位の試験用) -->
+  <node id="5" lat="31.6055" lon="130.5515">
+    <tag k="name" v="伊敷町"/>
+    <tag k="place" v="quarter"/>
+  </node>
+  <!-- way構成ノード(タグなし) -->
+  <node id="101" lat="31.6040" lon="130.5610"/>
+  <node id="102" lat="31.6042" lon="130.5615"/>
+  <node id="103" lat="31.6041" lon="130.5612"/>
+  <!-- 採用: tourism=hotel(ウェイ。代表点=ノード座標の平均) -->
+  <way id="10">
+    <nd ref="101"/>
+    <nd ref="102"/>
+    <nd ref="103"/>
+    <nd ref="101"/>
+    <tag k="name" v="城山ホテル"/>
+    <tag k="tourism" v="hotel"/>
+  </way>
+</osm>
