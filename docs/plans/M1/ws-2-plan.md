@@ -1784,7 +1784,7 @@ Expected: エラーなし
 
 503/422の構造化不能経路はスタブの設定経路がcompose api にないためunit(design §4.1-4/5)で証明済みであり、integrationでは検証しない(M0 ws-3と同じ振り分け・design §4.2末尾)。
 
-- [ ] **Step 1: 試験ファイルを作成する**
+- [x] **Step 1: 試験ファイルを作成する**
 
 `backend/tests/integration/test_intents_parse_api.py` を作成:
 
@@ -1926,12 +1926,12 @@ async def test_5_unregistered_subject_can_parse(api_client):
     assert resp.json()["structured_intent"] == EXPECTED_STUB_INTENT
 ```
 
-- [ ] **Step 2: 収集確認(実行はしない)**
+- [x] **Step 2: 収集確認(実行はしない)**
 
 Run: `cd backend && uv run pytest --collect-only -q tests/integration/test_intents_parse_api.py`
 Expected: 5件の試験が収集され、importエラーがない
 
-- [ ] **Step 3: 書式確認**
+- [x] **Step 3: 書式確認**
 
 Run: `cd backend && uv run ruff format tests/integration/test_intents_parse_api.py && uv run ruff check tests/integration/test_intents_parse_api.py`
 Expected: エラーなし
