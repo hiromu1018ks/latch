@@ -1,0 +1,68 @@
+# ci環境(10 第1節): 最小構成・常設。API 1インスタンス / Worker 1 / DB共用。
+# ポートはすべて127.0.0.1のみに公開。DB接続先は将来の分離に備え環境変数で与える。
+name: latch-ci
+
+services:
+  db:
+    build:
+      context: docker/postgres
+    environment:
+      POSTGRES_USER: ${LATCH_DB_USER:-latch}
+      POSTGRES_PASSWORD: ${LATCH_DB_PASSWORD:-latch}
+      POSTGRES_DB: ${LATCH_DB_NAME:-latch}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - latch-ci-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build:
+      context: backend
+    # 単一プロセス = API 1インスタンス(10 第1節)
+    command: uvicorn latch.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: backend
+    # Worker 1(10 第1節)
+    command: python -m latch.worker
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  latch-ci-db:
