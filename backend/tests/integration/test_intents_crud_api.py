@@ -549,12 +549,15 @@ async def test_7_delete(api_client, db_engine):
                 status = await conn.scalar(
                     text("SELECT status FROM intents WHERE id = :i"), {"i": target}
                 )
+                # active由来はPOST時のcreatedが既に存在し(§2.2表の正当な挙動)、
+                # deletedを足すと2行になる。イベント種で絞って検証する
                 ev = (
                     (
                         await conn.execute(
                             text(
                                 "SELECT event_type, payload FROM match_events "
-                                "WHERE source_intent_id = :i"
+                                "WHERE source_intent_id = :i "
+                                "AND event_type = 'deleted'"
                             ),
                             {"i": target},
                         )
@@ -562,8 +565,17 @@ async def test_7_delete(api_client, db_engine):
                     .mappings()
                     .one()
                 )
+                created_count = await conn.scalar(
+                    text(
+                        "SELECT count(*) FROM match_events "
+                        "WHERE source_intent_id = :i AND event_type = 'created'"
+                    ),
+                    {"i": target},
+                )
             assert status == "cancelled"
             assert ev["event_type"] == "deleted"
+            # active=作成確定のcreatedが残る / draft=発行なし(design §2.2表)
+            assert created_count == (1 if target == active_id else 0)
     finally:
         await _cleanup(db_engine, user_id, subject)
 
