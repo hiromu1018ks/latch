@@ -57,9 +57,21 @@ def build_parser() -> argparse.ArgumentParser:
 def _effective_area(
     args: argparse.Namespace, settings: Settings
 ) -> tuple[set[str], BBox]:
-    """CLI引数 → エリア設定へ解決(省略時はsettings既定値=ci暫定エリア)。"""
+    """CLI引数 → エリア設定へ解決(省略時はsettings既定値=ci暫定エリア)。
+
+    市コード・bboxとも形式破損はValueErrorで即失敗(Review Focus #2 —
+    タイポが通ると0行フルリロード=既存行のDELETEを含む破壊が黙って成功する)。
+    """
     raw_codes = getattr(args, "city_codes", None) or settings.geo_isj_city_codes
     city_codes = {c.strip() for c in raw_codes.split(",") if c.strip()}
+    if not city_codes:
+        raise ValueError(f"city codes must not be empty: {raw_codes!r}")
+    for code in sorted(city_codes):
+        if not (code.isascii() and code.isdigit()):
+            raise ValueError(
+                f"city codes must be numeric (ISJ市区町村コード): "
+                f"{code!r} in {raw_codes!r}"
+            )
     bbox = BBox.parse(getattr(args, "bbox", None) or settings.geo_osm_bbox)
     return city_codes, bbox
 

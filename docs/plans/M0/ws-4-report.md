@@ -84,3 +84,17 @@ aeb4fcc feat: 地物名称正規化(NFKC・記号除去・大字接頭辞・か�
 7. osmium 4.3.1のtransitive依存(requests/urllib3)はgeoグループ内のみに解決。
    `uv sync --frozen --no-dev`(Dockerfile)はgeoを入れないためapi/workerイメージ不変
    (条件6のとおりDockerfile・compose.yamlへの差分なし)
+8. **最終レビュー(opus・fresh context)後の修正**: 計画書Review Focus #2の市コード側
+   (「市コード設定文字列の形式破損は明確なValueErrorで即失敗」)が計画書自身の
+   `_effective_area` 実装コードでは未実装だった(計画書側の欠落)。タイポ
+   (`4620l` 等)が通ると0行フルリロード(既存isj_town行のDELETEを含む)がexit 0で
+   黙って成功するため、`_effective_area` に検証を追加: 市コードトークンはASCII数字のみ・
+   空セットは拒否(いずれもValueError)。テスト2件追加(RED→GREEN・全suite 177 passed)。
+   5桁固定や「0行取り込みの警告」は追加せず見送り(固定値を増やさない最小修正。
+   レビューのMinorとして記録)
+9. **G0実データ実行時の注意(レビュー勧告・スーパーバイザー向け)**:
+   `osm.py` の `FileProcessor.with_locations()` はノード位置のインメモリキャッシュを
+   持つため、九州extract(数億ノード)の実行時はメモリ使用を注視すること(GB級になり
+   得る。必要ならbbox事前extractを検討)。また geo-verify → test-ci の順序が正しい
+   (test-ciのfixtureフルリロードがgeofeaturesの実データを上書きするため — 本報告書の
+   手順どおり)

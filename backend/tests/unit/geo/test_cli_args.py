@@ -107,3 +107,18 @@ def test_public_api_reexports():
         "iter_isj_towns",
     ):
         assert getattr(api, name, None) is not None, name
+
+
+def test_effective_area_rejects_non_numeric_city_code(monkeypatch):
+    # Review Focus #2(市コード側): 形式破損は明確なValueErrorで即失敗。
+    # タイポが通ると0行フルリロード(既存isj_town行のDELETEを含む)が黙って成功する
+    args = _parse(["import-isj", "--csv", "x.csv", "--city-codes", "4620l,46202"])
+    with pytest.raises(ValueError, match="city"):
+        _effective_area(args, _settings(monkeypatch))
+
+
+def test_effective_area_rejects_empty_city_codes(monkeypatch):
+    # カンマ・空白のみの指定は空セット=全行除外になるためValueError
+    args = _parse(["import-isj", "--csv", "x.csv", "--city-codes", ","])
+    with pytest.raises(ValueError, match="city"):
+        _effective_area(args, _settings(monkeypatch))
