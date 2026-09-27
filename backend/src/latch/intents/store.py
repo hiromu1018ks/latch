@@ -72,7 +72,10 @@ _ROW_COLS = (
 )
 
 _GEO_CENTER_EXPR = (
-    "CASE WHEN :geo_lon::float8 IS NULL THEN NULL "
+    # :geo_lon::float8 の形は SQLAlchemy text() の bind param 正規表現が
+    # ':name' 直後の ':' を認識せずリテラル落ちするため CAST 構文を使う
+    # (test_store_sql.py が compile 結果で強制する)
+    "CASE WHEN CAST(:geo_lon AS float8) IS NULL THEN NULL "
     "ELSE ST_SetSRID(ST_MakePoint(:geo_lon, :geo_lat), 4326)::geography END"
 )
 

@@ -10,6 +10,7 @@ ParserOutput.model_validate(ValidationError→422)→ warnings構築。
 from __future__ import annotations
 
 import base64
+import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
@@ -55,6 +56,8 @@ from latch.users.service import age_years
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+logger = logging.getLogger("latch.intents")
 
 UserLookup = Callable[[str, str], Awaitable[uuid.UUID | None]]
 
@@ -170,6 +173,17 @@ def make_intent_parse_service(
 
 # ---------------------------------------------------------------------------
 # M1 ws-3: intents CRUD(design §2.2・§2.5〜§2.10)
+
+
+def _wrap_unexpected(exc: Exception) -> DependencyUnavailableError:
+    """予期しない例外を503へ包む。例外のクラス名のみログへ残す(08 §2.4)。
+
+    メッセージ本文・ユーザー由来の内容は出さない。クラス名は検証・障害時に
+    原因の切り分けへ使う最小の情報(実検証で原因例外不明の503が発生した
+    欠陥の運用性改善)。
+    """
+    logger.warning("intents.unexpected class=%s", type(exc).__name__)
+    return DependencyUnavailableError("intents dependency unavailable")
 
 
 class SupportsForwardGeocoding(Protocol):
@@ -342,7 +356,7 @@ class IntentService:
         except IntentsError:
             raise
         except Exception as exc:
-            raise DependencyUnavailableError("intents dependency unavailable") from exc
+            raise _wrap_unexpected(exc) from exc
 
     async def _create(
         self,
@@ -401,7 +415,7 @@ class IntentService:
         except IntentsError:
             raise
         except Exception as exc:
-            raise DependencyUnavailableError("intents dependency unavailable") from exc
+            raise _wrap_unexpected(exc) from exc
 
     # -- GET /v1/intents --
 
@@ -431,7 +445,7 @@ class IntentService:
         except IntentsError:
             raise
         except Exception as exc:
-            raise DependencyUnavailableError("intents dependency unavailable") from exc
+            raise _wrap_unexpected(exc) from exc
 
     # -- PATCH /v1/intents/{id}(design §2.10のPATCH分岐・§2.7)--
 
@@ -457,7 +471,7 @@ class IntentService:
         except IntentsError:
             raise
         except Exception as exc:
-            raise DependencyUnavailableError("intents dependency unavailable") from exc
+            raise _wrap_unexpected(exc) from exc
 
     async def _update(
         self,
@@ -729,7 +743,7 @@ class IntentService:
         except IntentsError:
             raise
         except Exception as exc:
-            raise DependencyUnavailableError("intents dependency unavailable") from exc
+            raise _wrap_unexpected(exc) from exc
 
 
 def make_intent_service(*, clock: Clock, engine: AsyncEngine) -> IntentService:

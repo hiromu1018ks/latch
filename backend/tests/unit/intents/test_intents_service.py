@@ -449,6 +449,33 @@ async def test_store_failure_maps_to_503_dependency_unavailable():
         )
 
 
+async def test_unexpected_exception_logs_class_name_only(caplog):
+    """503ラップ時のログに例外クラス名だけ残す(08 §2.4の範囲内)。
+
+    メッセージ本文・ユーザー由来の内容は出さない。実検証で原因が読めなく
+    なった欠陥(原因例外不明の503)の運用性改善。
+    """
+
+    class FailingStore(StubStore):
+        async def fetch_user_row(self, provider, subject):
+            raise RuntimeError("secret: raw_text を含む想像上の内部メッセージ")
+
+    svc, _, _, _, _ = _service(store=FailingStore())
+    with caplog.at_level(logging.WARNING, logger="latch.intents"):
+        with pytest.raises(DependencyUnavailableError):
+            await svc.create(
+                auth_provider="google",
+                auth_subject="s",
+                raw_text="r",
+                status="active",
+                structured_intent=_active_input(),
+            )
+    wrap_logs = [r for r in caplog.records if "unexpected" in r.getMessage()]
+    assert len(wrap_logs) == 1
+    assert "RuntimeError" in wrap_logs[0].getMessage()
+    assert "secret" not in wrap_logs[0].getMessage()  # メッセージ本文は出さない
+
+
 async def test_raw_text_and_location_never_appear_in_logs_or_errors(caplog):
     """08 §2.4: ログ・例外に本文・地名を出さない(design §4.1-7)。"""
     secret_raw = "内緒の飲み会の件"
