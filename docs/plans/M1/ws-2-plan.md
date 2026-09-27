@@ -462,7 +462,7 @@ Expected: エラーなし(prompt.py は Step 3 のコードが ruff format 安�
 
 **検証方針(design §3.1の注釈どおり)**: 必須3フィールド(category / time.start / location.name)は必須・既定なし。alcohol_involved も必須(常にLLMが出力・補完なし)。budget・participants・3配列は省略時の既定で受理(規則1「抽出できるフィールドのみ」への寛容な解釈)。余分なキーは無視(07 §4の失敗分類=欠損・値域外・パース不能のみを失敗とする)。time.start は tz-aware 必須(オフセットはJSTに限定しない)。flexibility_minutes / location.flexibility は null のみ受容(03 D-19の固定扱い)。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `backend/tests/unit/intents/test_parser_output.py` を作成:
 
@@ -603,12 +603,12 @@ def test_rejects_non_dict_input():
         ParserOutput.model_validate('{"category": "broken"}')
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_parser_output.py -v`
 Expected: FAIL(ImportError: ParserOutput がない)
 
-- [ ] **Step 3: 最小実装**
+- [x] **Step 3: 最小実装**
 
 `backend/src/latch/intents/schema.py` を作成:
 
@@ -691,12 +691,12 @@ WARNING_MESSAGE_NG_DOWNGRADED = (
 
 `backend/src/latch/intents/__init__.py` へ `ParserOutput`・`ParserCategory`・`ParserTime`・`ParserLocation`・`ParserBudget`・`ParserParticipants`・`WARNING_MESSAGE_NG_DOWNGRADED`(`from latch.intents.schema import ...`)を追記する。
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `cd backend && uv run pytest tests/unit/intents/test_parser_output.py -v`
 Expected: PASS 18件(受付5件+定数1件+パラメータ化拒否11件+非dict1件。件数は目安、全緑であればよい)
 
-- [ ] **Step 5: 書式確認**
+- [x] **Step 5: 書式確認**
 
 Run: `cd backend && uv run ruff format src/latch/intents tests/unit/intents && uv run ruff check src/latch/intents tests/unit/intents`
 Expected: エラーなし
