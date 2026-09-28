@@ -64,14 +64,21 @@ POST /v1/users {"display_name": "...", "birth_date": "1990-04-01", ...}
 users_router = APIRouter(
     prefix="/v1/users",
     tags=["users"],
-    dependencies=[Depends(require_authenticated)],  # C3(05 第5節冒頭)
+    dependencies=[Depends(api_rate_limited)],  # 401→429(M1 ws-4)
 )
 ```
 
 `dependencies=[...]` は「このルータに属する**すべての**窓口で、リクエスト処理の前にこれを通せ」
-というFastAPIへの指定です。通されるのが `require_authenticated`(`auth/deps.py`)で、
+というFastAPIへの指定です。通されるのが `api_rate_limited`(`ratelimit/deps.py`)で、
 `Authorization: Bearer <JWT>` ヘッダーを検証し、中身のclaims(主張。トークンが持つ
 「私はこういう者だ」の情報)を取り出します。
+
+**1行だけ歴史の注記**。ws-1でこの章が実装されたとき、ここにあったのは
+`Depends(require_authenticated)`(`auth/deps.py`)——認証だけを通す依存でした。
+M1 ws-4(第7章)で、全ルータのこの依存が `api_rate_limited` へ差し替えられました。
+名前のとおりレート制限(60req/分の429)を足す依存ですが、中で `require_authenticated`
+を**内包**しています。つまり「認証を通す」というこの章の説明は今も正しく、その上に
+「多すぎる利用を断る」段が重なった、という関係です(内包の仕組みは第7章7.6で読みます)。
 
 ここで **JWT**(ジェイ・ダブリュー・ティー)を初めて定義します。JWT(JSON Web Token)は、
 身分証明書のデータに電子署名を付けたものです。署名があるので、受け取った側は
@@ -381,7 +388,7 @@ ws-1でもう1周できた形です。
 - 3層に分けたもう1つの利益はテストにある。各層が「届いたものを信じて、自分の判断を
   返す」だけなので、層の境目で部品をスタブにすり替えれば、DBも認証もいない世界で
   各層を単独に試せる(4.7の33件がその実証)
-- 401は認証(require_authenticatedの一括指定)、400/422は入力の形(Pydantic+共通ハンドラ)、
+- 401は認証(ルータ単位の一括指定。現在第7章の api_rate_limited が内包)、400/422は入力の形(Pydantic+共通ハンドラ)、
   422 UNDER_AGEと409と503はサービス層の意味づけ。同じDBの失敗でも、
   「重複」と「それ以外」は別のステータスに分かれる
 - 年齢判定はJST暦日付で切る。Clockの `jst_date()` があるから、9時間のずれ問題が
@@ -416,7 +423,7 @@ ws-1でもう1周できた形です。
 
 1. 書き込みの処理が読み取りより難しくなる理由を、増える失敗の種類(この章の冒頭で
    挙げた5つ)を使って説明してください
-2. `dependencies=[Depends(require_authenticated)]` をルータに付けることは、
+2. `dependencies=[Depends(api_rate_limited)]` をルータに付けることは、
    各ハンドラに個別に書くことと何が違いますか。防げる事故は何ですか
 3. `{"birth_date": "1990/04/01"}` のリクエストに返るステータスコードと、
    それを決めているコードの位置を説明してください
