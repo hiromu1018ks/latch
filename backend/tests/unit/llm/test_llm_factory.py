@@ -8,8 +8,10 @@ from time import perf_counter  # 実時間計測はテストコードのみ(desi
 import pytest
 
 from latch.core.clock import FakeClock
+from latch.llm.anthropic import AnthropicParserProvider
 from latch.llm.gateway import build_llm_gateway
 from latch.llm.records import LOGGER_NAME
+from latch.llm.stub import StubLLM
 from latch.settings import Settings
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
@@ -87,13 +89,61 @@ async def test_factory_passes_delay_settings_to_stub(clock, monkeypatch):
 
 
 def test_factory_rejects_unknown_mode(clock, monkeypatch):
-    # M0では"stub"のみ。将来の"real"(T1確定後)もM0の時点では拒否する
-    s = _clean_settings(monkeypatch, llm_mode="real")
-    with pytest.raises(ValueError, match="llm_mode"):
-        build_llm_gateway(clock, s)
+    # stub/real以外は拒否(realの引数完備は別試験が担保)
     s = _clean_settings(monkeypatch, llm_mode="production")
     with pytest.raises(ValueError, match="llm_mode"):
         build_llm_gateway(clock, s)
+
+
+def test_factory_real_builds_anthropic_parser(clock, monkeypatch):
+    # design §2.4: real=Parser系統のみ実装プロバイダ。Embedding/JevはStubLLM継続
+    gw = build_llm_gateway(
+        clock,
+        _clean_settings(monkeypatch, llm_mode="real", llm_anthropic_api_key="test-key"),
+        parser_system_prompt="p {current_date}",
+        parser_output_schema={"type": "object", "properties": {}},
+    )
+    assert isinstance(gw._parser, AnthropicParserProvider)
+    assert gw._parser.name == "anthropic"
+    assert isinstance(gw._embedding, StubLLM)
+    assert isinstance(gw._jev, StubLLM)
+
+
+def test_factory_real_requires_api_key(clock, monkeypatch):
+    s = _clean_settings(monkeypatch, llm_mode="real")  # 鍵空=既定
+    with pytest.raises(ValueError, match="api_key"):
+        build_llm_gateway(clock, s, parser_system_prompt="p", parser_output_schema={})
+
+
+def test_factory_real_requires_prompt_and_schema(clock, monkeypatch):
+    s = _clean_settings(monkeypatch, llm_mode="real", llm_anthropic_api_key="test-key")
+    with pytest.raises(ValueError, match="parser_system_prompt"):
+        build_llm_gateway(clock, s)
+    with pytest.raises(ValueError, match="parser_system_prompt"):
+        build_llm_gateway(clock, s, parser_system_prompt="p")
+    with pytest.raises(ValueError, match="parser_system_prompt"):
+        build_llm_gateway(clock, s, parser_output_schema={"type": "object"})
+
+
+async def test_make_intent_parse_service_passes_prompt_and_schema(monkeypatch):
+    # design §2.3: ファクトリがPARSER_SYSTEM_PROMPTとParserOutputスキーマを渡す。
+    # real設定で構築できれば注入は機能している(欠落ならValueError)
+    from latch.intents.prompt import PARSER_SYSTEM_PROMPT
+    from latch.intents.schema import ParserOutput
+    from latch.intents.service import make_intent_parse_service
+
+    monkeypatch.delenv("LATCH_ANTHROPIC_API_KEY", raising=False)
+    settings = Settings(llm_mode="real", llm_anthropic_api_key="test-key")
+    service = make_intent_parse_service(
+        clock=FakeClock(NOW), settings=settings, user_lookup=None
+    )
+    # stubでもserviceは構築できる(llm/のimportはファクトリに限る規律どおり)
+    service_stub = make_intent_parse_service(
+        clock=FakeClock(NOW), settings=Settings(), user_lookup=None
+    )
+    assert service is not None and service_stub is not None
+    assert PARSER_SYSTEM_PROMPT  # (docstring参照の実在確認)
+    assert ParserOutput.model_json_schema()
 
 
 def test_public_api_reexports():
