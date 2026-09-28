@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from latch.core.clock import Clock
 from latch.geo.service import Geofeature
 from latch.intents.errors import (
+    ActiveIntentLimitError,
     DependencyUnavailableError,
     ForbiddenError,
     GeocodingFailedError,
@@ -51,11 +52,14 @@ from latch.intents.mapping import (
 from latch.intents.schema import WARNING_MESSAGE_NG_DOWNGRADED, ParserOutput
 from latch.intents.store import IntentRow, IntentStore, UserRow
 from latch.llm.gateway import build_llm_gateway
+from latch.ratelimit.errors import RateLimitedError
 from latch.settings import Settings
 from latch.users.service import age_years
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+    from latch.ratelimit import RateLimiter  # 実行時importなし(循環回避)
 
 logger = logging.getLogger("latch.intents")
 
@@ -243,12 +247,14 @@ class IntentService:
         uow: UnitOfWork,
         reader: Reader,
         geocoder: SupportsForwardGeocoding,
+        limiter: RateLimiter | None = None,
     ) -> None:
         self._clock = clock
         self._store = store
         self._uow = uow
         self._reader = reader
         self._geocoder = geocoder
+        self._limiter = limiter
 
     # -- 共通の検証・参照ヘルパー --
 
@@ -302,6 +308,17 @@ class IntentService:
             raise GeocodingFailedError("geocoding failed")
         return replace(cols, geo_lon=feature.lon, geo_lat=feature.lat)
 
+    async def _check_active_limit(
+        self, conn: AsyncConnection, user_id: uuid.UUID, *, now: datetime
+    ) -> None:
+        """Active数検証(§2.3: users行ロック→COUNT→判定を同一トランザクションで)。"""
+        await self._store.lock_user_row(conn, user_id)
+        count = await self._store.count_active(conn, user_id, now=now)
+        if count >= self._limiter.active_limit:  # type: ignore[union-attr]
+            raise ActiveIntentLimitError(
+                "active intent limit reached; pause or let expire an intent"
+            )
+
     @staticmethod
     def _row_from_cols(
         cols: ResolvedColumns,
@@ -353,7 +370,8 @@ class IntentService:
                 status=status,
                 inp=structured_intent or StructuredIntentInput(),
             )
-        except IntentsError:
+        except (IntentsError, RateLimitedError):
+            # RateLimitedError(429)は透過(design §2.4: 429は503にしない)
             raise
         except Exception as exc:
             raise _wrap_unexpected(exc) from exc
@@ -369,13 +387,21 @@ class IntentService:
     ) -> IntentRow:
         user = await self._require_user(auth_provider, auth_subject)
         now = self._clock.now()
+        if self._limiter is not None:
+            # INCR先行(§2.4): 429を返すリクエスト・422で失敗する作成も消費
+            await self._limiter.check_create(user_id=user.id)
         if status == "active":
-            cols = self._resolve_active_or_raise(inp, now=now)
-            if cols.alcohol_involved:
-                self._require_age_20(user)
-            cols = await self._geocode_or_raise(inp.location.name, cols)
-            cols = replace(cols, raw_text=raw_text)
+            # 検証一式をuow内へ: 422Activeが必須3より先(§2.4)かつ
+            # COUNT→INSERTをusers行ロックで直列化(§2.3)。ジオコーディングは
+            # 別コネクションのgeofeatures参照のみでusersロックと競合しない
             async with self._uow() as conn:
+                if self._limiter is not None:
+                    await self._check_active_limit(conn, user.id, now=now)
+                cols = self._resolve_active_or_raise(inp, now=now)
+                if cols.alcohol_involved:
+                    self._require_age_20(user)
+                cols = await self._geocode_or_raise(inp.location.name, cols)
+                cols = replace(cols, raw_text=raw_text)
                 intent_id = await self._store.insert(
                     conn, cols, user_id=user.id, status="active", now=now
                 )
@@ -468,7 +494,8 @@ class IntentService:
                 status=status,
                 structured_intent=structured_intent,
             )
-        except IntentsError:
+        except (IntentsError, RateLimitedError):
+            # RateLimitedError(429)は透過(design §2.4: 429は503にしない)
             raise
         except Exception as exc:
             raise _wrap_unexpected(exc) from exc
@@ -485,6 +512,8 @@ class IntentService:
     ) -> IntentRow:
         user = await self._require_user(auth_provider, auth_subject)
         now = self._clock.now()
+        if self._limiter is not None:
+            await self._limiter.check_update(intent_id=intent_id)
         async with self._uow() as conn:
             row = await self._store.fetch_for_update(conn, intent_id)
             if row is None:
@@ -606,6 +635,8 @@ class IntentService:
                 new_version,
             )
         # draft→active化: 全量必須・全検証(不通なら422でdraft据え置き)
+        if self._limiter is not None:
+            await self._check_active_limit(conn, user.id, now=now)
         if inp is None:
             raise IntentValidationError("structured_intent is required")
         cols = self._resolve_active_or_raise(inp, now=now)
@@ -678,6 +709,8 @@ class IntentService:
             new_status="active",
             version_delta=1,  # 確定値15: キー衝突回避のため必ず+1
             event_type=EVENT_UPDATED,
+            rate_limit_update=True,  # resumeはupdate種Eventを発行(告白1)
+            check_active=True,
         )
 
     async def delete(
@@ -703,10 +736,14 @@ class IntentService:
         new_status: str,
         version_delta: int,
         event_type: str | None,
+        rate_limit_update: bool = False,
+        check_active: bool = False,
     ) -> IntentRow:
         try:
             user = await self._require_user(auth_provider, auth_subject)
             now = self._clock.now()
+            if self._limiter is not None and rate_limit_update:
+                await self._limiter.check_update(intent_id=intent_id)
             async with self._uow() as conn:
                 row = await self._store.fetch_for_update(conn, intent_id)
                 if row is None:
@@ -715,6 +752,8 @@ class IntentService:
                     raise ForbiddenError("not owner")
                 if row.status not in allowed_from:
                     raise InvalidTransitionError("invalid status transition")
+                if self._limiter is not None and check_active:
+                    await self._check_active_limit(conn, user.id, now=now)
                 new_version = row.version + version_delta
                 count = await self._store.update_status(
                     conn,
@@ -740,17 +779,21 @@ class IntentService:
                     version=new_version,
                     updated_at=now,
                 )
-        except IntentsError:
+        except (IntentsError, RateLimitedError):
+            # RateLimitedError(429)は透過(design §2.4: 429は503にしない)
             raise
         except Exception as exc:
             raise _wrap_unexpected(exc) from exc
 
 
-def make_intent_service(*, clock: Clock, engine: AsyncEngine) -> IntentService:
+def make_intent_service(
+    *, clock: Clock, engine: AsyncEngine, limiter: RateLimiter | None = None
+) -> IntentService:
     """実SQL束ねてIntentServiceを構築する(design §2.10)。
 
     latch.geoへのimportはこのファクトリとProtocol戻り値型に限る
     (design §2.5)。保存APIは同期LLM非依存(C8)のためllm/を参照しない。
+    limiterはNone=無効(unit試験既定)。main.py lifespanがrate_limiterを渡す。
     """
     from latch.geo.service import GeoService
 
@@ -760,4 +803,5 @@ def make_intent_service(*, clock: Clock, engine: AsyncEngine) -> IntentService:
         uow=engine.begin,
         reader=engine.connect,
         geocoder=GeoService(engine),
+        limiter=limiter,
     )

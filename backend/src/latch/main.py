@@ -1,6 +1,6 @@
 """FastAPIアプリケーションファクトリ。
 
-統合履歴: M0 ws-3 認証 / M1 ws-1 users API / M1 ws-2 parse API。
+統合履歴: M0 ws-3 認証 / M1 ws-1 users API / M1 ws-2 parse API / M1 ws-4 レート制限。
 
 /health は運用プローブ用でありv1 API契約の外に置く(C3の対象外)。
 server_time は get_clock() 由来 — Clock差し替えが全経路で効くことの生の消費者。
@@ -28,6 +28,8 @@ from latch.core.deps import get_clock
 from latch.intents import IntentsError, make_intent_parse_service, parse_router
 from latch.intents.routes import intents_crud_router
 from latch.intents.service import make_intent_service
+from latch.ratelimit import make_rate_limiter
+from latch.ratelimit.errors import RateLimitError
 from latch.settings import Settings
 from latch.users.errors import UsersError
 from latch.users.routes import users_router
@@ -36,6 +38,7 @@ from latch.users.service import make_user_service
 logger = logging.getLogger("latch.auth")
 users_logger = logging.getLogger("latch.users")
 intents_logger = logging.getLogger("latch.intents")
+ratelimit_logger = logging.getLogger("latch.ratelimit")
 
 
 @asynccontextmanager
@@ -45,12 +48,20 @@ async def _lifespan(app: FastAPI):
     build_users = not hasattr(app.state, "users_service")
     build_intents = not hasattr(app.state, "intent_parse_service")
     build_intents_crud = not hasattr(app.state, "intent_service")
-    if not (build_auth or build_users or build_intents or build_intents_crud):
+    build_rate_limit = not hasattr(app.state, "rate_limiter")
+    if not (
+        build_auth
+        or build_users
+        or build_intents
+        or build_intents_crud
+        or build_rate_limit
+    ):
         yield
         return
     settings: Settings = app.state.settings
     redis_client = None
-    if build_auth:
+    if build_auth or build_rate_limit:
+        # Redisはauth(失効リスト)とレート制限カウンタの共用(design §2.8)
         redis_client = aioredis.Redis.from_url(
             settings.redis_url, decode_responses=True
         )
@@ -59,14 +70,23 @@ async def _lifespan(app: FastAPI):
     if engine is None:
         engine = create_db_engine(settings)
         app.state.db_engine = engine
-    # user_lookup は auth と intents の共有(索引済みSELECT 1本のファクトリ・純関数)
+    # user_lookup は auth と intents の共有。api_rate_limited も消費する
+    # (user_id単位のカウント — design §2.4)
     user_lookup = make_user_lookup(engine)
+    app.state.user_lookup = user_lookup
+    if build_rate_limit:
+        app.state.rate_limiter = make_rate_limiter(
+            clock=app.state.clock,
+            redis_client=redis_client,
+            settings=settings,
+        )
     if build_auth:
         app.state.auth_service = build_auth_service(
             clock=app.state.clock,
             settings=settings,
             redis_client=redis_client,
             user_lookup=user_lookup,
+            limiter=app.state.rate_limiter if build_rate_limit else None,
         )
     if build_users:
         app.state.users_service = make_user_service(
@@ -80,7 +100,9 @@ async def _lifespan(app: FastAPI):
         )
     if build_intents_crud:
         app.state.intent_service = make_intent_service(
-            clock=app.state.clock, engine=engine
+            clock=app.state.clock,
+            engine=engine,
+            limiter=app.state.rate_limiter if build_rate_limit else None,
         )
     try:
         yield
@@ -102,6 +124,7 @@ def create_app(
     users_service=None,
     intent_parse_service=None,
     intent_service=None,
+    rate_limiter=None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.clock = clock if clock is not None else SystemClock()
@@ -114,6 +137,8 @@ def create_app(
         app.state.intent_parse_service = intent_parse_service
     if intent_service is not None:
         app.state.intent_service = intent_service
+    if rate_limiter is not None:
+        app.state.rate_limiter = rate_limiter
 
     @app.get("/health")
     async def health(
@@ -148,6 +173,16 @@ def create_app(
         request: Request, exc: IntentsError
     ) -> JSONResponse:
         intents_logger.warning("intents.error code=%s", exc.code)
+        return JSONResponse(
+            status_code=exc.http_status,
+            content=_error_body(exc.code, str(exc)),
+        )
+
+    @app.exception_handler(RateLimitError)
+    async def rate_limit_error_handler(
+        request: Request, exc: RateLimitError
+    ) -> JSONResponse:
+        ratelimit_logger.warning("ratelimit.error code=%s", exc.code)
         return JSONResponse(
             status_code=exc.http_status,
             content=_error_body(exc.code, str(exc)),

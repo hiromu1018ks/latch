@@ -30,13 +30,14 @@ from latch.intents.service import (
     ParseResult,
 )
 from latch.intents.store import IntentRow
+from latch.ratelimit.deps import api_rate_limited
 
 logger = logging.getLogger("latch.intents")
 
 parse_router = APIRouter(
     prefix="/v1/intents",
     tags=["intents"],
-    dependencies=[Depends(require_authenticated)],  # C3(05 §5全API認証済み)
+    dependencies=[Depends(api_rate_limited)],  # 401→429(M1 ws-4・design §2.4)
 )
 
 
@@ -163,7 +164,7 @@ class IntentListResponse(BaseModel):
 intents_crud_router = APIRouter(
     prefix="/v1/intents",
     tags=["intents"],
-    dependencies=[Depends(require_authenticated)],  # C3(05 §5全API認証済み)
+    dependencies=[Depends(api_rate_limited)],  # 401→429(M1 ws-4・design §2.4)
 )
 
 

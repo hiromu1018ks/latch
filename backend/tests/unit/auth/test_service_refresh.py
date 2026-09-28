@@ -15,6 +15,7 @@ from latch.auth.service import AuthService
 from latch.auth.sessions import SessionStore
 from latch.auth.testkeys import DEFAULT_KID, load_private_key
 from latch.core.clock import FakeClock
+from latch.ratelimit.errors import RateLimitedError
 from latch.settings import Settings
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
@@ -53,7 +54,7 @@ def _idp_token(subject: str = "sub-1") -> str:
     )
 
 
-def _service(clock, redis) -> AuthService:
+def _service(clock, redis, *, limiter=None) -> AuthService:
     return AuthService(
         clock=clock,
         secret=SECRET,
@@ -62,6 +63,7 @@ def _service(clock, redis) -> AuthService:
             configs={"google": IdPVerifyConfig(issuer=ISSUER_G, audience=AUDIENCE)}
         ),
         user_lookup=_none_lookup,
+        limiter=limiter,
     )
 
 
@@ -124,3 +126,38 @@ async def test_authenticate_garbage_token(redis, clock):
     svc = _service(clock, redis)
     with pytest.raises(UnauthenticatedError):
         await svc.authenticate(token="not-a-jwt")
+
+
+# --- M1 ws-4: refreshの429フック(design §2.5)---
+
+
+class _StubAuthLimiter:
+    """check_authのスタブ(呼び出し記録・任意回数でRateLimitedError)。"""
+
+    def __init__(self, *, allowed: int = 60):
+        self.allowed = allowed
+        self.calls = []
+
+    async def check_auth(self, *, provider: str, subject: str):
+        self.calls.append((provider, subject))
+        self.allowed -= 1
+        if self.allowed < 0:
+            raise RateLimitedError("rate limit exceeded")
+
+
+async def test_refresh_counts_after_rotation(redis, clock):
+    """rotate(検証を兼ねる)の後にINCR — provider+subjectは回転結果由来。"""
+    limiter = _StubAuthLimiter()
+    issue_svc = _service(clock, redis)  # 発行側はlimiterなし
+    _, refresh = await _token_pair(issue_svc)
+    svc = _service(clock, redis, limiter=limiter)
+    await svc.refresh(refresh_token=refresh)
+    assert limiter.calls == [("google", "sub-1")]
+
+
+async def test_refresh_invalid_token_is_401_not_counted(redis, clock):
+    limiter = _StubAuthLimiter(allowed=0)
+    svc = _service(clock, redis, limiter=limiter)
+    with pytest.raises(InvalidRefreshTokenError):
+        await svc.refresh(refresh_token="unknown-token-value")
+    assert limiter.calls == []

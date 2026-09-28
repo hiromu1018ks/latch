@@ -40,3 +40,9 @@ class Settings(BaseSettings):
     geo_osm_bbox: str = (
         "130.5420,31.5825,130.5740,31.6095"  # min_lon,min_lat,max_lon,max_lat
     )
+
+    # --- レート制限(M1 ws-4。08 §5.4)---
+    rate_limit_api_per_min: int = 60
+    rate_limit_create_per_day: int = 20
+    rate_limit_update_per_hour: int = 6
+    rate_limit_active_intents: int = 5

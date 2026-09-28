@@ -8,6 +8,7 @@ from latch.intents.completion import (
     nearest_expires_at,
 )
 from latch.intents.errors import (
+    ActiveIntentLimitError,
     DependencyUnavailableError,
     ForbiddenError,
     GeocodingFailedError,
@@ -63,6 +64,7 @@ from latch.intents.service import (
 from latch.intents.store import IntentRow, IntentStore, UserRow
 
 __all__ = [
+    "ActiveIntentLimitError",
     "DEFAULT_PARTICIPANTS",
     "DEFAULT_RADIUS_M",
     "DependencyUnavailableError",
