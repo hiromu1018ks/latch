@@ -70,8 +70,8 @@ Model=大規模言語モデル)とは、文章をやり取りするAIの一種�
 
 ## 5.2 賢い嘘: スタブが開発を支える
 
-今のLATCHは、実は本物のLLMに接続していません。プロバイダ契約(T1)がまだなので、
-`llm_mode="stub"` という設定で動きます。LLMの役を務めるのが `llm/stub.py` の
+あなたが `make up` や `make test` で動かす系統は、本物のLLMに接続していません。
+`llm_mode="stub"` という設定で動くためです。LLMの役を務めるのが `llm/stub.py` の
 **StubLLM**です。
 
 スタブ(stub=切り株)とは「本物の代わりに置く、形は同じで中身は簡単な部品」のことです。
@@ -101,8 +101,43 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
 
 これが何を可能にするかというと、**LLMがなくてもシステム全体の設計と試験を進められる**
 ことです。あなたが `make test` で回しているparseまわりの66件の試験は、ネットワークも
-API鍵も使いません。そして将来T1でプロバイダが決まったら、`build_llm_gateway` の分岐に
-本物を足すだけ。切り株を本物の木に植え替えるとき、周りの庭はいじりません。
+API鍵も使いません。
+
+そして「プロバイダが決まったら、`build_llm_gateway` の分岐に本物を足すだけ。切り株を
+本物の木に植え替えるとき、周りの庭はいじらない」と書かれていたこの予言は、
+2026-09-28にそのとおり実現しました(作業単位M1 ws-6)。プロバイダ契約(T1)で
+Anthropic Claude API・Haiku 4.5が確定し、実adapter `llm/anthropic.py` が差し込まれ、
+`build_llm_gateway` はこう変わりました。
+
+```python
+    stub = StubLLM(
+        delay_parser_ms=settings.llm_stub_delay_parser_ms,
+        ...
+    )
+    if settings.llm_mode == "stub":
+        return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub)
+    if settings.llm_mode == "real":
+        if not settings.llm_anthropic_api_key:
+            raise ValueError("llm_mode='real' requires llm_anthropic_api_key")
+        ...
+        parser = AnthropicParserProvider(
+            api_key=settings.llm_anthropic_api_key,
+            system_prompt=parser_system_prompt,
+            output_schema=parser_output_schema,
+            base_url=settings.llm_anthropic_base_url,
+        )
+        return LLMGateway(clock=clock, parser=parser, embedding=stub, jev=stub)
+```
+
+読みどころは3つです。差し替わるのはParser系統の1本だけで、EmbeddingとJevは
+スタブのまま(`real` の意味は「Parserのみ実API」。ほか2系統の実装はM2)。
+鍵がなければ即座に `ValueError` で起動を拒む(スタブへ静かに落ちて「実測したつもりが
+スタブだった」を防ぐ、**fail-fast=問題を先に見つけて即止まり、の姿勢**)。そして
+LLMGateway本体・StubLLM・この章で読んだIntentParseServiceは、1行も変わっていません。
+庭をいじらずに植え替える、の実物です。
+
+実APIを実際に使うのは、Parserの精度を測るG1ゲートという専用の経路だけです。
+その実行手順は、作業レシピとして `howtos/g1-gate.md` にまとめてあります。
 
 ## 5.3 信頼できない協力者: 出力は境界で検証してから中へ
 
@@ -281,7 +316,7 @@ class SupportsParseIntent(Protocol):
 
 llm/へのimportは、ファイル単位で見ると `make_intent_parse_service` という構築用の
 関数のための1行だけです。`rg -n "from latch.llm" backend/src/latch/intents` を実行すると
-`service.py:27` の1行だけが返り、これが `build_llm_gateway` を呼ぶファクトリの中で
+`service.py:55` の1行だけが返り、これが `build_llm_gateway` を呼ぶファクトリの中で
 使われています。クラス本体は純粋なまま、LLMとの結びつきはこの1か所に閉じている、
 という構図です。
 
@@ -430,8 +465,8 @@ SELECTを足すのとは違う、という見本になります。
   出力はシステムの内側に入れない
 - 失敗は「利用者起因(422・フォームへ)」と「システム起因(503・再試行へ)」に
   切り分けられる。判定材料は「例外が上がったか、検証を通ったか」の2点だけ
-- StubLLMは「応答・失敗・遅延を演じ分けられる役者」。実プロバイダ確定(T1)まで
-  開発が止まらないのは、この切り株のおかげ
+- StubLLMは「応答・失敗・遅延を演じ分けられる役者」。実プロバイダ(T1・2026-09-28
+  確定)の実装を待たずに開発全体を進められたのは、この切り株のおかげ
 - Protocolで「LLM非依存」をimportの形で強制する。形が同じなら呼べる、は
   差し替え可能性を型にしたもの
 - 規則違反の出力は捨てずに正規化し、注意表示を付ける(黙って降格させない)。
