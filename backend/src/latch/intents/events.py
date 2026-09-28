@@ -20,6 +20,7 @@ EVENT_UPDATED = "updated"
 EVENT_DELETED = "deleted"
 EVENT_EXPIRED = "expired"  # 発行経路はM3-3(expiry_sweeper)
 EVENT_SCHEDULED = "scheduled"  # 発行経路はM2以降(§2.11)
+EVENT_EMBEDDING_COMPLETED = "embedding_completed"  # 発行経路はM2 ws-2(Embedding Worker)
 
 _INSERT_EVENT = text("""
     INSERT INTO match_events

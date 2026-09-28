@@ -107,6 +107,8 @@ _INSERT = text(f"""
     RETURNING id
 """)
 
+# 内容更新(全置換)でembeddingをクリアし更新Eventのキックで再エンベディング
+# (design §2.3。resume系は_UPDATE_STATUSのため対象外 — 06 §9のresume規定)
 _UPDATE = text(f"""
     UPDATE intents SET
         category_primary = :category_primary,
@@ -122,6 +124,8 @@ _UPDATE = text(f"""
         notification_level = :notification_level,
         status = :status,
         version = :version,
+        embedding = NULL,
+        embedding_model = NULL,
         time_start = :time_start,
         time_end = :time_end,
         expires_at = :expires_at,

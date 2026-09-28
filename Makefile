@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -44,3 +44,6 @@ geo-verify: ## 正転・逆転のサンプル確認(PostGIS完結の動作確認
 
 g1-gate: ## G1精度ゲートharness(実API・.envにLATCH_LLM_MODE=real+LATCH_ANTHROPIC_API_KEY必須)
 	cd backend && uv run --env-file ../.env python -m latch.g1gate
+
+embed-smoke: ## Embedding実APIスモーク(1呼び出し・.envにLATCH_LLM_MODE=real+LATCH_GEMINI_API_KEY必須)
+	cd backend && uv run --env-file ../.env python -m latch.llm.embed_smoke

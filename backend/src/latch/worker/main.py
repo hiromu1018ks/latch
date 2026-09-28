@@ -10,13 +10,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.events import EventBus, IncomingEvent, make_event_bus
+from latch.intents.events import EVENT_CREATED, EVENT_UPDATED
+from latch.llm.gateway import build_embedding_gateway
 from latch.settings import Settings
+from latch.worker.backfill import BackfillRunner
 from latch.worker.debounce import DebounceEntry, DebounceGroup, TrailingDebouncer
+from latch.worker.embedding import EmbeddingWorker
 from latch.worker.stage1 import Stage1
 
 logger = logging.getLogger(__name__)
@@ -37,6 +42,8 @@ class Worker:
         stage1: Stage1 | None = None,
         debouncer: TrailingDebouncer | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        embedding: EmbeddingWorker | None = None,
+        backfill: BackfillRunner | None = None,
     ) -> None:
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.settings: Settings = settings if settings is not None else Settings()
@@ -45,6 +52,8 @@ class Worker:
         self._stage1 = stage1
         self._debouncer = debouncer
         self._sleep = sleep
+        self._embedding = embedding
+        self._backfill = backfill
         self._stop = asyncio.Event()
         self._subscription = None
 
@@ -91,15 +100,39 @@ class Worker:
             )
             self._stage1 = stage1
             self._debouncer = debouncer
+            embedding = (
+                self._embedding
+                if self._embedding is not None
+                else EmbeddingWorker(
+                    engine=engine,
+                    clock=self.clock,
+                    gateway=build_embedding_gateway(self.clock, self.settings),
+                    bus=bus,
+                )
+            )
+            backfill = (
+                self._backfill
+                if self._backfill is not None
+                else BackfillRunner(
+                    engine=engine,
+                    embedding=embedding,
+                    interval_sec=self.settings.embedding_backfill_interval_sec,
+                    batch_limit=self.settings.embedding_backfill_batch_limit,
+                )
+            )
+            self._embedding = embedding
+            self._backfill = backfill
             await bus.ensure()
             self._subscription = await bus.subscribe(self._dispatch)
             debouncer_task = asyncio.create_task(debouncer.run(stop=self._stop))
+            backfill_task = asyncio.create_task(backfill.run(stop=self._stop))
             logger.info("worker started (app_env=%s)", self.settings.app_env)
             await self._stop.wait()
             # graceful shutdown: 窓内entryは解放せず未ack再配信へ(design §2.3)
             if self._subscription is not None:
                 self._subscription.stop()
             await debouncer_task
+            await backfill_task
             logger.info("worker stopped")
         finally:
             if owns_engine and engine is not None:
@@ -113,6 +146,11 @@ class Worker:
         try:
             result = await self._stage1.intake(event)
             if result.kind in ("processed", "duplicate", "quarantined"):
+                if (
+                    result.kind in ("processed", "duplicate")
+                    and result.triple is not None
+                ):
+                    await self._kick_embedding(*result.triple)
                 event.ack()
                 return
             if result.kind == "debounce":
@@ -136,9 +174,24 @@ class Worker:
             await self._stage1.process(
                 group.latest.event, group.latest.triple, group.latest.row_id
             )
+            await self._kick_embedding(*group.latest.triple)
             group.latest.event.ack()
             for entry in group.absorbed:
                 await self._stage1.discard(entry.row_id, reason="debounced_superceded")
                 entry.event.ack()
         except Exception:
             logger.exception("debounce release failed intent_id=%s", group.intent_id)
+
+    async def _kick_embedding(
+        self, event_type: str, intent_id: uuid.UUID, version: int
+    ) -> None:
+        """Stage1処理コミット後・ack前のEmbeddingキック(design §2.1-B)。
+
+        created/updatedのみ(06 §9「処理はEmbedding要求のキックまで」)。
+        LLM失敗はhandle内で握られ(embedding NULL=バックフィル対象)、DB失敗は
+        ここから伝播して_dispatch/_on_releaseの既存exceptが受け、ackなし
+        再配信が回収する。embedding未注入(ws-1資産の試験)は何もしない。
+        """
+        if self._embedding is None or event_type not in (EVENT_CREATED, EVENT_UPDATED):
+            return
+        await self._embedding.handle(intent_id, version)
