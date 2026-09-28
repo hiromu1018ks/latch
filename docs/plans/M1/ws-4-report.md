@@ -8,6 +8,8 @@
 ## コミット一覧
 
 ```
+42f5486 fix(ratelimit): 最終レビュー指摘の対応 — test_3カウント算術修正・分境界吸収・api_rate_limited直接試験(M1 ws-4 fix pass)
+e0e3d40 docs: M1 ws-4実装報告(M1 ws-4 Task 7)
 8fde35e test(ratelimit): 429/422のci環境統合試験9件を追加(M1 ws-4 Task 6)
 5790abf feat(auth): token/refreshへprovider+subject単位の429フックを追加(M1 ws-4 Task 5)
 618341c feat(ratelimit): API全体60req/分の依存差し替えとlifespan接続(M1 ws-4 Task 4)
@@ -26,10 +28,10 @@ bf9ac11 feat(ratelimit): Redisストアとエラー階層を追加(M1 ws-4 Task 
 ## 検証結果
 
 - make lint: クリーン(ruff format --check + ruff check)
-- make test(unit): **457 passed**(開始時426件から+31)
+- make test(unit): **463 passed**(実装前420件から+43)
   - 新規: test_store 6 / test_limiter 9 / test_jst_boundary 4 /
     test_intents_service追記 11 / test_rate_limit_wiring 1 /
-    auth unit追記 6
+    auth unit追記 6 / test_ratelimit_deps 6(fix pass)
   - 既存: 無修正で緑(ws-3 CRUD・auth・users・parse・arch test 2件)
 - test-ci: **スーパーバイザー検証待ち**(STATUS運用ルール1・4)
   - 検証手順: `docker compose build api` を先行のうえ `make test-ci`
@@ -38,6 +40,17 @@ bf9ac11 feat(ratelimit): Redisストアとエラー階層を追加(M1 ws-4 Task 
 - ファイル名一意性: `find backend/tests -name "test_*.py" | awk -F/ '{print $NF}' | sort | uniq -d` → 空
 - マイグレーション: 差分なし(alembic/versions 変更ゼロ)
 - arch test: test_arch_no_direct_time.py 緑(ratelimit配下もClock経由のみ)
+
+## 最終レビュー(全ブランチ・独立レビュアー)
+
+Task 7後に独立レビュー(最新Claude Opus・読み取り専用)へ全diffを委ねた。レビュー側がunit全緑・lint・禁止パス不変を独立再検証したうえで、下記の指摘と判定。Critical 1件・Important 2件はfix pass(コミット42f5486)で対応済み:
+
+- **Critical(test_3のカウント算術 — 修正済み)**: 計画書の統合試験test_3は「register(users POST 1回)もuserバケットに計上される」前提でGET 59回→60回目429を期待していたが、実際はregisterの依存実行時点でUser行がまだ存在せずanonフォールバックキー側に計上されるため、userバケットには入らない(レビューが実RateLimiterでのシミュレーションにより検証)。product codeは正しくテスト算術のみ誤り。GET 60回→61回目429へ修正し、docstring・コメントも訂正した。
+- **Important(分バケット境界のflaky — 対応済み)**: test_3・test_8は61リクエストを順次発行するため、JST分の切替を跨ぐと429が来ず誤赤になる(連打速度から推定2〜5%)。61回目が200を返した場合は429に到達するまで連打(上限180回・それまでの応答はすべて200であることを保証)する形で吸収した。時・日バケット(test_1/2/7)の境界暴露は1回あたり0.1%未満のため固定回数のまま。
+- **Important(api_rate_limitedの直接試験なし — 対応済み)**: 依存関数の4分岐(未載荷スルー・user_idキー・anonフォールバック×2・lookup失敗→503)はwiring試験(静的)・統合試験(未実行)のいずれでも担保されていなかった。tests/unit/ratelimit/test_ratelimit_deps.py(6件・実RateLimiter+fakeredis)を追加。既存実装が全分岐正しく動作することを確認(6/6緑)。
+- **Minor(記録のみ・未修正)**: (1) `check_auth` の上限が `api_per_min` を共有(LATCH_RATE_LIMIT_API_PER_MINがauth系にも効く。designは両方60のため現在は無害。M2でノブを使い分ける際に分離を推奨)。(2) users/routes.py・intents/routes.pyのルータdocstringが「require_authenticated を付す」のまま(実際はapi_rate_limitedへ差し替え済みでそれが内包する)。(3) RateLimiter._check がawaitなしのasync(同期化可能)。(4) _StubAuthLimiter がtoken/refresh両テストに重複。
+- **レビューの見送り13項目**(固定窓境界2倍・Retry-Afterなし・refresh 429時トークン喪失・/health対象外・IP単位不採用・Jev予算・sweeper・フロント・401未計上・anon→user_idバケットの1分重複・マルチレプリカ・EXPIRE毎回上書き): いずれもdesign §5告白・計画書§3スコープ外・仕様由来の帰結であり、維持を確認。
+- レビューの4Ruling(429透過のexcept拡張・wiring試験のFastAPI 0.141対応・auth/__init__の再export削除・uow内ロック順序)はすべて「妥当・転覆なし」と判定。デッドロック解析(意図行ロック→usersロックの順序)も問題なしと確認。
 
 ## 既存試験の保全検算(api 60req/分)
 
