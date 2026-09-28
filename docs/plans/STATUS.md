@@ -199,6 +199,7 @@
     (1) ci-db残存データ干渉(ws-1系試験・学習資産検証由来のactive+embedding済みIntent 55ユーザー分がLayer 2の検索に引っかかり「結果が空」型の期待4件を破壊)→掃除で解消。**integration試験のteardown完全性とDB残存への感度が課題として浮上**(次単位で対抗策検討)
     (2) 19歳fixtureがサーバ側alcohol確定(M1・07 §2)で422になる試験設計ミス2件 → supervisor直接修正 d3b0e07(meal作成→DB強制の手法へ)
   - 修正後: **マージ後main test-ci 769 passed**・worker復帰確認
+- 学習資産追従: ws-2・ws-3分 5fc092b(第10章「Intentを意味の数値へ変える: Embedding」・第11章「マッチング前半: SQLで確実に落とし、意味で上位を取る」新設+既存11ファイル更新。実APIスモークの出力を実測掲載。pgvector直接観察Labは次回候補)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
