@@ -33,3 +33,9 @@ htmlcov/
 
 # Geospatial source data (ws-4)
 backend/data/
+
+# Agent tooling assets (natural-japanese skill installer等の環境由来)
+.agents/
+.claude/skills/
+.hermes/
+skills-lock.json
