@@ -189,6 +189,7 @@
     (5) user_env teardownのmatch_candidates削除漏れFK違反(supervisor直接修正 5a59208)
   - 運用メモ: ci-dbに残存した古いpending行126行(9/27由来・event_type='create'等6値外)をフォールバックリレーが再publishし続け障害に見えたため掃除。以後の同種残行は6値外→quarantinedで自然終端する設計
   - 修正後: worktree基準 test-ci 677 passed・**マージ後main test-ci 677 passed**(api再ビルド後)・worker常設復帰確認・pubsubエミュレータ導入(旧イメージパスの匿名pull拒否により公式鏡像 gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators へ)
+- 学習資産追従: ws-1分 5906168(第9章「知らせを運ぶ仕組み: outboxからWorkerまでのイベント駆動」新設+既存8ファイル更新。実機観察Labはdocker制約で見送り・ws-2マージ時に再検討)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
