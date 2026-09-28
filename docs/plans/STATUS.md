@@ -6,11 +6,11 @@
 
 ## 現在
 
-- フェーズ: M1(Intentドメイン)
+- フェーズ: **M1完了**(2026-09-28 G1承認)→ 次はM2(マッチングパイプライン)。**M2着手はユーザーのGoサイン待ち**
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
-- 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **G1完了条件4項目とも実測・実装済み**(02#1〜#3緑・02#4は(a)代替検証・両精度ゲート合格 210042・再実行harness稼働)→ **G1判定の包括承認をユーザーへ申請中**。承認後にM1完了。M2着手は別途ユーザーのGoサインを得る
+- 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
+- 次の着手: M2開始のGoサイン待ち。**M2前に必要な人間領域**: Embedding系統(gemini-embedding-001)の契約とLATCH_GEMINI_API_KEY設定(Embedding Worker=12 M2-2の前まで)・TypeSafe Jevの契約詳細確認とLATCH_TYPESAFE_API_KEY設定(Layer 4=12 M2-6の前まで・08 v0.5 D-14)
 
 ## M0 作業単位
 
@@ -164,6 +164,7 @@
 ## ゲート承認
 
 - G0: **承認済み**(2026-09-27 ユーザー承認。暫定エリア・送信記録=構造化ログ・test-ci後のgeo再取り込みの各supervisor判断を含む承認)。**M1以降の実装は同時にユーザー指示で一時停止**
+- G1: **承認済み**(2026-09-28 ユーザー承認。4条件=①02#1〜#3 ci緑〔マージ後main test-ci 627 passed〕②Parser構造化ゲート合格〔g1-result-20260928-210042: category 100%/time.start 93.75%/location 100%/participants 84.4%/budget 100%〕③alcoholゲート合格〔recall 100%・precision 100%〕④両ゲート再実行harness稼働〔make g1-gate〕。**02#4は(a)代替検証の注記どおり期限経過後のexpired遷移はM3-3実装時にG3で確認**。規則7改訂07 v0.6〔FN=A-034対応・当日うちに両ゲート再実行で合格〕を含む。実測は実プロバイダHaiku 4.5・プロンプトSHAで改訂版を確認済み)
 
 ## 並行トラック(開発外・人間領域)
 
