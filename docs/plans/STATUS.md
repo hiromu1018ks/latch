@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **ws-6完了**(2026-09-28マージ 8fbf91b。Parser実adapter+G1ゲートharness稼働・make g1-gateで再実行可)。→ **G1精度ゲート全件実行(71件・約$0.3)→G1判定をユーザー承認へ**。T3確定済み・02#4は(a)裁定済み・Jev系統はC案確定(132ee7b)。gemini・typesafe鍵は未設定=Embedding系統契約はM2前の残課題
+- 次の着手: ws-6完了(2026-09-28マージ 8fbf91b)。**G1全件実測を実施 → Parser構造化=合格・alcohol=不合格(FN1件=A-034)→ G1は未達**。次は**07 §2規則7のプロンプト改善案をユーザーへ提示して判断を仰ぐ**(打ち手はプロンプト改善のみ・変更時は両ゲート再実行)。T3確定済み・02#4は(a)裁定済み・Jev系統はC案確定(132ee7b)。gemini・typesafe鍵は未設定=Embedding系統契約はM2前の残課題
 
 ## M0 作業単位
 
@@ -42,6 +42,7 @@
 - [x] 02#1(下書き経路含む)〜#3がci環境でグリーン(2026-09-28。マージ後main test-ci 561 passed。下書き経路=CRUD試験のdraft系。10 第3節の振り分けどおりbackend integration試験が本体。**02#4は保存時検証(過去不可・+7日)まで実施済み・「期限経過後expired遷移」の確認はexpiry_sweeper不在(M3-3)のため未実施〔ws-3設計§6-2の裁定待ち〕**)
 - [ ] Parser構造化精度ゲート: 入力セット30件以上で category 85% / time.start 90% / location 90% / participants 80% / budget 90%(07 D-17)。**実施にはT1(実プロバイダ契約)とT3草案確定が前提**
 - [ ] alcohol_involved精度ゲート: recall 100%・precision下限90%(09 第4.3節)。同上
+  - **G1実測(2026-09-28・make g1-gate・証拠=docs/testassets/results/g1-result-20260928-203517.yaml)**: Parser構造化=**合格**(category 32/32・time.start 29/32=90.6%・location 32/32・participants 28/32=87.5%・budget 32/32)。alcohol=**不合格**(precision 100%〔fp=0〕・**recall 23/24=95.8%〔fn=1〕**。FN=A-034「barでコーラだけ飲むつもり。今日21時、天文館のbarで」をfalse判定)。**G1全体は未達**。打ち手は07 §2規則7のプロンプト改善のみ(12 §7)で、プロンプト変更時は両ゲートを再実行(09 §4.3)。背景: A-034はT3確定時のユーザー確認ケース(barでコーラ=true)だが、規則7内の「バー等の語→true」と「アルコールを指さない用法はfalse」の**優先関係がプロンプトに明示されていない**
 - [x] プロンプト変更のたびに両ゲートを再実行できる状態(2026-09-28。PARSER_SYSTEM_PROMPT定数+全文ピン試験+docs/testassets/入力セット〔confirmed〕。**ゲートharness実装済み=ws-6マージ 8fbf91b・make g1-gateで1コマンド再実行可**)
 
 ## G1判定の待ち事項(人間領域)
