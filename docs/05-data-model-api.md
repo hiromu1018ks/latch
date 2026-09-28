@@ -1,10 +1,13 @@
 # LATCH データモデル・API仕様書
 
-- 文書バージョン: v0.4
+- 文書バージョン: v0.5
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27(v0.3・v0.4更新: 同日)
-- 前提文書: 01 要件定義書 v0.4 / 02 スコープ合意書 v0.3 / 03 UX仕様書 v0.4 / 04 システムアーキテクチャ設計書 v0.4
+- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28)
+- 前提文書: 01 要件定義書 v0.5 / 02 スコープ合意書 v0.3 / 03 UX仕様書 v0.4 / 04 システムアーキテクチャ設計書 v0.5
+- v0.5の変更点(TypeSafe Jev採用): 07 v0.5(2026-09-28オーナー裁定・C案)に追従し、match_candidates.jev_resultとcalibration_records.predictionの格納形をSystem Oneモデル「TypeSafe Jev」の応答に合わせて更新した。全変更箇所と出典はdocs/reviews/jev-systemone-revision.mdに記録。主要変更は次のとおり。
+  - jev_result: reason(自由文)を廃止 — System Oneモデルはテキストを生成せず、フォールバックLLM時も一貫して無し(07 v0.5第4節)。格納するのはanswers値(noul確率・score正規化値)とconfidence、provider、model(応答のバージョンID)
+  - prediction: 数値のみの前提を明記し、provider・modelキーを追加。既存のキー(would_*・jev_5axis等)と型は不変
 - v0.4の変更点(prototype整合): フロントエンドの実装基準を`prototype/`に合わせる02 v0.3(D-03再決定)・プロダクトオーナー決定を反映。主要変更は次のとおり。
   - FR-52: intents.visibilityをhidden_until_match(条件一致までは非公開)/ summary_only(候補にだけ概要を表示)の2値へ再定義(02 v0.3 D-03再決定)。friendshipsのMVP実装は取りやめ(将来版として残置)。Layer 1の公開範囲チェックは廃止し、開示範囲の制御はlatches.proposalの生成分岐(第2節)へ移す(06 v0.4)
   - FR-53: 下書き保存を追加。POST /v1/intentsに`status: "draft"`を許可し(raw_text必須のみで保存、Embedding・MatchEventなし)、PATCH /v1/intents/{id}でのdraft→active遷移時に通常の検証とEvent発行を行う。GET /v1/intents(自Intent一覧・statusフィルタ)を追加(02 v0.3・03 v0.4の「下書き保存」)
@@ -132,7 +135,7 @@ intents.structured_dataは、Hard Constraintとして独立カラム化した項
 | prev_latch_score | numeric | NULL | 同一バージョン組内の直前評価のlatch_score。更新トランザクション内で上書き前に退避する(次行)。03 D-07の「スコア変化」判定の比較元である(比較手順は06第10節) |
 | prev_evaluated_at | timestamptz | NULL | 直前評価の時刻。更新トランザクション内でupdated_atとともに退避する |
 | retrieval_score / cheap_judge_score | numeric | NULL | 各層の結果 |
-| jev_result | jsonb | NULL | would_a_accept_b / would_b_accept_a 等(01第13節)。同一バージョン組の再評価では再実行せず保持する(06第9節のJevスキップ) |
+| jev_result | jsonb | NULL | System One互換の判定結果(v0.5・07 v0.5第4節)。キーは would_a_accept_b / would_b_accept_a(noul確率、0〜1)/ jev_5axis(purpose_fit等の5軸。scoreの0〜4値をレベル数で割った0〜1正規化値とconfidence)/ provider("typesafe_jev" / "fallback_llm")/ model(第一候補時の応答modelバージョンID。フォールバック時はnull)。自由文は格納しない(v0.5でreasonを廃止。実物のJevはテキストを生成せず、フォールバックLLM時も一貫して無し)。同一バージョン組の再評価では再実行せず保持する(06第9節のJevスキップ) |
 | latch_score | numeric | NULL | L = H × MutualScore × C |
 | status | text | NOT NULL | pending / evaluated / skipped(Jev未判定、04 D-16) / closed |
 | created_at / updated_at | timestamptz | NOT NULL | |
@@ -210,7 +213,7 @@ calibration_records.proposal_snapshotはこのproposalと同形とする(09 D-09
 | id | uuid | PK | |
 | latch_id | uuid | NULL, FK→latches | 対象となった提案。匿名化(D-13)でNULLへ |
 | intent_ids | uuid[] | NULL, CHECK(2≦配列長≦4) | ペア・グループを区別せず集合全体を保持(07のintent_a/bとグループのintent_idsを統一)。匿名化でNULLへ |
-| prediction | jsonb | NOT NULL | would_a_accept_b / would_b_accept_a / MutualScore / L(提案時のスコア)とjev_5axis(purpose_fit等の5軸、07第4節) |
+| prediction | jsonb | NOT NULL | 数値のみ(v0.5で明記。自由文reasonは生成しない、07 v0.5第4節)。would_a_accept_b / would_b_accept_a / MutualScore / L(提案時のスコア)とjev_5axis(purpose_fit等の5軸の0〜1正規化値とconfidence、07 v0.5第4節)。v0.5でprovider("typesafe_jev" / "fallback_llm")・model(応答のバージョンID)をキーとして追加(判定経路の分離観測、09 v0.5第4節) |
 | proposal_snapshot | jsonb | NOT NULL | 提示した条件サマリ。latches.proposalと同形(第2節)。soft/NG条件の文言は含まない(08第2.3節)。匿名化後も保持 |
 | actual_responses | jsonb | NOT NULL | 全員の回答(latches.responsesと同形)。匿名化でuser_idを除去し、回答種別と時刻は残す |
 | matched | boolean | NOT NULL | 実際に成立したか |
