@@ -6,11 +6,12 @@
 
 ## 現在
 
-- フェーズ: **M1完了**(2026-09-28 G1承認)→ 次はM2(マッチングパイプライン)。**M2着手はユーザーのGoサイン待ち**
+- フェーズ: **M2進行中**(2026-09-28 Goサイン+単位表承認。単位=ws-1〜ws-8)
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: M2開始のGoサイン待ち。**M2前に必要な人間領域**: Embedding系統(gemini-embedding-001)の契約とLATCH_GEMINI_API_KEY設定(Embedding Worker=12 M2-2の前まで)・TypeSafe Jevの契約詳細確認とLATCH_TYPESAFE_API_KEY設定(Layer 4=12 M2-6の前まで・08 v0.5 D-14)
+- 次の着手: ws-1(イベント駆動基盀)agent1設計
+- プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
 
@@ -23,6 +24,34 @@
 | ws-4 | 地物データ取り込み(位置参照情報+OSM→PostGIS)・正転/逆転ジオコーディング | M0-6 / C5 | ws-1(PostGIS) | 完了 |
 
 実行wave: 雛形 → (ws-1 ∥ ws-2) → (ws-3 ∥ ws-4)
+
+## M2 作業単位
+
+| 単位 | 内容 | 出典(12) | 依存 | 状態 |
+|---|---|---|---|---|
+| ws-1 | イベント駆動基盤: Match Event 5種の発行網羅(intents CRUD組み込み・resumeはversion+1のupdate種発行)・Pub/Sub連携(ci環境の具象は設計で確定)・Matching Worker第1段(draft対象外・作成即時/更新のみdebounce 10秒トレーリング窓・idempotency key(event_type, source_intent_id, version)・version検査・5回再試行→quarantined・削除Eventの候補無効化・参照先不在=processed破棄とpayload不正=隔離の区別) | M2-1 / 06 §9・01 §16・10 §4.7 | M1 ws-3(intents)・M0(worker・Redis) | 未着手 |
+| ws-2 | Embedding Worker: 正規化テキスト生成(raw_text不使用)・LLM Gateway Embedding系統real化(gemini-embedding-001・timeout 2秒・再試行なし)・intents.embedding/embedding_model書き込み・embedding_completed発行・バックフィル・embedding既存はスキップして第2段相当へ直接投入 | M2-2 / 07 §3・06 §9・D-15 | ws-1 | 未着手 |
+| ws-3 | Layer 1 Hard Filter+Layer 2 Candidate Retrieval: SQL+PostGIS判定(自己除外・時間交差+flexibility・ST_DWithin(r_a+r_b)・ペア予算min 500円未満fail・人数2∈双方・ブロック・category_primary完全一致・飲酒ペアは双方20歳以上)・正規化テキストHNSW cosine上位K_v=50(同点intent_id昇順)・embedding IS NULL/draft対象外。02#9 Hard Filter単体試験 | M2-3, M2-4 / 06 §2〜§3・05 §3 | ws-2(fixture直入れで並行可) | 未着手 |
+| ws-4 | Layer 3 Cheap Judge+コスト保護: cheap_score=0.5×類似度+0.3×ルール+0.2×語彙重なり(D-04降格NGは計算対象外)上位K_c=20・Jev予算(1Intent 40回/日・1ユーザー120回/日・Redis JST日付キー)・再評価頻度30分(reeval:{intent_id} TTL)・D-16カウンタ(日次30,000・月次600,000・80% alertに第一候補/フォールバック内訳) | M2-5, M2-9 / 06 §4〜§5・04 §5 | ws-3 | 未着手 |
+| ws-5 | Layer 4 Jev: LLM GatewayへSystem One IF追加(state+型つき質問→answers)・TypeSafe Jev(jev-1.13.0)・429/529/timeoutでフォールバックLLM(Sonnet 5)へ切替(SDK backoff無効化・再試行なし)・jev_resultへprovider/model記録・K_j=8配分(1対1最低4回保証・未判定ペア継続優先)・同一評価世代スキップ(同バージョン組はH再検証のみ) | M2-6 / 06 §5・07 v0.5 §1・§4・04 §4 D-16 | ws-4・T1(確定済み) | 未着手 |
+| ws-6 | Layer 5 LATCH Engine: L=H×MutualScore×C(mutual=min)・閾値0.80・D-08上限(日6件/ユーザー・同時3件/Intent)超過はlatches candidate保留・提示順(対象時刻昇順・Score降順)・提示時D-05式再計算・proposal生成(visibility分岐: summary_only全フィールド/hidden_until_matchはheadcount+match_level)・nearby_also存在通知・muted通知抑制・D-07再提案制御(defer抑制min(24時間,残時間/2)・\|Δscore\|≧0.05・世代変化は無条件)・latch_status_events記録・再評価経路(30分Bucket・catch-upスキャン2時間/30分) | M2-7 / 06 §6・§9〜§10・03 D-05/D-07/D-08 | ws-5 | 未着手 |
+| ws-7 | グループマッチ: 候補Pool(同一Bucket・地域・カテゴリ・Layer 3通過・上限15・cheap_score降順)・貪欲法(種max>=3+Hard互換追加・3〜4人・作成user_id相異)・group_candidates記録+全ペアmatch_candidates生成・集約=H×min(ペアMutualScore)×C・通知はaggregate降順1集合のみ・未判定ペアはstatus=candidate保持し次評価のJev予算最優先 | M2-8 / 06 §5・§7〜§8・D-06・D-24 | ws-6 | 未着手 |
+| ws-8 | 縮退運転+G2ハーネス: circuit breaker(窓1分・第一候補エラー率50%超 or p95>6秒で開放・開放中フォールバックLLM継続・60秒後半開・1リクエスト試験)・フォールバックも失敗でskipped保留・02#5〜#12 E2E・K上限裏付け試験・冪等性(同一Event2回投入)・障害注入 | M2-10 / 06 D-15・10 §4.5〜§4.7 | ws-1〜ws-7 | 未着手 |
+
+実行wave: ws-1 → (ws-2 ∥ ws-3) → ws-4 → ws-5 → ws-6 → ws-7 → ws-8
+
+## G2(完了条件 — 12 M2より)
+
+- [ ] 02#5〜#12がci/stagingでグリーン(#9はHard Filter単体試験。10 第3節)
+- [ ] K上限の裏付け試験: 密集配置で Vector ≤50 / Cheap Judge ≤20 / Jev ≤8回 / Pool ≤15が記録で守られ、切り詰めが決定的(K_v超過時の同点intent_id昇順。10 第4.6節)
+- [ ] 冪等性: 同一Event2回投入でmatch_candidatesが二重生成しない(10 第4.7節)
+- [ ] 縮退: 第一候補TypeSafe Jevの障害注入でフォールバックLLMへ切替し判定継続、フォールバックLLMも障害でskipped保留し提案ゼロ、circuit breakerが開放→半開する(10 第4.5節)
+- [ ] 日本語評価(09 v0.5 第4節のG2必須): TypeSafe Jevのゴールドセット(日本語・評価ペア500件以上)による較正・精度評価を、オーナーが確定した合格基準で実施。不合格時はフォールバックLLM繰上げ判断をオーナーへ持ち帰る
+
+## G2判定の待ち事項(人間領域)
+
+1. **評価ペア500件+の整備と合格基準の確定**(オーナー) — T3と同じ「エージェント草案→ユーザー確認」方式の拡張を想定。進め方はws-5着手前までに協議
+2. **TypeSafe契約詳細の確認記録**(任意) — 2026-09-28ユーザー申告「すべて契約済み」。ZDR・漏洩通知・Telemetry条項の確認内容をdocs/reviews/へ文書化するならG2まで
 
 ## M1 作業単位
 
@@ -148,6 +177,10 @@
   - 規則7へ「場所の語の優先」と「ノンアルコール明示」を追記(07 v0.6・ユーザー文面承認)。両ゲート再実行=**Parser合格・alcohol合格(recall/precision 100%・A-034はTP是正)・overall_passed=true**
   - supervisor独立検証: 証拠数値・プロンプトSHA変更(改訂版で実測された証左)・unit 533 passed再実行一致・**マージ後main test-ci 627 passed**(api再ビルド後)・geo復旧済み
 
+### M2(2026-09-28〜)
+
+- M2開始 / 2026-09-28ユーザーGoサイン+単位表承認(ws-1〜ws-8)。プロバイダ3系統契約済み申告とAPI鍵実値確認を記録
+
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
 共有ci-db(compose常設・名前付きボリューム)の `alembic_version` はworktree間で取り合う状態になる。
@@ -169,6 +202,6 @@
 
 ## 並行トラック(開発外・人間領域)
 
-- T1 LLMプロバイダ契約(D-14の6基準+契約5条件): 未着手
+- T1 LLMプロバイダ契約(D-14の6基準+契約5条件): **完了**(2026-09-28ユーザー申告「すべて契約済み」)。Parser=Anthropic Haiku 4.5・Embedding=gemini-embedding-001・Layer 4=TypeSafe Jev+フォールバックSonnet 5。API鍵3本とも実値確認済み(スーパーバイザー確認)。TypeSafe契約詳細の文書化は「G2判定の待ち事項」2参照
 - T2 初期エリアの最終指定(11 第2節の4基準でスコアリング): 未着手
-- T3 ゴールドセット整備(シード200〜300件・期待値表・飲酒判定セット): M1開始に伴い着手対象。G1判定までにParser入力セット30件+・飲酒判定セット30件+が最低必要(進め方はユーザーと協議)
+- T3 ゴールドセット整備: Parser入力セット35件+飲酒判定セット36件は確定済み(G1で使用)。**G2日本語評価用の評価ペア500件+とM4共有資産(シード200〜300件・期待値表)の整備が残る**(前者はG2前・進め方協議待ち)
