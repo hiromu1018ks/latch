@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: ws-6完了(2026-09-28マージ 8fbf91b)。**G1全件実測を実施 → Parser構造化=合格・alcohol=不合格(FN1件=A-034)→ G1は未達**。次は**07 §2規則7のプロンプト改善案をユーザーへ提示して判断を仰ぐ**(打ち手はプロンプト改善のみ・変更時は両ゲート再実行)。T3確定済み・02#4は(a)裁定済み・Jev系統はC案確定(132ee7b)。gemini・typesafe鍵は未設定=Embedding系統契約はM2前の残課題
+- 次の着手: **G1完了条件4項目とも実測・実装済み**(02#1〜#3緑・02#4は(a)代替検証・両精度ゲート合格 210042・再実行harness稼働)→ **G1判定の包括承認をユーザーへ申請中**。承認後にM1完了。M2着手は別途ユーザーのGoサインを得る
 
 ## M0 作業単位
 
@@ -40,8 +40,8 @@
 ## G1(完了条件 — 12 M1より)
 
 - [x] 02#1(下書き経路含む)〜#3がci環境でグリーン(2026-09-28。マージ後main test-ci 561 passed。下書き経路=CRUD試験のdraft系。10 第3節の振り分けどおりbackend integration試験が本体。**02#4は保存時検証(過去不可・+7日)まで実施済み・「期限経過後expired遷移」の確認はexpiry_sweeper不在(M3-3)のため未実施〔ws-3設計§6-2の裁定待ち〕**)
-- [ ] Parser構造化精度ゲート: 入力セット30件以上で category 85% / time.start 90% / location 90% / participants 80% / budget 90%(07 D-17)。**実施にはT1(実プロバイダ契約)とT3草案確定が前提**
-- [ ] alcohol_involved精度ゲート: recall 100%・precision下限90%(09 第4.3節)。同上
+- [x] Parser構造化精度ゲート: 入力セット30件以上で category 85% / time.start 90% / location 90% / participants 80% / budget 90%(07 D-17)。**2026-09-28実測合格**(g1-result-20260928-210042: category 100%・time.start 93.75%・location 100%・participants 84.4%・budget 100%)
+- [x] alcohol_involved精度ゲート: recall 100%・precision下限90%(09 第4.3節)。**2026-09-28実測合格**(g1-result-20260928-210042: recall 100%・precision 100%・FN=0。初回203517はrecall 95.8%〔FN=A-034〕→規則7改訂〔07 v0.6〕で是正)
   - **G1実測(2026-09-28・make g1-gate・証拠=docs/testassets/results/g1-result-20260928-203517.yaml)**: Parser構造化=**合格**(category 32/32・time.start 29/32=90.6%・location 32/32・participants 28/32=87.5%・budget 32/32)。alcohol=**不合格**(precision 100%〔fp=0〕・**recall 23/24=95.8%〔fn=1〕**。FN=A-034「barでコーラだけ飲むつもり。今日21時、天文館のbarで」をfalse判定)。**G1全体は未達**。打ち手は07 §2規則7のプロンプト改善のみ(12 §7)で、プロンプト変更時は両ゲートを再実行(09 §4.3)。背景: A-034はT3確定時のユーザー確認ケース(barでコーラ=true)だが、規則7内の「バー等の語→true」と「アルコールを指さない用法はfalse」の**優先関係がプロンプトに明示されていない**
 - [x] プロンプト変更のたびに両ゲートを再実行できる状態(2026-09-28。PARSER_SYSTEM_PROMPT定数+全文ピン試験+docs/testassets/入力セット〔confirmed〕。**ゲートharness実装済み=ws-6マージ 8fbf91b・make g1-gateで1コマンド再実行可**)
 
@@ -143,6 +143,9 @@
   - supervisor独立検証: lint緑・unit 533 passed(再実行で一致)・差分スコープ準拠(依存追加はanthropic・pyyamlのみ)・実APIスモーク(--limit 5)exit 0・**マージ後main test-ci 627 passed**(api再ビルド後)・geo実データ復旧済み(46+563行)
   - 経過: 実APIスモークが401で一度BLOCKED → 原因はAPI鍵ではなく**環境変数ANTHROPIC_BASE_URL(z.aiプロキシ)をSDKが自動採用**したため(supervisorが特定・公式API直接curl=200で鍵の有効性を証明)。Settingsへllm_anthropic_base_url(既定=公式API)追加+AsyncAnthropicへの明示渡しで解消(b769308・supervisor裁定=design §3.2承認済み拡張)。詳細は報告書§5.1
 - 学習資産追従: ws-6分 cbb5e9c(how-to「G1精度ゲートを実行するには」新設・第5章拡張・00-environment.mdコマンド表へmake g1-gate追加・lab追従。教材検証の部分実行レポート203258も保管)
+- G1プロンプト修正(ws-6-g1fix) / マージ 064053b(規則7改訂 ee54bb4・実測証拠 e491661・報告書 a164e4f)/ docs/plans/M1/ws-6-g1fix-report.md + docs/testassets/results/g1-result-20260928-210042.yaml / 2026-09-28
+  - 規則7へ「場所の語の優先」と「ノンアルコール明示」を追記(07 v0.6・ユーザー文面承認)。両ゲート再実行=**Parser合格・alcohol合格(recall/precision 100%・A-034はTP是正)・overall_passed=true**
+  - supervisor独立検証: 証拠数値・プロンプトSHA変更(改訂版で実測された証左)・unit 533 passed再実行一致・**マージ後main test-ci 627 passed**(api再ビルド後)・geo復旧済み
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
