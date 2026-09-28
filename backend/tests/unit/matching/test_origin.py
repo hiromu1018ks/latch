@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 from latch.core.clock import FakeClock
+from latch.worker.matching.candidates import normalize_pair
 from latch.worker.matching.origin import (
     SKIP_EMBEDDING_NULL,
     SKIP_GEO_MISSING,
@@ -169,3 +170,19 @@ async def test_bind_params_keys_and_values():
     assert params["origin_user_id"] == USER
     assert params["origin_budget"] is None
     assert params["now"] == loaded.origin.evaluated_at
+
+
+# -- intent_a < intent_b 正規化(design §2.3・§4.1) --
+
+
+async def test_normalize_pair_orders_by_uuid():
+    """正規化 intent_a_id < intent_b_id(UUID比較はPython側 — 05 §2)。"""
+    loaded = await _load(_row())
+    assert loaded.origin is not None
+    org = loaded.origin
+    smaller = uuid.UUID("00000000-0000-4000-8000-000000000001")
+    bigger = uuid.UUID("ffffffff-ffff-4fff-8fff-ffffffffffff")
+    # 起点が大きい側 → a=候補
+    assert normalize_pair(org, smaller) == (smaller, org.intent_id)
+    # 起点が小さい側 → a=起点
+    assert normalize_pair(org, bigger) == (org.intent_id, bigger)

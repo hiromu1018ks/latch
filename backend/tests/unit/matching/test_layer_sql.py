@@ -7,7 +7,7 @@ test_store_sql.py と test_pubsub_bus_sdk_calls.py の流儀(bind param の
 
 from sqlalchemy.dialects import postgresql
 
-from latch.worker.matching import layer1, layer2
+from latch.worker.matching import candidates, layer1, layer2
 
 _WHERE_KEYS = (
     "origin_user_id",
@@ -90,4 +90,36 @@ def test_layer1_sql_all_bind_params_recognized():
 def test_layer2_sql_all_bind_params_recognized():
     compiled = str(layer2._SELECT_TOPK.compile(dialect=postgresql.dialect()))
     for key in _LAYER2_KEYS:
+        assert f":{key}" not in compiled, key
+
+
+# -- candidates UPSERT のSQLピン(design §2.3) --
+
+
+def test_upsert_on_conflict_targets_unique_columns():
+    sql = str(candidates._UPSERT)
+    assert (
+        "ON CONFLICT (intent_a_id, intent_b_id,"
+        " intent_a_version, intent_b_version)" in sql
+    )
+    assert "DO UPDATE SET" in sql
+    assert "retrieval_score = EXCLUDED.retrieval_score" in sql
+    assert "updated_at = EXCLUDED.updated_at" in sql
+
+
+def test_upsert_do_update_touches_score_only():
+    """DO UPDATE SET は retrieval_score/updated_at のみ(statusを壊さない —
+    design §2.3。evaluated/skipped/closedへの遷移はws-4以降/stage1の担当)。"""
+    sql = str(candidates._UPSERT)
+    update_clause = sql.split("DO UPDATE SET", 1)[1]
+    assert "status" not in update_clause
+    assert "cheap_judge_score" not in update_clause
+    # 新規行は status='pending'(05 §2・Layer 1〜2時点でJev未評価)
+    insert_part = sql.split("DO UPDATE", 1)[0]
+    assert "'pending'" in insert_part
+
+
+def test_upsert_sql_all_bind_params_recognized():
+    compiled = str(candidates._UPSERT.compile(dialect=postgresql.dialect()))
+    for key in _UPSERT_KEYS:
         assert f":{key}" not in compiled, key
