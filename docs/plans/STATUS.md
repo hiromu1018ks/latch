@@ -142,6 +142,7 @@
 - ws-6 / マージ 8fbf91b(実装はe195324まで・14コミット)/ docs/plans/M1/ws-6-report.md(+スモーク証拠 docs/testassets/results/g1-result-20260928-202115.yaml)/ 2026-09-28
   - supervisor独立検証: lint緑・unit 533 passed(再実行で一致)・差分スコープ準拠(依存追加はanthropic・pyyamlのみ)・実APIスモーク(--limit 5)exit 0・**マージ後main test-ci 627 passed**(api再ビルド後)・geo実データ復旧済み(46+563行)
   - 経過: 実APIスモークが401で一度BLOCKED → 原因はAPI鍵ではなく**環境変数ANTHROPIC_BASE_URL(z.aiプロキシ)をSDKが自動採用**したため(supervisorが特定・公式API直接curl=200で鍵の有効性を証明)。Settingsへllm_anthropic_base_url(既定=公式API)追加+AsyncAnthropicへの明示渡しで解消(b769308・supervisor裁定=design §3.2承認済み拡張)。詳細は報告書§5.1
+- 学習資産追従: ws-6分 cbb5e9c(how-to「G1精度ゲートを実行するには」新設・第5章拡張・00-environment.mdコマンド表へmake g1-gate追加・lab追従。教材検証の部分実行レポート203258も保管)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
