@@ -15,6 +15,7 @@ from datetime import date
 from typing import Any
 
 from latch.core.clock import Clock
+from latch.llm.anthropic import AnthropicParserProvider
 from latch.llm.errors import LLMError, LLMProviderError, LLMTimeoutError
 from latch.llm.providers import EmbeddingProvider, JevProvider, ParserProvider
 from latch.llm.records import SendRecord, SendStatus, SystemName, send_log
@@ -169,19 +170,39 @@ class LLMGateway:
         return result
 
 
-def build_llm_gateway(clock: Clock, settings: Settings) -> LLMGateway:
-    """設定からGatewayを構築する(design §2.7)。
+def build_llm_gateway(
+    clock: Clock,
+    settings: Settings,
+    *,
+    parser_system_prompt: str | None = None,
+    parser_output_schema: dict | None = None,
+) -> LLMGateway:
+    """設定からGatewayを構築する(design §2.7・ws-6 design §2.3/§2.4)。
 
-    M0ではllm_mode="stub"のみ。T1確定後の実装追加で"real"を選択できるように
-    なるが、その分岐はこの関数に閉じる(呼び出し側はGateway IFのみを知る)。
+    llm_mode="stub": 3系統すべてStubLLM(引数は無視 — 2引数呼び出し後方互換)。
+    llm_mode="real": Parser系統のみAnthropicParserProvider(Embedding/Jevは
+    StubLLM継続 — gemini・typesafe鍵は未設定・実装はM2)。鍵・プロンプト・
+    スキーマの欠落はfail-fast(静かにスタブへ落ちない)。
     """
-    if settings.llm_mode != "stub":
-        raise ValueError(
-            f"unknown llm_mode: {settings.llm_mode!r} (M0では 'stub' のみ)"
-        )
     stub = StubLLM(
         delay_parser_ms=settings.llm_stub_delay_parser_ms,
         delay_embedding_ms=settings.llm_stub_delay_embedding_ms,
         delay_jev_ms=settings.llm_stub_delay_jev_ms,
     )
-    return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub)
+    if settings.llm_mode == "stub":
+        return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub)
+    if settings.llm_mode == "real":
+        if not settings.llm_anthropic_api_key:
+            raise ValueError("llm_mode='real' requires llm_anthropic_api_key")
+        if parser_system_prompt is None or parser_output_schema is None:
+            raise ValueError(
+                "llm_mode='real' requires parser_system_prompt and parser_output_schema"
+            )
+        parser = AnthropicParserProvider(
+            api_key=settings.llm_anthropic_api_key,
+            system_prompt=parser_system_prompt,
+            output_schema=parser_output_schema,
+            base_url=settings.llm_anthropic_base_url,
+        )
+        return LLMGateway(clock=clock, parser=parser, embedding=stub, jev=stub)
+    raise ValueError(f"unknown llm_mode: {settings.llm_mode!r} ('stub' or 'real')")

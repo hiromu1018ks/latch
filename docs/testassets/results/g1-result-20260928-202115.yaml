@@ -1,0 +1,487 @@
+meta:
+  trial_id: g1-20260928-202115
+  executed_at: '2026-09-28T11:21:15.069461+00:00'
+  llm_mode: real
+  model: claude-haiku-4-5
+  parser_prompt_sha256: 80768d524398e4c9f286899047575a161433a9335d43058c7b4a6cc138e2e895
+  input_sets:
+    parser_struct:
+      file: g1-parser-struct.yaml
+      sha256: 37169a64a33240128addee6179a86f30c630ce88b9b2848742cb9aec91dc7013
+    alcohol:
+      file: g1-alcohol.yaml
+      sha256: b88d5c586667d86f06623d5d5ba9e7083b7ec5500dfbbee308c496743d67f9ac
+  base_current_datetime: '2026-10-01T11:30:00+09:00'
+  limit: 5
+parser_struct:
+  fields:
+    category:
+      match: 5
+      total: 5
+      rate: 1.0
+      threshold: 0.85
+      passed: true
+    time_start:
+      match: 5
+      total: 5
+      rate: 1.0
+      threshold: 0.9
+      passed: true
+    location:
+      match: 5
+      total: 5
+      rate: 1.0
+      threshold: 0.9
+      passed: true
+    participants:
+      match: 5
+      total: 5
+      rate: 1.0
+      threshold: 0.8
+      passed: true
+    budget:
+      match: 5
+      total: 5
+      rate: 1.0
+      threshold: 0.9
+      passed: true
+  passed: true
+  cases:
+  - id: P-001
+    fields:
+      category:
+        expected: drinking
+        actual: drinking
+        match: true
+      time_start:
+        expected: '2026-10-01T20:00:00+09:00'
+        actual: '2026-10-01T20:00:00+09:00'
+        match: true
+      location:
+        expected: 天文館
+        actual: 天文館
+        match: true
+      participants:
+        expected:
+        - null
+        - null
+        actual:
+          min: null
+          max: null
+        match: true
+      budget:
+        expected: 3000
+        actual: 3000
+        match: true
+    alcohol_involved:
+      expected: true
+      actual: true
+      match: true
+    actual:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-01T20:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 天文館
+        radius_m: null
+        flexibility: null
+      budget:
+        max: 3000
+        currency: JPY
+      participants:
+        min: null
+        max: null
+      soft_constraints:
+      - 軽く
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+  - id: P-002
+    fields:
+      category:
+        expected: drinking
+        actual: drinking
+        match: true
+      time_start:
+        expected: '2026-10-02T19:00:00+09:00'
+        actual: '2026-10-02T19:00:00+09:00'
+        match: true
+      location:
+        expected: 呉服町
+        actual: 呉服町
+        match: true
+      participants:
+        expected:
+        - null
+        - null
+        actual:
+          min: null
+          max: null
+        match: true
+      budget:
+        expected: 4000
+        actual: 4000
+        match: true
+    alcohol_involved:
+      expected: true
+      actual: true
+      match: true
+    actual:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-02T19:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 呉服町
+        radius_m: null
+        flexibility: null
+      budget:
+        max: 4000
+        currency: JPY
+      participants:
+        min: null
+        max: null
+      soft_constraints: []
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+  - id: P-003
+    fields:
+      category:
+        expected: drinking
+        actual: drinking
+        match: true
+      time_start:
+        expected: '2026-10-03T20:00:00+09:00'
+        actual: '2026-10-03T20:00:00+09:00'
+        match: true
+      location:
+        expected: 天文館
+        actual: 天文館
+        match: true
+      participants:
+        expected:
+        - null
+        - null
+        actual:
+          min: null
+          max: null
+        match: true
+      budget:
+        expected: 5000
+        actual: 5000
+        match: true
+    alcohol_involved:
+      expected: true
+      actual: true
+      match: true
+    actual:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-03T20:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 天文館
+        radius_m: null
+        flexibility: null
+      budget:
+        max: 5000
+        currency: JPY
+      participants:
+        min: null
+        max: null
+      soft_constraints: []
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+  - id: P-004
+    fields:
+      category:
+        expected: drinking
+        actual: drinking
+        match: true
+      time_start:
+        expected: '2026-10-02T21:00:00+09:00'
+        actual: '2026-10-02T21:00:00+09:00'
+        match: true
+      location:
+        expected: 鹿児島中央駅前
+        actual: 中央駅前
+        match: true
+      participants:
+        expected:
+        - 2
+        - 2
+        actual:
+          min: 2
+          max: 2
+        match: true
+      budget:
+        expected: null
+        actual: null
+        match: true
+    alcohol_involved:
+      expected: true
+      actual: true
+      match: true
+    actual:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-02T21:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 中央駅前
+        radius_m: null
+        flexibility: null
+      budget:
+        max: null
+        currency: JPY
+      participants:
+        min: 2
+        max: 2
+      soft_constraints:
+      - 静かに
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+  - id: P-005
+    fields:
+      category:
+        expected: drinking
+        actual: drinking
+        match: true
+      time_start:
+        expected: '2026-10-01T22:00:00+09:00'
+        actual: '2026-10-01T22:00:00+09:00'
+        match: true
+      location:
+        expected: 高見馬場
+        actual: 高見馬場
+        match: true
+      participants:
+        expected:
+        - null
+        - null
+        actual:
+          min: null
+          max: null
+        match: true
+      budget:
+        expected: 3000
+        actual: 3000
+        match: true
+    alcohol_involved:
+      expected: true
+      actual: true
+      match: true
+    actual:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-01T22:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 高見馬場
+        radius_m: null
+        flexibility: null
+      budget:
+        max: 3000
+        currency: JPY
+      participants:
+        min: null
+        max: null
+      soft_constraints: []
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+alcohol_reference:
+  tp: 5
+  fp: 0
+  fn: 0
+  tn: 0
+alcohol:
+  tp: 5
+  fp: 0
+  fn: 0
+  tn: 0
+  unclassified: 0
+  recall: 1.0
+  precision: 1.0
+  passed: true
+  cases:
+  - id: A-001
+    expected: true
+    classification: tp
+    actual: true
+    actual_raw:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-01T20:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 天文館
+        radius_m: null
+        flexibility: null
+      budget:
+        max: 3000
+        currency: JPY
+      participants:
+        min: 1
+        max: 1
+      soft_constraints: []
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+  - id: A-002
+    expected: true
+    classification: tp
+    actual: true
+    actual_raw:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-02T19:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 天文館
+        radius_m: null
+        flexibility: null
+      budget:
+        max: null
+        currency: JPY
+      participants:
+        min: null
+        max: null
+      soft_constraints: []
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+  - id: A-003
+    expected: true
+    classification: tp
+    actual: true
+    actual_raw:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-03T19:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 天文館
+        radius_m: null
+        flexibility: null
+      budget:
+        max: null
+        currency: JPY
+      participants:
+        min: null
+        max: null
+      soft_constraints:
+      - サワー飲み放題
+      - 宴会
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+  - id: A-004
+    expected: true
+    classification: tp
+    actual: true
+    actual_raw:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-02T19:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 天文館
+        radius_m: null
+        flexibility: null
+      budget:
+        max: null
+        currency: JPY
+      participants:
+        min: null
+        max: null
+      soft_constraints:
+      - ぬる燗
+      - ちびちびやりたい
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+  - id: A-005
+    expected: true
+    classification: tp
+    actual: true
+    actual_raw:
+      category:
+        primary: drinking
+        secondary: null
+      alcohol_involved: true
+      time:
+        start: '2026-10-02T20:00:00+09:00'
+        end: null
+        flexibility_minutes: null
+      location:
+        name: 天文館
+        radius_m: null
+        flexibility: null
+      budget:
+        max: null
+        currency: JPY
+      participants:
+        min: null
+        max: null
+      soft_constraints:
+      - ワインバル
+      - グラスワイン2杯くらい
+      negative_constraints: []
+      ng_unverifiable: []
+    error: null
+error_cases:
+- id: E-001
+  expected_error: 422 VALIDATION_ERROR
+  actual: 422 VALIDATION_ERROR
+  ok: true
+- id: E-002
+  expected_error: 422 VALIDATION_ERROR
+  actual: 422 VALIDATION_ERROR
+  ok: true
+- id: E-003
+  expected_error: 422 VALIDATION_ERROR
+  actual: 422 VALIDATION_ERROR
+  ok: true
+incomplete: false
+overall_passed: true

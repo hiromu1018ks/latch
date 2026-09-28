@@ -1,0 +1,44 @@
+# test_cases.py用の正常系最小セット(docs実YAMLと同じ構造・ fixtures専用の短id)
+meta:
+  status: confirmed
+  created: "2026-09-28"
+  current_datetime: "2026-10-01T11:30:00+09:00"
+  case_count: 2
+  error_case_count: 1
+
+cases:
+  - id: P-901
+    text: "今夜20時から天文館で飲みたい。ひとり3000円までで"
+    author_age: 26
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-01T20:00:00+09:00", end: null}
+      location: {name: 天文館}
+      participants: {min: null, max: null}
+      budget: {max: 3000}
+    needs_review: false
+    note: "fixtures用"
+
+  - id: P-902
+    text: "明日19時から呉服町で軽く一杯。予算4000円くらい"
+    author_age: 30
+    expected:
+      category: drinking
+      alcohol_involved: true
+      time: {start: "2026-10-02T19:00:00+09:00", end: null}
+      location: {name: 呉服町}
+      participants: {min: null, max: null}
+      budget: {max: 4000}
+    needs_review: false
+    note: "fixtures用"
+
+error_cases:
+  - id: E-901
+    text: "今日誰かと飲みたい"
+    author_age: null
+    expected:
+      error: "422 VALIDATION_ERROR"
+      missing: [time.start, location.name]
+    needs_review: false
+    note: "fixtures用"

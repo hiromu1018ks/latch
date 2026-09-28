@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -40,3 +40,6 @@ geo-import: ## settingsのエリア設定でISJ+OSMをPostGISへ取り込み(CSV
 
 geo-verify: ## 正転・逆転のサンプル確認(PostGIS完結の動作確認・座標は出さない)
 	cd backend && uv run --group geo python -m latch.geo verify
+
+g1-gate: ## G1精度ゲートharness(実API・.envにLATCH_LLM_MODE=real+LATCH_ANTHROPIC_API_KEY必須)
+	cd backend && uv run --env-file ../.env python -m latch.g1gate

@@ -49,6 +49,7 @@ from latch.intents.mapping import (
     resolve_for_active,
     resolve_for_draft,
 )
+from latch.intents.prompt import PARSER_SYSTEM_PROMPT
 from latch.intents.schema import WARNING_MESSAGE_NG_DOWNGRADED, ParserOutput
 from latch.intents.store import IntentRow, IntentStore, UserRow
 from latch.llm.gateway import build_llm_gateway
@@ -165,13 +166,19 @@ class IntentParseService:
 def make_intent_parse_service(
     *, clock: Clock, settings: Settings, user_lookup: UserLookup
 ) -> IntentParseService:
-    """設定からIntentParseServiceを構築する(design §2.7)。
+    """設定からIntentParseServiceを構築する(design §2.7・ws-6 design §2.3)。
 
     llm/へのimport(build_llm_gateway)はこのファクトリに限る — サービス本体は
-    LLM非依存(design §2.2)。llm_mode="stub" は build_llm_gateway が検証する
-    (M0と同一パターン)。
+    LLM非依存。プロンプト全文(PARSER_SYSTEM_PROMPT)と出力スキーマ
+    (ParserOutput.model_json_schema)をここで注入する。llm_modeの検証は
+    build_llm_gatewayが持つ("real"では鍵・引数欠落をfail-fast)。
     """
-    gateway = build_llm_gateway(clock, settings)
+    gateway = build_llm_gateway(
+        clock,
+        settings,
+        parser_system_prompt=PARSER_SYSTEM_PROMPT,
+        parser_output_schema=ParserOutput.model_json_schema(),
+    )
     return IntentParseService(clock=clock, parser=gateway, user_lookup=user_lookup)
 
 
