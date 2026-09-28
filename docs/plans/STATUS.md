@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **Jev系統は確定済み**(2026-09-28 C案裁定: 第一候補=TypeSafe Jev・フォールバック=Anthropic Sonnet 5。docs v0.5一式改版済み 132ee7b)。**G1残要件はParserプロバイダの契約のみ**(T1 v0.2推奨=Anthropic Haiku 4.5。ユーザーの契約・API鍵準備待ち→実プロバイダadapter→G1精度ゲート実測→G1判定)。T3確定済み・02#4は(a)裁定済み
+- 次の着手: **Jev系統・Parser系統とも確定済み**(Jev: 2026-09-28 C案裁定=第一候補TypeSafe Jev+フォールバックAnthropic Sonnet 5・docs v0.5改版 132ee7b。Parser: 2026-09-28 Anthropic Haiku 4.5で契約確定・LATCH_ANTHROPIC_API_KEYを.envに設定済み〔gemini・typesafe鍵は未設定=Embedding系統契約はM2前の残課題〕)。→ **ws-6(実プロバイダadapter+G1精度ゲートharness)→G1精度ゲート実測→G1判定**。T3確定済み・02#4は(a)裁定済み
 
 ## M0 作業単位
 
@@ -33,7 +33,7 @@
 | ws-3 | intents CRUD: POST(active/draft)・GET・PATCH・DELETE・pause/resume・draft→active遷移(全検証通過後に受理・初回MatchEvent発行)。ジオコーディング正転の保存組み込み・alcohol_involvedのサーバ側確定・時刻検証(過去不可・+7日上限・active時のみ) | M1-4, M1-5 / 05 §5〜§6 | ws-1・ws-2 | 完了 |
 | ws-4 | レート制限: Active 5件・作成20件/日・更新6回/時・API 60req/分(Redis・JST日付キー) | M1-6 / 08 §5.4・04 §5 | ws-3・M0(Redis) | 完了 |
 | ws-5 | フロントエンド(prototype準拠): parse連携・条件リストの動的連結・有効期限の既定選択計算+disabled化・必須3フィールド催促・判定不能NG条件のNG行・注意表示・保存API接続(active/draft。03 第10節の既知差分解消) | M1-7 / 03 §3・§10 | ws-2〜ws-4 | 完了 |
-| ws-6 | 実プロバイダadapter(Parser=Anthropic Haiku 4.5・llm_mode=real・鍵はLATCH_ANTHROPIC_API_KEY)+G1精度ゲートharness(Parser入力セット+飲酒判定セットをdocs/testassets/で実行・合格基準は07 D-17/09 §4.3) | 12 M1完了条件 / 07 §1〜§2・09 §4.3・T1 v0.2 | ws-2・T1 Parser契約(2026-09-28済) | 未着手 |
+| ws-6 | 実プロバイダadapter(Parser=Anthropic Haiku 4.5・llm_mode=real・鍵はLATCH_ANTHROPIC_API_KEY)+G1精度ゲートharness(Parser入力セット+飲酒判定セットをdocs/testassets/で実行・合格基準は07 D-17/09 §4.3) | 12 M1完了条件 / 07 §1〜§2・09 §4.3・T1 v0.2 | ws-2・T1 Parser契約(2026-09-28済) | 着手(2026-09-28) |
 
 実行wave: (ws-1 ∥ ws-2) → ws-3 → ws-4 → ws-5
 
@@ -46,7 +46,7 @@
 
 ## G1判定の待ち事項(人間領域)
 
-1. **T1 LLMプロバイダ契約**(08 §3のD-14基準6件+契約5条件) — 精度ゲートは実プロバイダでの実測が前提。契約未確定プロバイダは技術基準を満たしても不採用。**2026-09-28更新: Jev系統はC案裁定で確定(下記)。G1に必要なのはParser系統(推奨Haiku 4.5)とEmbedding系統(推奨gemini-embedding-001)の契約のみ**
+1. **T1 LLMプロバイダ契約**(08 §3のD-14基準6件+契約5条件) — 精度ゲートは実プロバイダでの実測が前提。契約未確定プロバイダは技術基準を満たしても不採用。**2026-09-28: Jev系統(C案裁定)・Parser系統(Anthropic Haiku 4.5・API鍵設定済み)とも確定しG1は実施可能。残るEmbedding系統(gemini-embedding-001)の契約はM2開始前が締切**
 2. ~~T3草案の確認~~ → **確定済み**(2026-09-28 ユーザー委任によりスーパーバイザーが裁定・要確認7件とも草案どおり。A-033=false/A-034=trueの根拠はYAML末尾の裁定記録)
 3. ~~02#4の期限経過確認の扱い~~ → **(a)で裁定済み**(2026-09-28 ユーザー裁定。M1は保存時検証+期限選択UIで#4の本体を検証済みとし、「期限経過後のexpired遷移」はM3-3のexpiry_sweeper実装時にG3で確認。G1記録に注記する)
 
@@ -134,6 +134,8 @@
   - 事実確認: context7(/websites/typesafe_ai)とexaでdocs.typesafe.ai・typesafe.ai等の一次資料を直接確認(ユーザー指示)。未確認事項は改版メモ§3に正直に申告(MCA/DPA全条精読・SOC2レポート本体等はM2で契約前確認)
   - **T1資料v0.1のコスト試算に1/1000の計算誤りを発見・訂正**(Jev $1.80→$1,800等。TypeSafe Jev採用で通常時約$140/月・フォールバック全件長期化で約$1,915/月)。スーパーバイザーのレビュー不足も起因(数值の検算を怠った)。以後、報告前に数値は検算する
   - 実装への影響: なし(M0・M1にJev呼び出しは未実装。GatewayのSystem One IF追加はM2で実施)
+
+- ws-6 / 2026-09-28着手(T1 Parser契約確定: Anthropic Haiku 4.5。LATCH_ANTHROPIC_API_KEY設定済み・gemini/typesafe鍵は未設定。設計→計画→実装のサイクル開始)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
