@@ -417,11 +417,21 @@ async def test_7_alcohol_underage(api_client, db_engine, field):
     h1, _ = await _user(api_client, field)
     t20 = await _intent(api_client, db_engine, h1, _payload(_structured(alcohol=True)))
     h2, _ = await _user(api_client, field, _birth_jst_years_ago(19))
-    o19 = await _intent(api_client, db_engine, h2, _payload(_structured()))
-    await _set(db_engine, o19["id"], "alcohol_involved = true")  # API検証バイパス
+    # 19歳×drinkingはAPIのサーバ側確定(M1・07 §2)で422になるため、
+    # 非飲酒カテゴリで作成してからカテゴリ・alcohol両方をDB直接変更する(API検証バイパス)
+    o19 = await _intent(
+        api_client, db_engine, h2, _payload(_structured(category="meal"))
+    )
+    await _set(
+        db_engine, o19["id"], "category_primary = 'drinking', alcohol_involved = true"
+    )
     h3, _ = await _user(api_client, field, _birth_jst_years_ago(19))
-    t19 = await _intent(api_client, db_engine, h3, _payload(_structured()))
-    await _set(db_engine, t19["id"], "alcohol_involved = true")
+    t19 = await _intent(
+        api_client, db_engine, h3, _payload(_structured(category="meal"))
+    )
+    await _set(
+        db_engine, t19["id"], "category_primary = 'drinking', alcohol_involved = true"
+    )
 
     ids = await _hard_ids(db_engine, clock, o20["id"])
     assert t20["id"] in ids  # 20歳×20歳の飲酒ペアは通過
@@ -436,13 +446,22 @@ async def test_8_age_boundary_jst(api_client, db_engine, field):
     h20, _ = await _user(api_client, field)
     o20 = await _intent(api_client, db_engine, h20, _payload(_structured(alcohol=True)))
     # 今日が20歳の誕生日(JST暦日)→ 当日=満20歳 → 通過
+    # (19歳相当はdrinking作成が422になるためmeal作成→DBで両方強制。test_7と同じ手法)
     hb, _ = await _user(api_client, field, _birth_jst_years_ago(20))
-    t_bday = await _intent(api_client, db_engine, hb, _payload(_structured()))
-    await _set(db_engine, t_bday["id"], "alcohol_involved = true")
+    t_bday = await _intent(
+        api_client, db_engine, hb, _payload(_structured(category="meal"))
+    )
+    await _set(
+        db_engine, t_bday["id"], "category_primary = 'drinking', alcohol_involved = true"
+    )
     # 誕生日は明日(=19歳)→ fail
     hc, _ = await _user(api_client, field, _birth_jst_years_ago(20, plus_days=1))
-    t_eve = await _intent(api_client, db_engine, hc, _payload(_structured()))
-    await _set(db_engine, t_eve["id"], "alcohol_involved = true")
+    t_eve = await _intent(
+        api_client, db_engine, hc, _payload(_structured(category="meal"))
+    )
+    await _set(
+        db_engine, t_eve["id"], "category_primary = 'drinking', alcohol_involved = true"
+    )
 
     ids = await _hard_ids(db_engine, clock, o20["id"])
     assert t_bday["id"] in ids  # EXTRACT(YEAR FROM AGE(...)) = 20
