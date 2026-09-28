@@ -26,9 +26,10 @@ def test_from_payload_full_triple():
 
 
 def test_from_payload_missing_version_yields_none_triple():
-    payload = b'{"event_type": "updated", "source_intent_id": "%s"}' % str(
-        uuid.uuid4()
-    ).encode()
+    payload = (
+        b'{"event_type": "updated", "source_intent_id": "%s"}'
+        % str(uuid.uuid4()).encode()
+    )
     event = IncomingEvent.from_payload(message_id="m2", payload=payload, ack=_ack)
     assert event.triple() is None
     assert event.version is None
@@ -51,8 +52,6 @@ def test_from_payload_wrong_types_yield_none_triple():
 
 
 def test_from_payload_invalid_json_keeps_raw():
-    event = IncomingEvent.from_payload(
-        message_id="m4", payload=b"not-json{", ack=_ack
-    )
+    event = IncomingEvent.from_payload(message_id="m4", payload=b"not-json{", ack=_ack)
     assert event.triple() is None
     assert event.data == {"_raw": "not-json{"}  # 生データをDB保存経路へ残す
