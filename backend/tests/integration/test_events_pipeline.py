@@ -202,6 +202,16 @@ async def user_env(api_client, db_engine):
         yield st
     finally:
         async with db_engine.begin() as conn:
+            # test_4がfixtureで入れるmatch_candidatesを先に消す(FK:
+            # fk_match_candidates_intent_a。supervisor検証4巡目のteardown修正)
+            await conn.execute(
+                text(
+                    "DELETE FROM match_candidates WHERE intent_a_id IN"
+                    " (SELECT id FROM intents WHERE user_id = :uid)"
+                    " OR intent_b_id IN (SELECT id FROM intents WHERE user_id = :uid)"
+                ),
+                {"uid": user_id},
+            )
             await conn.execute(
                 text(
                     "DELETE FROM match_events WHERE source_intent_id IN"
