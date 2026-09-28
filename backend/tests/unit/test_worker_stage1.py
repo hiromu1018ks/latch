@@ -391,3 +391,54 @@ def test_mark_processed_extra_preserves_version_key():
     # ここでは BACKOFF_SEC と PayloadInvalid の公開値を固定する:
     assert BACKOFF_SEC == (1.0, 2.0, 4.0, 8.0, 16.0)
     assert issubclass(PayloadInvalid, Exception)
+
+
+# -- asyncpg返却UUIDインスタンスの回帰ピン(スーパーバイザー3巡目検出・M0 ws-3同種)--
+
+
+async def test_intake_claim_returning_uuid_instance():
+    """INSERT RETURNING id がUUIDインスタンス(pgproto.UUID相当)でも
+    再構築で落ちずclaimできる(str返しスタブでは検出不能だった経路)。"""
+    engine = ScriptedEngine(
+        [
+            FakeResult((ROW_ID,)),  # RETURNING id: UUID型
+            FakeResult(("pending",)),
+            FakeResult((1,)),
+            FakeResult(None, 1),
+        ]
+    )
+    result = await _stage1(engine).intake(_event("created", IID, 1))
+    assert result.kind == "processed"
+    assert result.row_id == ROW_ID
+
+
+async def test_intake_duplicate_claim_uuid_instance():
+    """UNIQUE競合後の SELECT id, status のidがUUID型でもduplicate判定へ。"""
+    engine = ScriptedEngine(
+        [
+            FakeResult(None, 0),  # INSERT ON CONFLICT DO NOTHING(競合)
+            FakeResult((ROW_ID, "processed")),  # SELECT id, status FOR UPDATE
+        ]
+    )
+    result = await _stage1(engine).intake(_event("created", IID, 1))
+    assert result.kind == "duplicate"
+    assert result.row_id == ROW_ID
+
+
+async def test_quarantine_direct_conflict_with_uuid_instance():
+    """3点組可の毒(6値外event_type)のUNIQUE競合→既存行隔離遷移で
+    _SELECT_CLAIM のidがUUID型でも落ちない(stage1.py:358の検出経路)。"""
+    engine = ScriptedEngine(
+        [
+            FakeResult(None, 0),  # INSERT(quarantined直行)がUNIQUE競合
+            FakeResult((ROW_ID, "pending")),  # _SELECT_CLAIM(UUID型)
+            FakeResult(None, 1),  # _MARK_QUARANTINED
+        ]
+    )
+    sleep = RecordingSleep()
+    result = await _stage1(engine, sleep=sleep).intake(_event("bogus", IID, 1))
+    assert result.kind == "quarantined"
+    assert sleep.seconds == list(BACKOFF_SEC)
+    params = engine.conn.calls[2][1]
+    assert params["row_id"] == ROW_ID  # UUID型がそのまま渡る(str再構築しない)
+    assert params["extra"] is not None

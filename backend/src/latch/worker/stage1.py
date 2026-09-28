@@ -47,6 +47,16 @@ EVENT_TYPES = frozenset(
 BACKOFF_SEC: tuple[float, ...] = (1.0, 2.0, 4.0, 8.0, 16.0)
 _NIL_UUID = uuid.UUID(int=0)
 
+
+def _coerce_uuid(value: object) -> uuid.UUID:
+    """SELECT/RETURNING結果のUUID列復元。asyncpgはuuid.UUIDのサブクラス
+    (pgproto.UUID)を返すためuuid.UUID(value)の再構築はAttributeErrorに
+    なる(intents/store.pyと同じ対策 — スーパーバイザー3巡目検出)。"""
+    if isinstance(value, uuid.UUID):
+        return value
+    return uuid.UUID(str(value))
+
+
 _INSERT_EVENT = text("""
     INSERT INTO match_events
         (event_type, source_intent_id, payload, status, created_at)
@@ -222,7 +232,7 @@ class Stage1:
             res = await conn.execute(_INSERT_EVENT, params)
             row = res.first()
             if row is not None:
-                return uuid.UUID(row[0]), "pending"
+                return _coerce_uuid(row[0]), "pending"
             res = await conn.execute(
                 _SELECT_CLAIM,
                 {
@@ -234,7 +244,7 @@ class Stage1:
             row = res.first()
             if row is None:
                 raise Retryable("claim conflicted but row not found")
-            return uuid.UUID(row[0]), row[1]
+            return _coerce_uuid(row[0]), row[1]
 
     async def _process_once(
         self, triple: tuple[str, uuid.UUID, int], row_id: uuid.UUID
@@ -355,7 +365,7 @@ class Stage1:
                     await conn.execute(
                         _MARK_QUARANTINED,
                         {
-                            "row_id": uuid.UUID(existing[0]),
+                            "row_id": _coerce_uuid(existing[0]),
                             "now": now,
                             "extra": json.dumps({"failure_reason": reason}),
                         },
