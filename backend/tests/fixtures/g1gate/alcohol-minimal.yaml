@@ -1,0 +1,36 @@
+# test_cases.py・test_runner.py用の正常系最小セット(3件: true 2 / false 1)
+meta:
+  status: confirmed
+  created: "2026-09-28"
+  current_datetime: "2026-10-01T11:30:00+09:00"
+  case_count: 3
+  true_count: 2
+  false_count: 1
+
+cases:
+  - id: A-901
+    text: "今夜20時から天文館で飲みたい。ひとり3000円くらい"
+    author_age: 26
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "fixtures用"
+
+  - id: A-902
+    text: "明日19時、天文館でビール飲みに行きたい人いますか"
+    author_age: 27
+    expected:
+      alcohol_involved: true
+      category_ref: drinking
+    needs_review: false
+    note: "fixtures用"
+
+  - id: A-903
+    text: "昼12時から天文館のカフェでコーヒーを飲みましょう"
+    author_age: 35
+    expected:
+      alcohol_involved: false
+      category_ref: activity
+    needs_review: false
+    note: "fixtures用(アルコールを指さない用法)"
