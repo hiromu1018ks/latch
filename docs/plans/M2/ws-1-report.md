@@ -7,11 +7,11 @@
 ## 完了条件の検証結果
 | # | 条件 | 結果 | 証拠(コマンド出力の要点) |
 |---|---|---|---|
-| 1 | make lint / make test | PASS | `All checks passed!` / `569 passed, 102 deselected in 3.94s` |
+| 1 | make lint / make test | PASS | `All checks passed!` / `569 passed, 102 deselected in 3.94s`(スーパーバイザー検証後のfixコミット適用後は **`572 passed`** — 回帰ピン3件追加。下記「スーパーバイザー検証で検出した欠陥と修正」参照) |
 | 2 | integration 8試験の収集 | 収集確認済み/test-ci=スーパーバイザー検証待ち | `uv run pytest --collect-only tests/integration/test_events_pipeline.py -q` → `8 tests collected`・exit 0(実行は§0によりスーパーバイザー検証時) |
 | 3 | 実時間参照がclock.pyのみ | PASS | rg ヒットは `backend/src/latch/core/clock.py:33: return datetime.now(UTC)` の1行のみ。`uv run pytest tests/unit/test_arch_no_direct_time.py -v` → `1 passed` |
 | 4 | alembic・docs無変更 | PASS | `git diff --stat main -- backend/alembic docs` → 本reportファイル1件のみ(`docs/plans/M2/ws-1-report.md`。※report自身がdocs/配下のためコミット後はこの1行が出力される。計画§6-4の採取時点=reportコミット前では空。alembic・docs 01〜12・learn・reviews・STATUS・M0/M1計画書は無変更) |
-| 5 | 触るファイルがスコープどおり | PASS | `git diff --name-only main \| sort` → 計画§4の作成11+変更9+report.mdの21ファイルのみ(下記コミット一覧参照・過不足なし)。`git status --short` → 空 |
+| 5 | 触るファイルがスコープどおり | PASS | `git diff --name-only main \| sort` → 計画§4の作成11+変更9+report.mdの21ファイルのみ(下記コミット一覧参照・過不足なし)。`git status --short` → 空(※fixコミットにより `backend/tests/unit/test_pubsub_bus_sdk_calls.py` を1件追加 — 検出欠陥の回帰ピン。下記「スーパーバイザー検証で検出した欠陥と修正」参照) |
 | 6 | テストbasename一意 | PASS | `find backend/tests -name "test_*.py" \| awk -F/ '{print $NF}' \| sort \| uniq -d` → 出力なし(空) |
 | 7 | compose.yaml・Makefileの規定 | 記載確認/make -n test-ci出力 | `make -n test-ci` → `docker compose up -d --wait` → `docker compose stop worker` → `cd backend && uv run --group geo pytest; rc=$?; docker compose start worker; exit $rc`(pytest成否にかかわらずworker復帰)。compose.yamlへpubsubサービス(127.0.0.1:8085)とapi/workerの `LATCH_PUBSUB_EMULATOR_HOST: pubsub:8085` を記録 |
 
@@ -34,6 +34,10 @@
 
 ## コミット一覧
 ```
+119b72b fix: PubsubEventBusのgapic呼び出し形式(create_topic・delete_subscriptionをrequest辞書へ)
+(本節追記のdocsコミット)
+be4ba58 fix: integration試験の時計進行レース修正と報告書の証拠訂正(最終レビュー対応)
+0145099 docs: M2 ws-1の実行報告(完了条件7項目の証拠・test-ciは検証待ち)
 ba7e230 test: イベントパイプラインE2E 8試験(作成のみ・実行はスーパーバイザー)
 2916d32 feat: ci環境へPub/Subエミュレータ追加とtest-ciのworker停止/復帰
 b0a2861 feat: Workerへsubscribe・debounce・Stage1配線(ackはstatus遷移後)
@@ -68,3 +72,34 @@ e8e3968 feat: イベント駆動の設定とgoogle-cloud-pubsub依存を追加(M
 - **publish経路にタイムアウトなし**: google-cloud-pubsubのPublisherClientは一時障害を無限再試行するため、Pub/Sub到達不能時のpublishは例外ではなく未解決futureのまま滞り得る(設計§2.2-Bの「失敗は握り」は即座に返る前提)。`asyncio.wait_for(publish, timeout=5秒)` 等での包装をws-2以降またはM4前の改善として記録(ciではpubsub常設のため発火しない)
 - **main.py build_events分岐が注入済みintent_serviceを無条件上書き**: `create_app(intent_service=...)` 注入+event_bus未注入+lifespan実行の組合せで注入スタブが置換される(計画書Task 7 Step 4指定の形。現状のunit試験はlifespan未実行のため潜在)。lifespan系試験を追加する単位で `if build_intents_crud:` ガードを検討
 - **Stage1.intakeのclaim系一時障害にin-process再試行なし**: `_claim` 失敗はackなしで再配信(at-least-onceで正しい)だが、回収がrelay(約35秒後)またはack_deadline 600秒待ちになる。対称性のためclaimも再試行ループへ入れる価値をws-2で検討
+
+## スーパーバイザー検証で検出した欠陥と修正(2026-09-28・fixコミット 119b72b)
+
+**検出事象**(スーパーバイザーtest-ci検証・実SDK経路):
+
+1. 常設workerコンテナが起動時クラッシュループ(Restarting exit 1)。traceback: `worker/main.py run → bus.ensure() → pubsub_bus.py _ensure → create_topic(self._topic_path)` が `TypeError: Invalid constructor input for Topic: 'projects/latch-ci/topics/match-events'`
+2. これによりintegration 8試験も全件setupエラー。`worker_env` fixtureがensure()の例外を握った結果のリトライ40回→「pubsub emulator not reachable at 127.0.0.1:8085」**誤表示**(エミュレータ自体は正常起動・ログで "Server started, listening on 8085" 確認済み)
+
+**原因**: google-cloud-pubsub 2.41.0 のgapicクライアント(`create_topic`・`create_subscription`・`delete_subscription`)は第1位置引数を `request` と解釈する。素の文字列パスを位置引数に渡すと protobuf メッセージのコンストラクタ(`Topic(request)`)へ文字列が流れ TypeError になる。Task 3のunit試験を書かなかった経路(design §4.1: SDKの実RPCをunitで代替できないため・integrationで担保する計画)の欠陥が、integration実行前に一度もSDK呼び出しが成功しない形で顕在化した
+
+**修正**(commit 119b72b・TDD: 回帰ピン試験RED→修正→GREEN):
+
+- `create_topic(request={"name": self._topic_path})` へ(request辞書形式)
+- `delete_subscription(request={"subscription": self._subscription_path})` へ(同じ形式問題・未検出のまま残っていた)
+- `create_subscription(name=…, topic=…, ack_deadline_seconds=…)` は **kw-only形式でgapic正式・無修正**(位置引数なし)
+
+**SDK呼び出しの全数点検**(pubsub_bus.py内7種):
+
+| 呼び出し | 形式 | 点検結果 |
+|---|---|---|
+| `create_topic` | gapic(位置引数=request) | **修正**(request辞書へ) |
+| `create_subscription` | gapic | 無修正(kw-only正式形式・試験でピン留め) |
+| `delete_subscription` | gapic | **修正**(request辞書へ) |
+| `publish(topic, data)` | クライアント独自メソッド | 無修正(位置引数が正式形式) |
+| `subscribe(subscription, callback=…)` | クライアント独自メソッド | 無修正(同上) |
+| `topic_path` / `subscription_path` | パス構築ヘルパー | 無整改(位置引数が正式形式) |
+| `api_client.close()` / `subscriber.close()` | 引数なし | 無整改 |
+
+**回帰ピンunit試験の追加**(`backend/tests/unit/test_pubsub_bus_sdk_calls.py`・3件): 修正要求にあった「SDKの呼び出し形式が正しいことの検証」を実SDK不要の形で追加した — SDKクライアントを記録スタブへ差し替え、`ensure()`/`delete_subscription()` が①位置引数なし・②`request` 辞書/kw-onlyの所定形式で呼ぶことをassert(修正前に2件が実際にFAILすることを確認=検出欠陥の再現)。実RPCの挙動自体は引き続きintegration(test-ci)が担保する。`bus_with_stubs` fixtureはPUBSUB_EMULATOR_HOSTを一時設定してクライアント生成の認証をバイパスしテスト終了時に復元(§最終レビュー補足5の前提と同じ)
+
+**検証**: `make lint` グリーン / `make test` **572 passed**(569+回帰ピン3)/ テストbasename一意(新ファイル `test_pubsub_bus_sdk_calls.py`)。**実機test-ciの再実行はスーパーバイザーが行う**(本修正の実SDK検証は `docker compose build api worker` → `make test-ci` で完了条件2・worker起動を再検証)
