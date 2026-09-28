@@ -44,3 +44,20 @@ describe("frontend雛形", () => {
     expect(css()).toContain("paper-milk.png");
   });
 });
+
+describe("本実装の構成(Task 11)", () => {
+  it("トークンパネル・催促注記・エラー表示の要素がある", () => {
+    for (const id of ["tokenPanel", "idpToken", "tokenConnect", "tokenError", "requiredNote", "parseError", "globalError"]) {
+      expect(html()).toContain(`id="${id}"`);
+    }
+  });
+
+  it("expiry selectは初期disabled(選択肢はAPI応答から構成)", () => {
+    expect(html()).toMatch(/<select id="expiry" disabled><\/select>/);
+  });
+
+  it("初期テキストは空(サンプル文言を残さない・文言対応表)", () => {
+    expect(html()).toContain('id="characterCount">0 / 300');
+    expect(html()).not.toContain("天文館");
+  });
+});

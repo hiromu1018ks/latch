@@ -53,14 +53,23 @@
         </div>
       </header>
 
+      <section class="token-panel" id="tokenPanel" aria-labelledby="token-title" hidden>
+        <p class="section-kicker"><span></span>DEV AUTH</p>
+        <h2 id="token-title">開発用トークンパネル</h2>
+        <p class="token-note">APIを利用するには認証が必要です(05 §5)。backendの内部CLIで発行したIdPトークンを貼り付けてください。手順は frontend/README.md を参照。</p>
+        <textarea id="idpToken" rows="3" aria-label="IdPトークン" placeholder="eyJhbGciOiJSUzI1NiIs…"></textarea>
+        <button class="token-connect" id="tokenConnect" type="button">接続する</button>
+        <p class="token-error" id="tokenError" role="status" hidden></p>
+      </section>
+
       <main id="main" class="workspace">
         <section class="intent-editor" aria-labelledby="page-title">
           <div class="section-kicker"><span></span>NEW INTENT</div>
           <h1 id="page-title">やりたいことを、<br class="mobile-break" />一文だけ。</h1>
 
           <div class="intent-field">
-            <textarea id="intentText" aria-label="やりたいこと" maxlength="300" rows="4">今日20時以降、天文館で2〜4人くらいなら軽く飲みたい。予算は5,000円くらい。</textarea>
-            <span class="character-count" id="characterCount">41 / 300</span>
+            <textarea id="intentText" aria-label="やりたいこと" maxlength="300" rows="4"></textarea>
+            <span class="character-count" id="characterCount">0 / 300</span>
           </div>
 
           <section class="conditions" aria-labelledby="conditions-title">
@@ -69,38 +78,10 @@
               <h2 id="conditions-title"><b>LATCH</b>が読み取った条件</h2>
             </div>
 
-            <div class="condition-list" id="conditionList">
-              <div class="condition-row" data-label="時間">
-                <div class="condition-icon"><i class="ph ph-clock" aria-hidden="true"></i></div>
-                <span class="condition-label">時間</span>
-                <span class="condition-value">今日 20:00以降</span>
-                <button class="edit-button" type="button" aria-label="時間を編集"><i class="ph ph-pencil-simple"></i></button>
-              </div>
-              <div class="condition-row" data-label="場所">
-                <div class="condition-icon"><i class="ph ph-map-pin" aria-hidden="true"></i></div>
-                <span class="condition-label">場所</span>
-                <span class="condition-value">天文館</span>
-                <button class="edit-button" type="button" aria-label="場所を編集"><i class="ph ph-pencil-simple"></i></button>
-              </div>
-              <div class="condition-row" data-label="人数">
-                <div class="condition-icon"><i class="ph ph-users-three" aria-hidden="true"></i></div>
-                <span class="condition-label">人数</span>
-                <span class="condition-value">2〜4人</span>
-                <button class="edit-button" type="button" aria-label="人数を編集"><i class="ph ph-pencil-simple"></i></button>
-              </div>
-              <div class="condition-row" data-label="予算">
-                <div class="condition-icon"><i class="ph ph-currency-jpy" aria-hidden="true"></i></div>
-                <span class="condition-label">予算</span>
-                <span class="condition-value">ひとり5,000円まで</span>
-                <button class="edit-button" type="button" aria-label="予算を編集"><i class="ph ph-pencil-simple"></i></button>
-              </div>
-              <div class="condition-row" data-label="目的">
-                <div class="condition-icon"><i class="ph ph-flag" aria-hidden="true"></i></div>
-                <span class="condition-label">目的</span>
-                <span class="condition-value">軽く飲む</span>
-                <button class="edit-button" type="button" aria-label="目的を編集"><i class="ph ph-pencil-simple"></i></button>
-              </div>
-            </div>
+            <div class="condition-list" id="conditionList"></div>
+
+            <p class="required-note" id="requiredNote" hidden>時間・場所・目的を指定すると預けられます</p>
+            <p class="parse-error" id="parseError" role="alert" hidden></p>
 
             <form class="add-row" id="addConditionForm" hidden>
               <select id="newConditionLabel" aria-label="条件の種類">
@@ -127,14 +108,9 @@
           </div>
 
           <div class="setting-group">
-            <label for="expiry"><i class="ph ph-clock" aria-hidden="true"></i>有効期限</label>
+            <label for="expiry"><i class="ph ph-clock" aria-hidden="true"></i>有効期限(入力後に選べます)</label>
             <div class="select-wrap">
-              <select id="expiry">
-                <option>今夜 23:30</option>
-                <option>明日 12:00</option>
-                <option>明日 23:30</option>
-                <option>3日後まで</option>
-              </select>
+              <select id="expiry" disabled></select>
               <i class="ph ph-caret-down" aria-hidden="true"></i>
             </div>
           </div>
@@ -177,6 +153,8 @@
             </button>
             <span class="shortcut">⌘ Enter</span>
           </div>
+
+          <p class="form-error" id="globalError" role="alert" hidden></p>
         </aside>
       </main>
 

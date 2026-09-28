@@ -700,3 +700,106 @@ html[data-theme="dark"] .modal-backdrop {
   .confirmation { padding: 42px 24px 32px; }
   .confirmation-summary { flex-wrap: wrap; }
 }
+
+/* ---------------------------------------------------------------------------
+   M1 ws-5 追加分: 催促・NG行・エラー・トークンパネル(design §2.3・§2.7〜§2.9)
+   既存スタイルはprototype基準のまま変更しない(00 運用ルール6)
+--------------------------------------------------------------------------- */
+
+.condition-row.condition-missing .condition-value {
+  color: var(--coral);
+}
+
+.required-note,
+.parse-error,
+.form-error,
+.ng-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.parse-error,
+.form-error {
+  color: var(--coral);
+}
+
+.condition-row.condition-error .condition-value {
+  color: var(--coral);
+}
+
+.parse-retry {
+  margin-left: 10px;
+  padding: 4px 14px;
+  border: 1px solid var(--field-border);
+  border-radius: 999px;
+  background: var(--field-surface-strong);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ng-row .condition-value { font-size: 16px; }
+
+.ng-note { margin: 4px 0 0; }
+
+.condition-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  grid-column: 3 / 4;
+  min-width: 0;
+}
+
+.condition-edit input,
+.condition-edit select {
+  padding: 8px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+  background: var(--field-surface-strong);
+  font: inherit;
+  font-size: 15px;
+  min-width: 0;
+}
+
+.condition-edit input[type="number"] { width: 90px; }
+
+.token-panel {
+  margin: 24px auto 0;
+  max-width: 640px;
+  padding: 20px 24px;
+  border: 1px solid var(--field-border);
+  border-radius: 16px;
+  background: var(--field-surface);
+  display: grid;
+  gap: 10px;
+}
+
+.token-panel h2 { margin: 0; font-size: 18px; }
+
+.token-note { margin: 0; font-size: 13px; color: var(--muted); }
+
+.token-panel textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+  background: var(--field-surface-strong);
+  font: inherit;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.token-connect {
+  justify-self: start;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 999px;
+  background: var(--green);
+  color: var(--paper);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.token-error { margin: 0; font-size: 13px; color: var(--coral); }

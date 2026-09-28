@@ -1,199 +1,262 @@
-const intentText = document.querySelector("#intentText");
-const root = document.documentElement;
-const themeButton = document.querySelector("#themeButton");
-const characterCount = document.querySelector("#characterCount");
-const submitButton = document.querySelector("#submitButton");
-const conditionList = document.querySelector("#conditionList");
-const addConditionButton = document.querySelector("#addConditionButton");
-const addConditionForm = document.querySelector("#addConditionForm");
-const newConditionValue = document.querySelector("#newConditionValue");
-const toast = document.querySelector("#toast");
-const confirmationModal = document.querySelector("#confirmationModal");
-const modalClose = document.querySelector("#modalClose");
-const returnButton = document.querySelector("#returnButton");
+// エントリポイント(03 §3の入力フロー・design §2.2〜§2.9)。
+// DOM配線のみを担い、ロジックは各モジュールへ委ねる。意図文言をログに出さない(01 §21)。
+import { initChrome } from "./ui/chrome.js";
+import { createClient } from "./api/client.js";
+import { createSession, exchangeIdpToken } from "./api/session.js";
+import { PRIVACY_VALUES, NOTIFICATION_VALUES } from "./intent/format.js";
+import {
+  applyParseFallback,
+  applyParseResult,
+  canDraft,
+  canSubmit,
+  createFormState,
+  missingRequired,
+} from "./intent/state.js";
+import { createParseFlow } from "./intent/parseFlow.js";
+import {
+  NG_NOTE_TEXT,
+  REQUIRED_NOTE_TEXT,
+  attachAddCondition,
+  beginRowEdit,
+  renderConditions,
+} from "./intent/conditions.js";
+import { applyExpiryOptions, fetchExpiryOptions, selectedExpiry } from "./intent/expiry.js";
+import { createSaveFlow } from "./intent/save.js";
 
-const updateThemeButton = () => {
-  const dark = root.dataset.theme === "dark";
-  themeButton.setAttribute("aria-pressed", String(dark));
-  themeButton.setAttribute("aria-label", dark ? "ライトモードに切り替える" : "ダークモードに切り替える");
-  themeButton.querySelector("i").className = dark ? "ph ph-sun" : "ph ph-moon";
-};
+const $ = (selector) => document.querySelector(selector);
 
-const setTheme = (theme, persist = false) => {
-  root.dataset.theme = theme;
-  if (persist) localStorage.setItem("latch-theme", theme);
-  updateThemeButton();
-};
-
-themeButton.addEventListener("click", () => {
-  setTheme(root.dataset.theme === "dark" ? "light" : "dark", true);
+const session = createSession();
+const client = createClient({
+  session,
+  onSessionExpired: () => showTokenPanel(),
 });
 
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
-  if (!localStorage.getItem("latch-theme")) setTheme(event.matches ? "dark" : "light");
-});
+const state = createFormState();
 
-updateThemeButton();
-
-const popovers = [
-  {
-    button: document.querySelector("#noticeButton"),
-    panel: document.querySelector("#noticePopover"),
+// --- 画面装飾(テーマ・popover・トースト・モーダル) -------------------------
+const chrome = initChrome({
+  themeButton: $("#themeButton"),
+  popovers: [
+    { button: $("#noticeButton"), panel: $("#noticePopover") },
+    { button: $("#accountButton"), panel: $("#accountPopover") },
+  ],
+  toast: $("#toast"),
+  modal: {
+    root: $("#confirmationModal"),
+    closeButton: $("#modalClose"),
+    returnButton: $("#returnButton"),
   },
-  {
-    button: document.querySelector("#accountButton"),
-    panel: document.querySelector("#accountPopover"),
-  },
-];
-
-const closePopovers = (except = null) => {
-  popovers.forEach(({ button, panel }) => {
-    if (panel !== except) {
-      panel.hidden = true;
-      button.setAttribute("aria-expanded", "false");
-    }
-  });
-};
-
-popovers.forEach(({ button, panel }) => {
-  button.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const willOpen = panel.hidden;
-    closePopovers(panel);
-    panel.hidden = !willOpen;
-    button.setAttribute("aria-expanded", String(willOpen));
-  });
-  panel.addEventListener("click", (event) => event.stopPropagation());
 });
 
-document.addEventListener("click", () => closePopovers());
+// --- 開発用トークンパネル(design §2.3・トークン未設定時のみ表示) ----------
+const tokenPanel = $("#tokenPanel");
+const tokenError = $("#tokenError");
 
-const updateIntentState = () => {
-  characterCount.textContent = `${intentText.value.length} / 300`;
-  submitButton.disabled = !intentText.value.trim();
-};
+function showTokenPanel() {
+  tokenPanel.hidden = false;
+  tokenError.hidden = true;
+}
 
-intentText.addEventListener("input", updateIntentState);
-updateIntentState();
+if (!session.hasTokens()) showTokenPanel();
 
-const createEditButton = (label) => {
-  const button = document.createElement("button");
-  button.className = "edit-button";
-  button.type = "button";
-  button.setAttribute("aria-label", `${label}を編集`);
-  button.innerHTML = '<i class="ph ph-pencil-simple" aria-hidden="true"></i>';
-  return button;
-};
+$("#tokenConnect").addEventListener("click", async () => {
+  const idpToken = $("#idpToken").value.trim();
+  if (!idpToken) return;
+  const button = $("#tokenConnect");
+  button.disabled = true;
+  try {
+    const tokens = await exchangeIdpToken((...args) => fetch(...args), {
+      provider: "google",
+      idpToken,
+    });
+    session.save(tokens);
+    tokenPanel.hidden = true;
+    $("#idpToken").value = "";
+  } catch (err) {
+    tokenError.textContent =
+      err?.status === 401
+        ? "トークンが無効です。再発行して貼り直してください。"
+        : "接続できませんでした。APIの起動を確認してください。";
+    tokenError.hidden = false;
+  } finally {
+    button.disabled = false;
+  }
+});
 
-const beginConditionEdit = (row) => {
-  if (row.querySelector(".condition-edit")) return;
-  const label = row.dataset.label;
-  const valueElement = row.querySelector(".condition-value");
-  const editButton = row.querySelector(".edit-button");
-  const originalValue = valueElement.textContent;
-  const form = document.createElement("form");
-  form.className = "condition-edit";
-  form.innerHTML = `
-    <input aria-label="${label}を編集" />
-    <button type="submit" aria-label="変更を保存"><i class="ph ph-check" aria-hidden="true"></i></button>
-  `;
-  form.querySelector("input").value = originalValue;
+// --- 条件リスト ------------------------------------------------------------
+const conditionList = $("#conditionList");
+const requiredNote = $("#requiredNote");
+const parseError = $("#parseError");
+const globalError = $("#globalError");
 
-  const finish = (save) => {
-    const nextValue = form.querySelector("input").value.trim();
-    if (save && nextValue) valueElement.textContent = nextValue;
-    form.replaceWith(valueElement, editButton);
-  };
-
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    finish(true);
-  });
-  form.querySelector("input").addEventListener("keydown", (event) => {
-    if (event.key === "Escape") finish(false);
-  });
-
-  valueElement.remove();
-  editButton.replaceWith(form);
-  form.querySelector("input").focus();
-  form.querySelector("input").select();
+const rerender = () => {
+  renderConditions({ listEl: conditionList, state, now: new Date().toISOString() });
+  const missing = missingRequired(state);
+  requiredNote.hidden = missing.length === 0;
 };
 
 conditionList.addEventListener("click", (event) => {
   const editButton = event.target.closest(".edit-button");
-  if (editButton) beginConditionEdit(editButton.closest(".condition-row"));
+  if (editButton) {
+    beginRowEdit({ rowEl: editButton.closest(".condition-row"), state, rerender });
+    refreshActions();
+  }
 });
 
-addConditionButton.addEventListener("click", () => {
+const addConditionForm = $("#addConditionForm");
+$("#addConditionButton").addEventListener("click", () => {
   addConditionForm.hidden = false;
-  addConditionButton.hidden = true;
-  newConditionValue.focus();
+  $("#addConditionButton").hidden = true;
+  $("#newConditionValue").focus();
 });
-
-document.querySelector("#cancelAdd").addEventListener("click", () => {
+$("#cancelAdd").addEventListener("click", () => {
   addConditionForm.hidden = true;
-  addConditionButton.hidden = false;
-  newConditionValue.value = "";
+  $("#addConditionButton").hidden = false;
+  $("#newConditionValue").value = "";
+});
+attachAddCondition({
+  formEl: addConditionForm,
+  state,
+  rerender: () => {
+    rerender();
+    $("#addConditionButton").hidden = false; // 追加フォームはattachAddCondition内で閉じる
+  },
 });
 
-addConditionForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const label = document.querySelector("#newConditionLabel").value;
-  const value = newConditionValue.value.trim();
-  if (!value) return;
-
-  const row = document.createElement("div");
-  row.className = "condition-row";
-  row.dataset.label = label;
-  row.innerHTML = `
-    <div class="condition-icon"><i class="ph ph-flag" aria-hidden="true"></i></div>
-    <span class="condition-label">${label}</span>
-    <span class="condition-value"></span>
-  `;
-  row.querySelector(".condition-value").textContent = value;
-  row.append(createEditButton(label));
-  conditionList.append(row);
-
-  newConditionValue.value = "";
-  addConditionForm.hidden = true;
-  addConditionButton.hidden = false;
-});
-
-let toastTimer;
-document.querySelector("#draftButton").addEventListener("click", () => {
-  window.clearTimeout(toastTimer);
-  toast.hidden = false;
-  toastTimer = window.setTimeout(() => {
-    toast.hidden = true;
-  }, 2400);
-});
-
-const openConfirmation = () => {
-  if (!intentText.value.trim()) return;
-  const expiry = document.querySelector("#expiry").value;
-  const privacy = document.querySelector("#privacy").value;
-  const summary = confirmationModal.querySelector(".confirmation-summary");
-  summary.innerHTML = `
-    <i class="ph ph-clock" aria-hidden="true"></i> ${expiry}まで
-    <i class="ph ph-lock" aria-hidden="true"></i> ${privacy === "条件一致までは非公開" ? "成立までは非公開" : privacy}
-  `;
-  confirmationModal.hidden = false;
-  document.body.classList.add("modal-open");
-  modalClose.focus();
+// --- parse連携(debounce・design §2.4) ------------------------------------
+const showParseError = (message, retryable) => {
+  parseError.replaceChildren(document.createTextNode(message));
+  if (retryable) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "parse-retry";
+    button.textContent = "もう一度読み取る"; // 07 D-17: 入力テキストを保持した再試行
+    button.addEventListener("click", () => parseFlow.retry());
+    parseError.append(button);
+  }
+  parseError.hidden = false;
 };
 
-const closeConfirmation = () => {
-  confirmationModal.hidden = true;
-  document.body.classList.remove("modal-open");
-  submitButton.focus();
+const parseFlow = createParseFlow({
+  send: (text, { signal }) =>
+    client.call("POST", "/v1/intents/parse", { body: { text }, signal }),
+  onResult: (data) => {
+    parseError.hidden = true;
+    Object.assign(state, applyParseResult(state, data.structured_intent));
+    rerender();
+    refreshExpiry(state.structured.time.start);
+    refreshActions();
+  },
+  onError: (err) => {
+    state.parseStatus = "error";
+    if (err?.code === "VALIDATION_ERROR") {
+      // 構造化フォームへのフォールバック(確定値9): 全行が手動入力可能な空状態
+      parseError.hidden = true;
+      Object.assign(state, applyParseFallback(state));
+      rerender();
+      refreshActions();
+      return;
+    }
+    if (err?.code === "RATE_LIMITED") {
+      showParseError("操作が集中しています。少し時間をおいてから入力し直してください。", false);
+    } else if (err?.code === "LLM_UNAVAILABLE") {
+      showParseError("ただいま条件を読み取れません。", true);
+    } else if (err?.code === "UNAUTHENTICATED") {
+      return; // パネル表示済み(onSessionExpired)
+    } else {
+      showParseError("通信エラーが発生しました。", true);
+    }
+  },
+});
+
+// --- 入力テキスト(300字上限はmaxlength・カウンタ常時表示) ----------------
+const intentText = $("#intentText");
+const characterCount = $("#characterCount");
+const submitButton = $("#submitButton");
+const draftButton = $("#draftButton");
+
+const refreshActions = () => {
+  characterCount.textContent = `${intentText.value.length} / 300`;
+  state.rawText = intentText.value;
+  submitButton.disabled = !canSubmit(state);
+  draftButton.disabled = !canDraft(state);
+};
+
+intentText.addEventListener("input", () => {
+  refreshActions();
+  parseFlow.input(intentText.value);
+});
+
+// --- 有効期限(design §2.6) ----------------------------------------------
+const expirySelect = $("#expiry");
+
+async function refreshExpiry(timeStartIso) {
+  try {
+    const data = await fetchExpiryOptions(client, timeStartIso ?? null);
+    applyExpiryOptions(expirySelect, data);
+    expirySelect.disabled = false;
+    expirySelect.closest(".setting-group").querySelector("label").textContent =
+      "有効期限";
+  } catch {
+    // 取得失敗時は既存の選択肢のまま続行(保存時は現在の選択値を送る)
+  }
+}
+
+// --- 保存(active/draft・design §2.9) ------------------------------------
+const saveFlow = createSaveFlow({
+  client,
+  getState: () => state,
+  getOptions: () => ({
+    visibility:
+      PRIVACY_VALUES[$("#privacy").value] ?? "hidden_until_match",
+    notificationLevel:
+      NOTIFICATION_VALUES[$("#notification").value] ?? "proposals_only",
+    expiresAt: selectedExpiry(expirySelect).expiresAt,
+  }),
+  onBusy: (busy) => {
+    submitButton.disabled = busy || !canSubmit(state);
+    draftButton.disabled = busy || !canDraft(state);
+  },
+  onActiveSaved: () => {
+    chrome.closeModal({ submitButton }); // モーダルを閉じ同一画面に留まる(03 §3)
+    refreshActions();
+  },
+  onDraftSaved: () => {
+    chrome.showToast("下書きを保存しました"); // プロトタイプ文言
+    refreshActions();
+  },
+  onFormError: (placement) => {
+    if (placement.target === "location" || placement.target === "time") {
+      // 条件リストへ戻して修正を促す(確定値11・design §2.9) — モーダルを閉じる
+      chrome.closeModal({});
+      const row = conditionList.querySelector(
+        `[data-label="${placement.target === "location" ? "場所" : "時間"}"]`,
+      );
+      row?.classList.add("condition-error");
+      row?.setAttribute("title", placement.note);
+      globalError.hidden = true;
+    } else {
+      globalError.textContent = placement.note;
+      globalError.hidden = false;
+    }
+  },
+});
+
+const openConfirmation = async () => {
+  if (!canSubmit(state)) return;
+  // モーダルを開く時に期限を選択肢の最新状態へ再取得(時間経過で過ぎた選択肢の
+  // disabled化・既定の再計算 — design §2.6・確定値6)
+  await refreshExpiry(state.structured.time.start);
+  const { label } = selectedExpiry(expirySelect);
+  chrome.openModal({
+    expiryLabel: label ?? "—",
+    privacyLabel: $("#privacy").value,
+  });
 };
 
 submitButton.addEventListener("click", openConfirmation);
-modalClose.addEventListener("click", closeConfirmation);
-returnButton.addEventListener("click", closeConfirmation);
-confirmationModal.addEventListener("click", (event) => {
-  if (event.target === confirmationModal) closeConfirmation();
-});
+$("#returnButton").addEventListener("click", () => saveFlow.saveActive());
+draftButton.addEventListener("click", () => saveFlow.saveDraft());
 
 document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -201,7 +264,10 @@ document.addEventListener("keydown", (event) => {
     openConfirmation();
   }
   if (event.key === "Escape") {
-    closePopovers();
-    if (!confirmationModal.hidden) closeConfirmation();
+    if (!$("#confirmationModal").hidden) chrome.closeModal({});
   }
 });
+
+// --- 初期化 ---------------------------------------------------------------
+rerender();
+refreshActions();
