@@ -1,4 +1,4 @@
-"""Embedding系統の実プロバイダ(Google Gemini API・gemini-embedding-001。T1 v0.2・07 §3)。
+"""Embedding系統の実プロバイダ(Google Gemini API・T1 v0.2・07 §3)。
 
 design §2.6: google-genai(Python公式統一SDK)・明示api_key(SDKが環境変数
 GEMINI_API_KEY/GOOGLE_API_KEYを自動採用するのを排除 — llm_anthropic_base_url
