@@ -69,3 +69,21 @@ class Settings(BaseSettings):
     rate_limit_create_per_day: int = 20
     rate_limit_update_per_hour: int = 6
     rate_limit_active_intents: int = 5
+
+    # --- イベント駆動(M2 ws-1。design §3.2)---
+    # Pub/Sub(04 §3選定)。ci=エミュレータ(composeのpubsubサービス)。
+    # pubsub_emulator_host が空なら実GCP(本番)。非空ならSDKの
+    # PUBSUB_EMULATOR_HOST 経由でエミュレータへ接続する
+    pubsub_project_id: str = "latch-ci"
+    pubsub_topic_match_events: str = "match-events"
+    pubsub_subscription_match_events: str = "match-events-sub"
+    pubsub_emulator_host: str = ""
+    pubsub_ack_deadline_sec: int = (
+        600  # 最大値(debounce10s+backoff31s+処理が収まる — design §2.3)
+    )
+    # フォールバックリレー(design §2.2-B): 通常処理はしきい値に到達しない
+    # (=通常時の再publishゼロ)。debounce 10秒+処理 < 30秒
+    event_fallback_relay_after_sec: int = 30
+    event_fallback_poll_sec: int = 5
+    event_debounce_window_sec: int = 10  # 06 §9-1(初期値。調整はQueue lag計測で)
+    event_retry_max: int = 5  # 06 §9-4(初回+再試行5回。バックオフ1,2,4,8,16秒)
