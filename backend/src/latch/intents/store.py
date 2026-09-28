@@ -157,6 +157,18 @@ _LIST = {
     (True, True): _list_sql(with_status=True, with_before=True),
 }
 
+_COUNT_ACTIVE = text("""
+    SELECT count(*) FROM intents
+    WHERE user_id = :user_id AND status = 'active'
+      AND (expires_at IS NULL OR expires_at > :now)
+""")
+# 期限切れ残留行(sweeperがM3-3未実装のためstatus='active'のまま)は遷移表上
+# expired相当のため計上から除外する(design §2.3告白2 — 枠の解放を機能させる)
+
+_SELECT_USER_ROW_FOR_UPDATE = text(
+    "SELECT id FROM users WHERE id = :user_id FOR UPDATE"
+)
+
 
 def _row_from(mapping) -> IntentRow:
     structured = mapping.structured_data
@@ -335,3 +347,13 @@ class IntentStore:
             params["before_ts"], params["before_id"] = before
         rows = (await conn.execute(sql, params)).mappings().all()
         return [_row_from(r) for r in rows]
+
+    async def lock_user_row(self, conn: AsyncConnection, user_id: uuid.UUID) -> None:
+        """users行をFOR UPDATEで確保(同一ユーザーのActive化操作を直列化 — §2.3)。"""
+        await conn.execute(_SELECT_USER_ROW_FOR_UPDATE, {"user_id": user_id})
+
+    async def count_active(
+        self, conn: AsyncConnection, user_id: uuid.UUID, *, now: datetime
+    ) -> int:
+        """Active数の計上(design §2.3。期限切れ行は除外)。"""
+        return int(await conn.scalar(_COUNT_ACTIVE, {"user_id": user_id, "now": now}))

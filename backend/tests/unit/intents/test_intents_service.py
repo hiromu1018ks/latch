@@ -15,6 +15,7 @@ from latch.core.clock import FakeClock
 from latch.geo.service import Geofeature
 from latch.intents import events as events_mod
 from latch.intents.errors import (
+    ActiveIntentLimitError,
     DependencyUnavailableError,
     ForbiddenError,
     GeocodingFailedError,
@@ -26,6 +27,7 @@ from latch.intents.errors import (
 from latch.intents.intent_input import StructuredIntentInput
 from latch.intents.service import IntentService, decode_cursor, encode_cursor
 from latch.intents.store import IntentRow, UserRow
+from latch.ratelimit.errors import RateLimitedError
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)  # JST 2026-09-27 21:00
 USER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
@@ -87,6 +89,8 @@ class StubStore:
         self.status_updates = []
         self.list_calls = []
         self.next_id = uuid.uuid4()
+        self.active_count = 0  # count_activeの仕込み値
+        self.locked_users = []  # lock_user_rowの呼び出し記録
 
     async def fetch_user_row(self, provider, subject):
         return self.user_row
@@ -138,6 +142,12 @@ class StubStore:
         )
         return self.page[:limit]
 
+    async def lock_user_row(self, conn, user_id):
+        self.locked_users.append(user_id)
+
+    async def count_active(self, conn, user_id, *, now):
+        return self.active_count
+
 
 class StubGeocoder:
     def __init__(self, feature=None):
@@ -149,7 +159,7 @@ class StubGeocoder:
         return self.feature
 
 
-def _service(*, store=None, geocoder=None, clock=None):
+def _service(*, store=None, geocoder=None, clock=None, limiter=None):
     uow_conn = FakeConn()
     read_conn = FakeConn()
     store = store if store is not None else StubStore()
@@ -160,6 +170,7 @@ def _service(*, store=None, geocoder=None, clock=None):
         uow=FakeCtx(uow_conn),
         reader=FakeCtx(read_conn),
         geocoder=geocoder,
+        limiter=limiter,
     )
     return svc, store, geocoder, uow_conn, read_conn
 
@@ -912,3 +923,192 @@ async def test_pause_missing_intent_404():
     svc, _, _, _, _ = _service()
     with pytest.raises(IntentNotFoundError):
         await _transition(svc, uuid.uuid4())
+
+
+# --- M1 ws-4: レート制限フック(design §2.3・§2.4)---
+
+
+class StubLimiter:
+    """RateLimiterのスタブ(active_limitを公開・呼び出しを記録・例外を仕込む)。
+
+    serviceはRateLimiterのこの面のみに依存する(構造的型 — 実クラスをimport
+    しない)。429相当には実例外 RateLimitedError を使う(serviceはこれを
+    ラップせず透過させるため、本物と同じ例外で検証する)。
+    """
+
+    def __init__(self, *, active_limit: int = 5, fail_create=False, fail_update=False):
+        self.active_limit = active_limit
+        self._fail_create = fail_create
+        self._fail_update = fail_update
+        self.create_calls = []
+        self.update_calls = []
+
+    async def check_create(self, *, user_id):
+        self.create_calls.append(user_id)
+        if self._fail_create:
+            raise RateLimitedError("rate limit exceeded")
+
+    async def check_update(self, *, intent_id):
+        self.update_calls.append(intent_id)
+        if self._fail_update:
+            raise RateLimitedError("rate limit exceeded")
+
+
+async def test_create_active_consumes_create_count():
+    limiter = StubLimiter()
+    svc, *_ = _service(limiter=limiter)
+    await svc.create(
+        auth_provider="google",
+        auth_subject="s",
+        raw_text="r",
+        status="active",
+        structured_intent=_active_input(),
+    )
+    assert len(limiter.create_calls) == 1
+    assert limiter.create_calls[0] == USER_ID
+
+
+async def test_create_429_propagates():
+    svc, *_ = _service(limiter=StubLimiter(fail_create=True))
+    with pytest.raises(RateLimitedError):
+        await svc.create(
+            auth_provider="google",
+            auth_subject="s",
+            raw_text="r",
+            status="active",
+            structured_intent=_active_input(),
+        )
+
+
+async def test_create_active_locks_user_row_before_rejecting():
+    """uow内で users行ロック→COUNT→判定 の順(design §2.3)。"""
+    limiter = StubLimiter()
+    store = StubStore()
+    store.active_count = 5  # 既にActive満杯
+    svc, *_ = _service(limiter=limiter, store=store)
+    with pytest.raises(ActiveIntentLimitError) as ei:
+        await svc.create(
+            auth_provider="google",
+            auth_subject="s",
+            raw_text="r",
+            status="active",
+            structured_intent=_active_input(),
+        )
+    assert ei.value.http_status == 422
+    assert ei.value.code == "ACTIVE_INTENT_LIMIT"
+    assert store.locked_users == [USER_ID]  # 判定前にロック取得
+
+
+async def test_create_draft_skips_active_check():
+    limiter = StubLimiter()
+    store = StubStore()
+    store.active_count = 5
+    svc, *_ = _service(limiter=limiter, store=store)
+    row = await svc.create(
+        auth_provider="google",
+        auth_subject="s",
+        raw_text="r",
+        status="draft",
+        structured_intent=None,
+    )
+    assert row.status == "draft"
+    assert store.locked_users == []  # draftはActive数検証なし
+
+
+async def test_active_limit_precedes_required3():
+    """§2.4順序: Active満杯+必須3欠落では ACTIVE_INTENT_LIMIT が先。"""
+    limiter = StubLimiter()
+    store = StubStore()
+    store.active_count = 5
+    svc, *_ = _service(limiter=limiter, store=store)
+    missing = StructuredIntentInput()  # 必須3すべて欠落
+    with pytest.raises(ActiveIntentLimitError):
+        await svc.create(
+            auth_provider="google",
+            auth_subject="s",
+            raw_text="r",
+            status="active",
+            structured_intent=missing,
+        )
+
+
+async def test_update_consumes_update_count():
+    limiter = StubLimiter()
+    intent_id = uuid.uuid4()
+    store = StubStore(rows={intent_id: _row(status="active")})
+    svc, *_ = _service(limiter=limiter, store=store)
+    await svc.update(
+        auth_provider="google",
+        auth_subject="s",
+        intent_id=intent_id,
+        raw_text="r2",
+        status=None,
+        structured_intent=_active_input(),
+    )
+    assert limiter.update_calls == [intent_id]
+
+
+async def test_update_429_precedes_404():
+    """INCRはuser解決直後・行取得の前(design §2.4 — 429が先)。"""
+    svc, *_ = _service(limiter=StubLimiter(fail_update=True))
+    with pytest.raises(RateLimitedError):
+        await svc.update(
+            auth_provider="google",
+            auth_subject="s",
+            intent_id=uuid.uuid4(),  # 存在しない行
+            raw_text="r",
+            status=None,
+            structured_intent=None,
+        )
+
+
+async def test_draft_to_active_checks_active_limit():
+    intent_id = uuid.uuid4()
+    store = StubStore(rows={intent_id: _row(status="draft")})
+    store.active_count = 5
+    svc, *_ = _service(limiter=StubLimiter(), store=store)
+    with pytest.raises(ActiveIntentLimitError):
+        await svc.update(
+            auth_provider="google",
+            auth_subject="s",
+            intent_id=intent_id,
+            raw_text="r",
+            status="active",
+            structured_intent=_active_input(),
+        )
+
+
+async def test_resume_consumes_update_count_and_checks_active():
+    intent_id = uuid.uuid4()
+    store = StubStore(rows={intent_id: _row(status="paused")})
+    store.active_count = 5
+    limiter = StubLimiter()
+    svc, *_ = _service(limiter=limiter, store=store)
+    with pytest.raises(ActiveIntentLimitError):
+        await svc.resume(auth_provider="google", auth_subject="s", intent_id=intent_id)
+    assert limiter.update_calls == [intent_id]
+
+
+async def test_pause_does_not_consume_update_count():
+    intent_id = uuid.uuid4()
+    store = StubStore(rows={intent_id: _row(status="active")})
+    limiter = StubLimiter()
+    svc, *_ = _service(limiter=limiter, store=store)
+    await svc.pause(auth_provider="google", auth_subject="s", intent_id=intent_id)
+    assert limiter.update_calls == []
+
+
+async def test_limiter_none_keeps_existing_behavior():
+    """limiter=None(既定)ではロックも判定も走らない(ws-3回帰 — design §2.8)。"""
+    store = StubStore()
+    store.active_count = 99  # 満杯でも
+    svc, *_ = _service(store=store)  # limiter省略=既定None
+    row = await svc.create(
+        auth_provider="google",
+        auth_subject="s",
+        raw_text="r",
+        status="active",
+        structured_intent=_active_input(),
+    )
+    assert row.status == "active"
+    assert store.locked_users == []

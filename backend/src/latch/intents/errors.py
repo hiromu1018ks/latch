@@ -86,3 +86,14 @@ class InvalidTransitionError(IntentsError):
 
     http_status = 422
     code = "VALIDATION_ERROR"
+
+
+class ActiveIntentLimitError(IntentsError):
+    """Active Intent数上限(08 §5.4。Active 5件/ユーザー)。
+
+    促し文言は「既存Intentの停止・期限切れを促す」趣旨の固定メッセージ。
+    レート制限4種のうちActive数のみ422(05 §5 — リソース状態の検証)。
+    """
+
+    http_status = 422
+    code = "ACTIVE_INTENT_LIMIT"
