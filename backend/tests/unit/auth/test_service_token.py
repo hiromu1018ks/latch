@@ -14,6 +14,7 @@ from latch.auth.sessions import SessionStore
 from latch.auth.testkeys import DEFAULT_KID, load_private_key
 from latch.auth.tokens import verify_access_token
 from latch.core.clock import FakeClock
+from latch.ratelimit.errors import RateLimitedError
 from latch.settings import Settings
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
@@ -66,13 +67,14 @@ def _idp_token(subject: str = "sub-1", provider: str = "google") -> str:
     )
 
 
-def _service(clock, redis, *, lookup=None, idp=None) -> AuthService:
+def _service(clock, redis, *, lookup=None, idp=None, limiter=None) -> AuthService:
     return AuthService(
         clock=clock,
         secret=SECRET,
         sessions=SessionStore(redis),
         idp=idp if idp is not None else _idp(),
         user_lookup=lookup if lookup is not None else _none_lookup,
+        limiter=limiter,
     )
 
 
@@ -203,3 +205,56 @@ async def test_user_lookup_builds_uuid_from_string_row_value():
 async def test_user_lookup_returns_none_when_no_row():
     lookup = make_user_lookup(_FakeEngine(row=None))  # type: ignore[arg-type]
     assert await lookup("google", "sub-1") is None
+
+
+# --- M1 ws-4: token発行の429フック(design §2.5)---
+
+
+class _StubAuthLimiter:
+    """check_authのスタブ(呼び出し記録・任意回数でRateLimitedError)。"""
+
+    def __init__(self, *, allowed: int = 60):
+        self.allowed = allowed
+        self.calls = []
+
+    async def check_auth(self, *, provider: str, subject: str):
+        self.calls.append((provider, subject))
+        self.allowed -= 1
+        if self.allowed < 0:
+            raise RateLimitedError("rate limit exceeded")
+
+
+async def test_token_counts_provider_subject_after_idp_verify(redis, clock):
+    limiter = _StubAuthLimiter()
+    await _service(clock, redis, limiter=limiter).token(
+        provider="google", idp_token=_idp_token("sub-1")
+    )
+    assert limiter.calls == [("google", "sub-1")]
+
+
+async def test_token_61st_is_rate_limited(redis, clock):
+    limiter = _StubAuthLimiter(allowed=1)
+    svc = _service(clock, redis, limiter=limiter)
+    await svc.token(provider="google", idp_token=_idp_token("sub-1"))
+    with pytest.raises(RateLimitedError) as ei:
+        await svc.token(provider="google", idp_token=_idp_token("sub-1"))
+    assert ei.value.http_status == 429
+    assert ei.value.code == "RATE_LIMITED"
+
+
+async def test_token_401_precedes_rate_limit(redis, clock):
+    """無効idp_tokenはIdP検証で401(INCRされない — design §2.5の401優先)。"""
+    limiter = _StubAuthLimiter(allowed=0)
+    with pytest.raises(InvalidIdpTokenError):
+        await _service(clock, redis, limiter=limiter).token(
+            provider="google", idp_token="garbage"
+        )
+    assert limiter.calls == []
+
+
+async def test_token_no_limiter_keeps_behavior(redis, clock):
+    """limiter=None(既定)は既存挙動のまま(M0回帰 — design §2.8)。"""
+    result = await _service(clock, redis).token(
+        provider="google", idp_token=_idp_token("sub-1")
+    )
+    assert result.token_type == "Bearer"

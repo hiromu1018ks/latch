@@ -86,6 +86,7 @@ async def _lifespan(app: FastAPI):
             settings=settings,
             redis_client=redis_client,
             user_lookup=user_lookup,
+            limiter=app.state.rate_limiter if build_rate_limit else None,
         )
     if build_users:
         app.state.users_service = make_user_service(

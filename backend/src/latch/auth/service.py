@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis
 from sqlalchemy import text
@@ -34,7 +35,11 @@ from latch.auth.tokens import (
     verify_access_token,
 )
 from latch.core.clock import Clock
+from latch.ratelimit.errors import RateLimitedError
 from latch.settings import Settings
+
+if TYPE_CHECKING:
+    from latch.ratelimit import RateLimiter
 
 UserLookup = Callable[[str, str], Awaitable[uuid.UUID | None]]
 
@@ -108,17 +113,20 @@ class AuthService:
         sessions: SessionStore,
         idp: IdPVerifier,
         user_lookup: UserLookup,
+        limiter: RateLimiter | None = None,
     ) -> None:
         self._clock = clock
         self._secret = secret
         self._sessions = sessions
         self._idp = idp
         self._user_lookup = user_lookup
+        self._limiter = limiter
 
     async def token(self, *, provider: str, idp_token: str) -> TokenResult:
         try:
             return await self._token(provider=provider, idp_token=idp_token)
-        except AuthError:
+        except (AuthError, RateLimitedError):
+            # RateLimitedError(429)は透過(design §2.4: 429は503にしない)
             raise
         except Exception as exc:
             raise DependencyUnavailableError("auth dependency unavailable") from exc
@@ -127,6 +135,9 @@ class AuthService:
         _, subject = await self._idp.verify(
             provider=provider, idp_token=idp_token, clock=self._clock
         )
+        if self._limiter is not None:
+            # IdP検証の直後(design §2.5): 401優先を保ったうえで429
+            await self._limiter.check_auth(provider=provider, subject=subject)
         user_id = await self._user_lookup(provider, subject)
         issued = await self._sessions.create_refresh(provider=provider, subject=subject)
         access = issue_access_token(
@@ -149,7 +160,8 @@ class AuthService:
     async def refresh(self, *, refresh_token: str) -> RefreshResult:
         try:
             return await self._refresh(refresh_token=refresh_token)
-        except AuthError:
+        except (AuthError, RateLimitedError):
+            # RateLimitedError(429)は透過(design §2.4: 429は503にしない)
             raise
         except Exception as exc:
             raise DependencyUnavailableError("auth dependency unavailable") from exc
@@ -158,6 +170,11 @@ class AuthService:
         rotated = await self._sessions.rotate_refresh(
             token=refresh_token, now=self._clock.now()
         )
+        if self._limiter is not None:
+            # rotate(検証を兼ねる)の後にprovider+subjectが確定する(design §2.5)
+            await self._limiter.check_auth(
+                provider=rotated.provider, subject=rotated.subject
+            )
         access = issue_access_token(
             clock=self._clock,
             secret=self._secret,
@@ -212,6 +229,7 @@ def build_auth_service(
     settings: Settings,
     redis_client: aioredis.Redis,
     user_lookup: UserLookup,
+    limiter: RateLimiter | None = None,
 ) -> AuthService:
     """設定からAuthServiceを構築する(design §2.5-3)。
 
@@ -219,6 +237,7 @@ def build_auth_service(
     が残存する場合はValueErrorで拒否する(ws-2のllm_mode拒否と同一パターン)。
     ci/stagingは既定値でそのまま動く。redis_client の生成・解体は呼び出し側
     (main.py lifespan)の責務 — この関数は純粋な構築のみ行う。
+    limiterはNone=無効(ci試験既定)。main.py lifespanがrate_limiterを渡す。
     """
     if settings.app_env == "prod":
         if (
@@ -253,4 +272,5 @@ def build_auth_service(
         sessions=SessionStore(redis_client),
         idp=IdPVerifier(configs=configs),
         user_lookup=user_lookup,
+        limiter=limiter,
     )
