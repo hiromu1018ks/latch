@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **T1選定資料を作成中**(exa MCP調査エージェント・04 D-14の6基準+08 D-14の契約5条件で比較)。**G1残要件はT1(プロバイダ確定→実測→精度ゲート)のみ**。T3は確定済み・02#4は(a)裁定済み
+- 次の着手: **T1選定資料完成**(c44ce3e・docs/plans/T1-llm-provider-selection.md。推奨=生成Anthropic Claude/Sonnet 5+Haiku 4.5・埋め込みGemini gemini-embedding-001〔768次元〕・代替本命=AWS Bedrock Claude東京)。**ユーザーの採用判断と契約手続き待ち**。採用確定後に実プロバイダadapter→G1精度ゲート実測→G1判定。T3確定済み・02#4は(a)裁定済み
 
 ## M0 作業単位
 
