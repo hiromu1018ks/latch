@@ -19,6 +19,7 @@ LLM_ENV_VARS = (
     "LATCH_LLM_STUB_DELAY_PARSER_MS",
     "LATCH_LLM_STUB_DELAY_EMBEDDING_MS",
     "LATCH_LLM_STUB_DELAY_JEV_MS",
+    "LATCH_ANTHROPIC_API_KEY",
 )
 
 
@@ -36,6 +37,7 @@ def _clean_settings(monkeypatch, **overrides) -> Settings:
 def test_llm_settings_defaults(monkeypatch):
     s = _clean_settings(monkeypatch)
     assert s.llm_mode == "stub"
+    assert s.llm_anthropic_api_key == ""
     assert s.llm_stub_delay_parser_ms == 0
     assert s.llm_stub_delay_embedding_ms == 0
     assert s.llm_stub_delay_jev_ms == 0
@@ -50,13 +52,14 @@ def test_llm_settings_env_override(monkeypatch):
     assert s.llm_stub_delay_jev_ms == 120
 
 
-def test_llm_settings_are_exactly_four_fields(monkeypatch):
+def test_llm_settings_are_exactly_five_fields(monkeypatch):
     # Review Focus #5: timeout・failフラグのenv経路を作らない(design §2.4・§2.6)。
-    # LLM系設定はこの4項目のみであることを機械検査する。
+    # LLM系設定はこの5項目のみであることを機械検査する。
     _clean_settings(monkeypatch)
     llm_fields = {f for f in Settings.model_fields if f.startswith("llm_")}
     assert llm_fields == {
         "llm_mode",
+        "llm_anthropic_api_key",
         "llm_stub_delay_parser_ms",
         "llm_stub_delay_embedding_ms",
         "llm_stub_delay_jev_ms",

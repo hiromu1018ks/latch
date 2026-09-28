@@ -13,7 +13,13 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://latch:latch@127.0.0.1:5432/latch"
 
     # --- LLM Gateway(ws-2。design §3.2)---
-    llm_mode: str = "stub"  # T1確定後に "real" を追加(M0ではstubのみ)
+    # "stub": 3系統すべてスタブ / "real": Parser系統のみAnthropic実API
+    # (Embedding/JevはM2までスタブ継続 — design §2.4)
+    llm_mode: str = "stub"
+    # T1 Parser契約(2026-09-28・Anthropic Haiku 4.5)のAPI鍵。実値は.env
+    # (git管理外)へ書き、make g1-gate(uv run --env-file ../.env)経由で
+    # のみプロセスへ渡す。ci環境(compose)へは渡さない
+    llm_anthropic_api_key: str = ""
     # 10 第1節レイテンシ注入(既定は無効)。p50/p95分布はM4でスタブ内で拡張
     llm_stub_delay_parser_ms: int = 0
     llm_stub_delay_embedding_ms: int = 0
