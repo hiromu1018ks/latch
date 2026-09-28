@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: (ws-2 ∥ ws-3)並行wave(Embedding Worker・Layer 1+2)
+- 次の着手: ws-4(Layer 3 Cheap Judge+コスト保護)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -30,8 +30,8 @@
 | 単位 | 内容 | 出典(12) | 依存 | 状態 |
 |---|---|---|---|---|
 | ws-1 | イベント駆動基盤: Match Event 5種の発行網羅(intents CRUD組み込み・resumeはversion+1のupdate種発行)・Pub/Sub連携(ci環境の具象は設計で確定)・Matching Worker第1段(draft対象外・作成即時/更新のみdebounce 10秒トレーリング窓・idempotency key(event_type, source_intent_id, version)・version検査・5回再試行→quarantined・削除Eventの候補無効化・参照先不在=processed破棄とpayload不正=隔離の区別) | M2-1 / 06 §9・01 §16・10 §4.7 | M1 ws-3(intents)・M0(worker・Redis) | 完了 |
-| ws-2 | Embedding Worker: 正規化テキスト生成(raw_text不使用)・LLM Gateway Embedding系統real化(gemini-embedding-001・timeout 2秒・再試行なし)・intents.embedding/embedding_model書き込み・embedding_completed発行・バックフィル・embedding既存はスキップして第2段相当へ直接投入 | M2-2 / 07 §3・06 §9・D-15 | ws-1 | 未着手 |
-| ws-3 | Layer 1 Hard Filter+Layer 2 Candidate Retrieval: SQL+PostGIS判定(自己除外・時間交差+flexibility・ST_DWithin(r_a+r_b)・ペア予算min 500円未満fail・人数2∈双方・ブロック・category_primary完全一致・飲酒ペアは双方20歳以上)・正規化テキストHNSW cosine上位K_v=50(同点intent_id昇順)・embedding IS NULL/draft対象外。02#9 Hard Filter単体試験 | M2-3, M2-4 / 06 §2〜§3・05 §3 | ws-2(fixture直入れで並行可) | 未着手 |
+| ws-2 | Embedding Worker: 正規化テキスト生成(raw_text不使用)・LLM Gateway Embedding系統real化(gemini-embedding-001・timeout 2秒・再試行なし)・intents.embedding/embedding_model書き込み・embedding_completed発行・バックフィル・embedding既存はスキップして第2段相当へ直接投入 | M2-2 / 07 §3・06 §9・D-15 | ws-1 | 完了 |
+| ws-3 | Layer 1 Hard Filter+Layer 2 Candidate Retrieval: SQL+PostGIS判定(自己除外・時間交差+flexibility・ST_DWithin(r_a+r_b)・ペア予算min 500円未満fail・人数2∈双方・ブロック・category_primary完全一致・飲酒ペアは双方20歳以上)・正規化テキストHNSW cosine上位K_v=50(同点intent_id昇順)・embedding IS NULL/draft対象外。02#9 Hard Filter単体試験 | M2-3, M2-4 / 06 §2〜§3・05 §3 | ws-2(fixture直入れで並行可) | 完了 |
 | ws-4 | Layer 3 Cheap Judge+コスト保護: cheap_score=0.5×類似度+0.3×ルール+0.2×語彙重なり(D-04降格NGは計算対象外)上位K_c=20・Jev予算(1Intent 40回/日・1ユーザー120回/日・Redis JST日付キー)・再評価頻度30分(reeval:{intent_id} TTL)・D-16カウンタ(日次30,000・月次600,000・80% alertに第一候補/フォールバック内訳) | M2-5, M2-9 / 06 §4〜§5・04 §5 | ws-3 | 未着手 |
 | ws-5 | Layer 4 Jev: LLM GatewayへSystem One IF追加(state+型つき質問→answers)・TypeSafe Jev(jev-1.13.0)・429/529/timeoutでフォールバックLLM(Sonnet 5)へ切替(SDK backoff無効化・再試行なし)・jev_resultへprovider/model記録・K_j=8配分(1対1最低4回保証・未判定ペア継続優先)・同一評価世代スキップ(同バージョン組はH再検証のみ) | M2-6 / 06 §5・07 v0.5 §1・§4・04 §4 D-16 | ws-4・T1(確定済み) | 未着手 |
 | ws-6 | Layer 5 LATCH Engine: L=H×MutualScore×C(mutual=min)・閾値0.80・D-08上限(日6件/ユーザー・同時3件/Intent)超過はlatches candidate保留・提示順(対象時刻昇順・Score降順)・提示時D-05式再計算・proposal生成(visibility分岐: summary_only全フィールド/hidden_until_matchはheadcount+match_level)・nearby_also存在通知・muted通知抑制・D-07再提案制御(defer抑制min(24時間,残時間/2)・\|Δscore\|≧0.05・世代変化は無条件)・latch_status_events記録・再評価経路(30分Bucket・catch-upスキャン2時間/30分) | M2-7 / 06 §6・§9〜§10・03 D-05/D-07/D-08 | ws-5 | 未着手 |
@@ -190,6 +190,15 @@
   - 運用メモ: ci-dbに残存した古いpending行126行(9/27由来・event_type='create'等6値外)をフォールバックリレーが再publishし続け障害に見えたため掃除。以後の同種残行は6値外→quarantinedで自然終端する設計
   - 修正後: worktree基準 test-ci 677 passed・**マージ後main test-ci 677 passed**(api再ビルド後)・worker常設復帰確認・pubsubエミュレータ導入(旧イメージパスの匿名pull拒否により公式鏡像 gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators へ)
 - 学習資産追従: ws-1分 5906168(第9章「知らせを運ぶ仕組み: outboxからWorkerまでのイベント駆動」新設+既存8ファイル更新。実機観察Labはdocker制約で見送り・ws-2マージ時に再検討)
+- ws-2 / マージ 059aece(設計・計画は 42d3236・3a3950eに込み・実装は06b47d1まで・12コミット)/ docs/plans/M2/ws-2-report.md / 2026-09-29
+  - 実装中BLOCKED 1件(計画書内部矛盾): settings.pyへllm_gemini_api_key追加がM1 ws-6のllm_*6項目機械ピン試験(test_llm_factory.py)と衝突 → supervisor裁定で期待値7項目への機械的追従を許可(M1 ws-5前例)
+  - スーパーバイザー独立検証: worktree test-ci **727 passed一発グリーン**・**実APIスモークOK(gemini-embedding-001・768次元・478ms)**
+- ws-3 / マージ 0c45aa7(実装は23c35b5まで・8コミット)/ docs/plans/M2/ws-3-report.md / 2026-09-29
+  - 実装中BLOCKED 1件(計画書内部矛盾): 計画書指定のtest_runner.pyがg1gate既存試験とbasename衝突 → supervisor裁定でtest_matching_runner.pyへのリネームを許可
+  - スーパーバイザー独立検験(両単位マージ後main)で3系統の問題を検出・対応:
+    (1) ci-db残存データ干渉(ws-1系試験・学習資産検証由来のactive+embedding済みIntent 55ユーザー分がLayer 2の検索に引っかかり「結果が空」型の期待4件を破壊)→掃除で解消。**integration試験のteardown完全性とDB残存への感度が課題として浮上**(次単位で対抗策検討)
+    (2) 19歳fixtureがサーバ側alcohol確定(M1・07 §2)で422になる試験設計ミス2件 → supervisor直接修正 d3b0e07(meal作成→DB強制の手法へ)
+  - 修正後: **マージ後main test-ci 769 passed**・worker復帰確認
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
