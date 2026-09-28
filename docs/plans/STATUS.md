@@ -33,6 +33,7 @@
 | ws-3 | intents CRUD: POST(active/draft)・GET・PATCH・DELETE・pause/resume・draft→active遷移(全検証通過後に受理・初回MatchEvent発行)。ジオコーディング正転の保存組み込み・alcohol_involvedのサーバ側確定・時刻検証(過去不可・+7日上限・active時のみ) | M1-4, M1-5 / 05 §5〜§6 | ws-1・ws-2 | 完了 |
 | ws-4 | レート制限: Active 5件・作成20件/日・更新6回/時・API 60req/分(Redis・JST日付キー) | M1-6 / 08 §5.4・04 §5 | ws-3・M0(Redis) | 完了 |
 | ws-5 | フロントエンド(prototype準拠): parse連携・条件リストの動的連結・有効期限の既定選択計算+disabled化・必須3フィールド催促・判定不能NG条件のNG行・注意表示・保存API接続(active/draft。03 第10節の既知差分解消) | M1-7 / 03 §3・§10 | ws-2〜ws-4 | 完了 |
+| ws-6 | 実プロバイダadapter(Parser=Anthropic Haiku 4.5・llm_mode=real・鍵はLATCH_ANTHROPIC_API_KEY)+G1精度ゲートharness(Parser入力セット+飲酒判定セットをdocs/testassets/で実行・合格基準は07 D-17/09 §4.3) | 12 M1完了条件 / 07 §1〜§2・09 §4.3・T1 v0.2 | ws-2・T1 Parser契約(2026-09-28済) | 未着手 |
 
 実行wave: (ws-1 ∥ ws-2) → ws-3 → ws-4 → ws-5
 
