@@ -21,9 +21,10 @@ lint: ## ruff(format検査+lint)
 test: ## unit試験(毎コミットの規律)
 	cd backend && uv run pytest -m "not integration"
 
-test-ci: ## ci環境試験(compose起動 → unit+integration。--group geoでosmium込み)
+test-ci: ## ci環境試験(worker停止→unit+integration→worker復帰。--group geoでosmium込み)
 	docker compose up -d --wait
-	cd backend && uv run --group geo pytest
+	docker compose stop worker
+	cd backend && uv run --group geo pytest; rc=$$?; docker compose start worker; exit $$rc
 
 migrate: ## DBマイグレーションをheadまで適用(明示実行。API/Workerの起動時自動実行はしない)
 	cd backend && uv run alembic upgrade head
