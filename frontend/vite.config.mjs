@@ -12,8 +12,4 @@ export default defineConfig({
     },
     warmup: { clientFiles: ["./index.html", "./styles.css", "./src/main.js"] },
   },
-  test: {
-    environment: "happy-dom",
-    include: ["tests/**/*.test.js"],
-  },
 });
