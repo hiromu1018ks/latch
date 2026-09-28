@@ -214,15 +214,19 @@ async def test_2_debounce_merges_updates(api_client, db_engine, worker_env, user
     v2["raw_text"] = "明日の夜 天文館でしっかり飲みたい"
     r2 = await api_client.patch(f"/v1/intents/{intent['id']}", headers=headers, json=v2)
     assert r2.status_code == 200, r2.text
+    # Worker受信(submit)完了後にClockを進める(実時間settle — advanceがsubmit前に
+    # 走るとrelease_atがClock進行後の時刻+10秒となり到達不能・窓が解放されない)
+    await asyncio.sleep(1.0)
     worker_env.clock.advance(timedelta(seconds=3))
     v3 = dict(_active_payload())
     v3["raw_text"] = "明後日の夜 天文館で軽く飲みたい"
     r3 = await api_client.patch(f"/v1/intents/{intent['id']}", headers=headers, json=v3)
     assert r3.status_code == 200, r3.text
+    await asyncio.sleep(1.0)
     worker_env.clock.advance(timedelta(seconds=10))  # 窓解放
     row3 = await _wait_status(db_engine, "updated", intent["id"], 3)
     assert row3[0] == "processed" and "discard_reason" not in row3[1]
-    row2 = await _fetch_event(db_engine, "updated", intent["id"], 2)
+    row2 = await _wait_status(db_engine, "updated", intent["id"], 2)
     assert row2[0] == "processed"  # 窓吸収行のprocessed閉包
     assert row2[1].get("discard_reason") == "debounced_superceded"
 
@@ -393,6 +397,8 @@ async def test_8_resume_update_event(api_client, db_engine, worker_env, user_env
     assert resp.status_code == 200, resp.text
     new_version = resp.json()["version"]
     assert new_version == intent["version"] + 1  # 05 §6・06 §9
+    # Worker受信(submit)完了後にClockを進ける(test_2と同じsettle — 時計進行レース回避)
+    await asyncio.sleep(1.0)
     worker_env.clock.advance(timedelta(seconds=10))  # debounce窓解放
     row = await _wait_status(db_engine, "updated", intent["id"], new_version)
     assert row[0] == "processed"

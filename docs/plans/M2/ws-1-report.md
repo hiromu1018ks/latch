@@ -10,7 +10,7 @@
 | 1 | make lint / make test | PASS | `All checks passed!` / `569 passed, 102 deselected in 3.94s` |
 | 2 | integration 8試験の収集 | 収集確認済み/test-ci=スーパーバイザー検証待ち | `uv run pytest --collect-only tests/integration/test_events_pipeline.py -q` → `8 tests collected`・exit 0(実行は§0によりスーパーバイザー検証時) |
 | 3 | 実時間参照がclock.pyのみ | PASS | rg ヒットは `backend/src/latch/core/clock.py:33: return datetime.now(UTC)` の1行のみ。`uv run pytest tests/unit/test_arch_no_direct_time.py -v` → `1 passed` |
-| 4 | alembic・docs無変更 | PASS | `git diff --stat main -- backend/alembic docs` → 出力なし(空) |
+| 4 | alembic・docs無変更 | PASS | `git diff --stat main -- backend/alembic docs` → 本reportファイル1件のみ(`docs/plans/M2/ws-1-report.md`。※report自身がdocs/配下のためコミット後はこの1行が出力される。計画§6-4の採取時点=reportコミット前では空。alembic・docs 01〜12・learn・reviews・STATUS・M0/M1計画書は無変更) |
 | 5 | 触るファイルがスコープどおり | PASS | `git diff --name-only main \| sort` → 計画§4の作成11+変更9+report.mdの21ファイルのみ(下記コミット一覧参照・過不足なし)。`git status --short` → 空 |
 | 6 | テストbasename一意 | PASS | `find backend/tests -name "test_*.py" \| awk -F/ '{print $NF}' \| sort \| uniq -d` → 出力なし(空) |
 | 7 | compose.yaml・Makefileの規定 | 記載確認/make -n test-ci出力 | `make -n test-ci` → `docker compose up -d --wait` → `docker compose stop worker` → `cd backend && uv run --group geo pytest; rc=$?; docker compose start worker; exit $rc`(pytest成否にかかわらずworker復帰)。compose.yamlへpubsubサービス(127.0.0.1:8085)とapi/workerの `LATCH_PUBSUB_EMULATOR_HOST: pubsub:8085` を記録 |
@@ -55,4 +55,16 @@ e8e3968 feat: イベント駆動の設定とgoogle-cloud-pubsub依存を追加(M
    - Task 7: テストのFakeConnにexecuteメソッドが無くoutbox INSERT呼び出しで落ちるため、既存test_intents_service.pyと同じ流儀(async executeで記録)へ完成
    - Task 10: `# noqa: E402(説明)` の書式違反を直前コメント行へ分離・UP041(asyncio.TimeoutError→TimeoutError)を適用
 4. **make lint の `ruff format --check` 整形差分**: 計画§0の規定フロー(`cd backend && uv run ruff format .` を当てて再実行)で各タスク対応済み
-5. **PubsubEventBus構築はunit試験のlifespanで失敗しないことを確認**(Task 7 Step 5注記の検証どおり、クライアント生成のみでRPCしないため。relay初回run_onceのDB接続失敗も握り込まれる)
+5. **PubsubEventBus構築とlifespanについて(最終レビューで訂正)**: 当初「unit試験のlifespanで構築が失敗しないことを確認」と記載したが、unit試験はhttpx ASGITransportを使用しており**lifespanを実行していない**ため未検証だった(誤記載を訂正)。最終レビューでの実機検証の結果、`PUBSUB_EMULATOR_HOST`未設定かつGCP ADC(アプリケーションデフォルト認証情報)無しの環境では `PublisherClient()` 構築自体が `DefaultCredentialsError` で失敗し得る。**ci(compose)ではapi/workerへ `LATCH_PUBSUB_EMULATOR_HOST: pubsub:8085` を設定済みのため発火しない**。compose外でAPI/Workerを起動する場合はエミュレータhost設定またはADCが必須という前提を後続単位へ引き継ぐ
+
+## 最終レビュー(final review)の結果と引継ぎ事項
+
+ブランチ全体のコードレビュー(独立レビュアー・Critical 0件)。修正対応したもの:
+
+- **integration試験#2・#8の時計進行レースを修正**: PATCH/resume応答直後の `clock.advance` がWorker受信チェーン(publish→エミュレータpush→intake→debouncer.submit)より先に走ると、submit時の `release_at = clock.now()+10` がClock進行後の時刻基準となり到達不能(窓が解放されず `_wait_status` がタイムアウト)。計画書テストコード由来の欠陥のため、各応答後に `await asyncio.sleep(1.0)` のsettle(test_7と同じ手法)を追加し、#2のrow2参照も `_wait_status` 待ちへ変更。**実行検証はスーパーバイザーのtest-ci時**
+
+修正せず引継ぐもの(スコープ外・後続単位の改善事項):
+
+- **publish経路にタイムアウトなし**: google-cloud-pubsubのPublisherClientは一時障害を無限再試行するため、Pub/Sub到達不能時のpublishは例外ではなく未解決futureのまま滞り得る(設計§2.2-Bの「失敗は握り」は即座に返る前提)。`asyncio.wait_for(publish, timeout=5秒)` 等での包装をws-2以降またはM4前の改善として記録(ciではpubsub常設のため発火しない)
+- **main.py build_events分岐が注入済みintent_serviceを無条件上書き**: `create_app(intent_service=...)` 注入+event_bus未注入+lifespan実行の組合せで注入スタブが置換される(計画書Task 7 Step 4指定の形。現状のunit試験はlifespan未実行のため潜在)。lifespan系試験を追加する単位で `if build_intents_crud:` ガードを検討
+- **Stage1.intakeのclaim系一時障害にin-process再試行なし**: `_claim` 失敗はackなしで再配信(at-least-onceで正しい)だが、回収がrelay(約35秒後)またはack_deadline 600秒待ちになる。対称性のためclaimも再試行ループへ入れる価値をws-2で検討
