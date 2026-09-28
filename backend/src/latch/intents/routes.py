@@ -17,6 +17,10 @@ from pydantic import BaseModel, Field
 
 from latch.auth.deps import require_authenticated
 from latch.auth.tokens import AccessTokenClaims
+from latch.core.clock import JST, Clock
+from latch.core.deps import get_clock
+from latch.intents.completion import expires_at_candidates, nearest_expires_at
+from latch.intents.errors import IntentValidationError
 from latch.intents.intent_input import (
     IntentCreateRequest,
     IntentPatchRequest,
@@ -88,6 +92,63 @@ async def parse_intent(
     )
     logger.info("intents.parse ok")
     return _to_response(result)
+
+
+# ---------------------------------------------------------------------------
+# M1 ws-5: 有効期限選択肢の提供(design §2.6・05 §5追記分)
+
+
+class ExpiryOptionOut(BaseModel):
+    """期限選択肢1件(03 §3 FR-13・design §2.6)。"""
+
+    label: str
+    expires_at: datetime
+    selectable: bool
+
+
+class ExpiryOptionsResponse(BaseModel):
+    options: list[ExpiryOptionOut]
+    default_index: int | None = None  # time_start未指定はnull
+
+
+EXPIRY_LABELS = ("今夜 23:30", "明日 12:00", "明日 23:30", "3日後まで")
+
+TimeStartParam = Annotated[
+    datetime | None,
+    Query(description="time.start(ISO 8601・tz-aware)"),
+]
+
+
+@parse_router.get("/expiry-options", response_model=ExpiryOptionsResponse)
+async def expiry_options(
+    clock: Annotated[Clock, Depends(get_clock)],
+    time_start: TimeStartParam = None,
+) -> ExpiryOptionsResponse:
+    """GET /v1/intents/expiry-options(05 §5追記・design §2.6)。
+
+    completion.py の単一実装を呼ぶだけ(新規計算ロジックなし — 07 §2)。
+    UI計算(ws-5)がこのAPI経由で消費する。parse_routerに置くことで
+    intents_crud_router の GET /{intent_id} より先にマッチする
+    (main.py のinclude順)。
+    """
+    if time_start is not None and time_start.tzinfo is None:
+        raise IntentValidationError("time_start must be tz-aware ISO8601")
+    now = clock.now()
+    candidates = expires_at_candidates(now)
+    default_index: int | None = None
+    if time_start is not None:
+        nearest = nearest_expires_at(time_start, now)
+        default_index = candidates.index(nearest)
+    return ExpiryOptionsResponse(
+        options=[
+            # 応答のexpires_atはJST表記へ統一(now+72hはUTCのままZ表記になるのを防ぐ)
+            ExpiryOptionOut(
+                label=label, expires_at=at.astimezone(JST), selectable=at > now
+            )
+            for label, at in zip(EXPIRY_LABELS, candidates, strict=True)
+        ],
+        default_index=default_index,
+    )
 
 
 # ---------------------------------------------------------------------------

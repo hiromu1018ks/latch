@@ -53,6 +53,7 @@ def test_all_v1_routes_are_rate_limited():
     assert Counter(protected) == {
         "/v1/auth/logout": 1,
         "/v1/intents": 2,  # GET + POST
+        "/v1/intents/expiry-options": 1,  # M1 ws-5追加(スーパーバイザー許可 2026-09-28)
         "/v1/intents/parse": 1,
         "/v1/intents/{intent_id}": 3,  # GET + PATCH + DELETE
         "/v1/intents/{intent_id}/pause": 1,
