@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f4ec" />
+    <meta name="description" content="条件が合う瞬間だけ、人と機会をつなぐLATCHのWebアプリプロトタイプ" />
+    <title>新しいIntent | LATCH</title>
+    <script>
+      (() => {
+        const requested = new URLSearchParams(location.search).get("theme");
+        const saved = localStorage.getItem("latch-theme");
+        const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = ["light", "dark"].includes(requested) ? requested : saved || preferred;
+      })();
+    </script>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="wordmark" href="#main" aria-label="LATCH ホーム">LATCH</a>
+        <span class="topbar-divider" aria-hidden="true"></span>
+        <button class="intent-count" type="button">Intent <span>3件</span></button>
+
+        <div class="topbar-actions">
+          <button class="icon-button theme-button" id="themeButton" type="button" aria-label="ダークモードに切り替える" aria-pressed="false">
+            <i class="ph ph-moon" aria-hidden="true"></i>
+          </button>
+          <div class="popover-wrap">
+            <button class="icon-button notification-button" id="noticeButton" type="button" aria-label="お知らせ" aria-expanded="false">
+              <i class="ph ph-bell" aria-hidden="true"></i>
+              <span class="notification-dot"></span>
+            </button>
+            <div class="popover notification-popover" id="noticePopover" role="status" hidden>
+              <p class="popover-kicker">お知らせ</p>
+              <strong>まだ新しい候補はありません</strong>
+              <span>条件が合うと、ここに静かに届きます。</span>
+            </div>
+          </div>
+          <span class="topbar-divider topbar-divider-short" aria-hidden="true"></span>
+          <div class="popover-wrap">
+            <button class="account-button" id="accountButton" type="button" aria-expanded="false">
+              <span>たろう</span>
+              <i class="ph ph-caret-down" aria-hidden="true"></i>
+            </button>
+            <div class="popover account-popover" id="accountPopover" hidden>
+              <button type="button">プロフィール</button>
+              <button type="button">設定</button>
+              <button type="button">ログアウト</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main id="main" class="workspace">
+        <section class="intent-editor" aria-labelledby="page-title">
+          <div class="section-kicker"><span></span>NEW INTENT</div>
+          <h1 id="page-title">やりたいことを、<br class="mobile-break" />一文だけ。</h1>
+
+          <div class="intent-field">
+            <textarea id="intentText" aria-label="やりたいこと" maxlength="300" rows="4">今日20時以降、天文館で2〜4人くらいなら軽く飲みたい。予算は5,000円くらい。</textarea>
+            <span class="character-count" id="characterCount">41 / 300</span>
+          </div>
+
+          <section class="conditions" aria-labelledby="conditions-title">
+            <div class="section-heading">
+              <span aria-hidden="true"></span>
+              <h2 id="conditions-title"><b>LATCH</b>が読み取った条件</h2>
+            </div>
+
+            <div class="condition-list" id="conditionList">
+              <div class="condition-row" data-label="時間">
+                <div class="condition-icon"><i class="ph ph-clock" aria-hidden="true"></i></div>
+                <span class="condition-label">時間</span>
+                <span class="condition-value">今日 20:00以降</span>
+                <button class="edit-button" type="button" aria-label="時間を編集"><i class="ph ph-pencil-simple"></i></button>
+              </div>
+              <div class="condition-row" data-label="場所">
+                <div class="condition-icon"><i class="ph ph-map-pin" aria-hidden="true"></i></div>
+                <span class="condition-label">場所</span>
+                <span class="condition-value">天文館</span>
+                <button class="edit-button" type="button" aria-label="場所を編集"><i class="ph ph-pencil-simple"></i></button>
+              </div>
+              <div class="condition-row" data-label="人数">
+                <div class="condition-icon"><i class="ph ph-users-three" aria-hidden="true"></i></div>
+                <span class="condition-label">人数</span>
+                <span class="condition-value">2〜4人</span>
+                <button class="edit-button" type="button" aria-label="人数を編集"><i class="ph ph-pencil-simple"></i></button>
+              </div>
+              <div class="condition-row" data-label="予算">
+                <div class="condition-icon"><i class="ph ph-currency-jpy" aria-hidden="true"></i></div>
+                <span class="condition-label">予算</span>
+                <span class="condition-value">ひとり5,000円まで</span>
+                <button class="edit-button" type="button" aria-label="予算を編集"><i class="ph ph-pencil-simple"></i></button>
+              </div>
+              <div class="condition-row" data-label="目的">
+                <div class="condition-icon"><i class="ph ph-flag" aria-hidden="true"></i></div>
+                <span class="condition-label">目的</span>
+                <span class="condition-value">軽く飲む</span>
+                <button class="edit-button" type="button" aria-label="目的を編集"><i class="ph ph-pencil-simple"></i></button>
+              </div>
+            </div>
+
+            <form class="add-row" id="addConditionForm" hidden>
+              <select id="newConditionLabel" aria-label="条件の種類">
+                <option>その他</option>
+                <option>曜日</option>
+                <option>移動</option>
+                <option>雰囲気</option>
+              </select>
+              <input id="newConditionValue" placeholder="条件を入力" aria-label="追加する条件" />
+              <button type="submit" aria-label="条件を追加"><i class="ph ph-check"></i></button>
+              <button type="button" id="cancelAdd" aria-label="追加をやめる"><i class="ph ph-x"></i></button>
+            </form>
+            <button class="add-condition" id="addConditionButton" type="button">
+              <i class="ph ph-plus" aria-hidden="true"></i>
+              条件を追加
+            </button>
+          </section>
+        </section>
+
+        <aside class="deposit-settings" aria-labelledby="settings-title">
+          <div class="section-heading settings-heading">
+            <span aria-hidden="true"></span>
+            <h2 id="settings-title">預け方</h2>
+          </div>
+
+          <div class="setting-group">
+            <label for="expiry"><i class="ph ph-clock" aria-hidden="true"></i>有効期限</label>
+            <div class="select-wrap">
+              <select id="expiry">
+                <option>今夜 23:30</option>
+                <option>明日 12:00</option>
+                <option>明日 23:30</option>
+                <option>3日後まで</option>
+              </select>
+              <i class="ph ph-caret-down" aria-hidden="true"></i>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label for="privacy"><i class="ph ph-lock" aria-hidden="true"></i>公開設定</label>
+            <div class="select-wrap">
+              <select id="privacy">
+                <option>条件一致までは非公開</option>
+                <option>候補にだけ概要を表示</option>
+              </select>
+              <i class="ph ph-caret-down" aria-hidden="true"></i>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label for="notification"><i class="ph ph-bell" aria-hidden="true"></i>お知らせ</label>
+            <div class="select-wrap">
+              <select id="notification">
+                <option>一致したときだけ</option>
+                <option>近い候補も知らせる</option>
+                <option>通知しない</option>
+              </select>
+              <i class="ph ph-caret-down" aria-hidden="true"></i>
+            </div>
+          </div>
+
+          <div class="privacy-note">
+            <i class="ph ph-lock" aria-hidden="true"></i>
+            <p>相手の名前やプロフィールは、<br />全員が承認するまで表示しません。</p>
+          </div>
+
+          <div class="actions-panel">
+            <button class="draft-button" id="draftButton" type="button">
+              下書き保存
+            </button>
+            <button class="submit-button" id="submitButton" type="button">
+              <span>このIntentを預ける</span>
+              <i class="ph ph-arrow-right" aria-hidden="true"></i>
+            </button>
+            <span class="shortcut">⌘ Enter</span>
+          </div>
+        </aside>
+      </main>
+
+      <div class="toast" id="toast" role="status" hidden>
+        <i class="ph ph-check" aria-hidden="true"></i> 下書きを保存しました
+      </div>
+
+      <div class="modal-backdrop" id="confirmationModal" role="presentation" hidden>
+        <section class="confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+          <button class="modal-close" id="modalClose" type="button" aria-label="閉じる"><i class="ph ph-x"></i></button>
+          <div class="confirmation-mark"><i class="ph ph-check" aria-hidden="true"></i></div>
+          <p class="section-kicker centered"><span></span>INTENT SAVED</p>
+          <h2 id="confirmation-title">あとは、置いておくだけ。</h2>
+          <p>条件が重なる候補が見つかったときだけ、LATCHがお知らせします。</p>
+          <div class="confirmation-summary">
+            <i class="ph ph-clock" aria-hidden="true"></i> 今夜 23:30まで
+            <i class="ph ph-lock" aria-hidden="true"></i> 成立までは非公開
+          </div>
+          <button class="return-button" id="returnButton" type="button">Intentを確認する</button>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
