@@ -137,6 +137,7 @@
 
 - ws-6 / 2026-09-28着手(T1 Parser契約確定: Anthropic Haiku 4.5。LATCH_ANTHROPIC_API_KEY設定済み・gemini/typesafe鍵は未設定)
 - ws-6 / 設計 7522662(supervisor承認・design §6の7件: temperature=0・structured outputs+スキーマ供給源=ParserOutput.model_json_schema()の段階的判断・realはParser系統のみでEmbedding/Jevはstub継続〔M2で系統別へ拡張〕・.env読み込みはmake g1-gateのuv run --env-file経路のみ・alcohol参考値は集計のみで判定外・error_casesは422相当の発生まで・レポートへ生応答記録)。supervisor検算でコスト試算の100倍誤りを設計書§2.11に訂正(71回全体で$0.3未満・1回あたり約$0.004)/ 2026-09-28
+- ws-6 / 計画 61ddd77(コード全文記載・Task 9・47ステップ。§0に鍵規律・worktreeコミット規律・basename一意性を規定)/ 2026-09-28実装着手
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
