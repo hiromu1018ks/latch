@@ -17,11 +17,14 @@ from pydantic import BaseModel
 from latch.auth.deps import get_auth_service, require_authenticated
 from latch.auth.service import AuthService
 from latch.auth.tokens import ACCESS_TTL_S, AccessTokenClaims
+from latch.ratelimit.deps import api_rate_limited
 
 logger = logging.getLogger("latch.auth")
 
 public_router = APIRouter(prefix="/v1/auth", tags=["auth"])
-logout_router = APIRouter(prefix="/v1/auth", tags=["auth"])
+logout_router = APIRouter(
+    prefix="/v1/auth", tags=["auth"], dependencies=[Depends(api_rate_limited)]
+)
 
 
 class TokenRequest(BaseModel):

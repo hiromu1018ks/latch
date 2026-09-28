@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from latch.auth.deps import require_authenticated
 from latch.auth.tokens import AccessTokenClaims
+from latch.ratelimit.deps import api_rate_limited
 from latch.users.service import UserCreated, UserMe, UserService
 
 logger = logging.getLogger("latch.users")
@@ -26,7 +27,7 @@ logger = logging.getLogger("latch.users")
 users_router = APIRouter(
     prefix="/v1/users",
     tags=["users"],
-    dependencies=[Depends(require_authenticated)],  # C3(05 第5節冒頭)
+    dependencies=[Depends(api_rate_limited)],  # 401→429(M1 ws-4)
 )
 
 
