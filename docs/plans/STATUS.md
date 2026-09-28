@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **M1 ws-5(フロントエンド)を実施中**(設計 79718c0承認済み・計画作成中。ws-4マージ後に実装着手)。T3草案(docs/testassets/・5a28a0e)はユーザー確認待ち
+- 次の着手: **M1実装単位はすべて完了(ws-1〜ws-5マージ済み・マージ後main test-ci 561 passed)**。G1判定は人間領域の前提待ち: (1) T1 LLMプロバイダ契約(精度ゲートは実プロバイダでの実測が前提・08 §3)、(2) T3草案のユーザー確認(docs/testassets/)、(3) 02#4期限経過確認の扱い(ws-3設計§6-2)。揃い次第ゲート実行
 
 ## M0 作業単位
 
@@ -32,18 +32,22 @@
 | ws-2 | Intent Parser(07 §2: 確定済みシステムプロンプト実装・アプリ層補完の単一規則・D-04連携ng_unverifiable→warnings)+ POST /v1/intents/parse(同期LLM・timeout 10秒・再試行なし・503 LLM_UNAVAILABLE/422 VALIDATION_ERROR切替 D-17) | M1-2, M1-3 / 07 §2・05 §5 | M0(LLM Gateway) | 完了 |
 | ws-3 | intents CRUD: POST(active/draft)・GET・PATCH・DELETE・pause/resume・draft→active遷移(全検証通過後に受理・初回MatchEvent発行)。ジオコーディング正転の保存組み込み・alcohol_involvedのサーバ側確定・時刻検証(過去不可・+7日上限・active時のみ) | M1-4, M1-5 / 05 §5〜§6 | ws-1・ws-2 | 完了 |
 | ws-4 | レート制限: Active 5件・作成20件/日・更新6回/時・API 60req/分(Redis・JST日付キー) | M1-6 / 08 §5.4・04 §5 | ws-3・M0(Redis) | 完了 |
-| ws-5 | フロントエンド(prototype準拠): parse連携・条件リストの動的連結・有効期限の既定選択計算+disabled化・必須3フィールド催促・判定不能NG条件のNG行・注意表示・保存API接続(active/draft。03 第10節の既知差分解消) | M1-7 / 03 §3・§10 | ws-2〜ws-4 | 未着手 |
+| ws-5 | フロントエンド(prototype準拠): parse連携・条件リストの動的連結・有効期限の既定選択計算+disabled化・必須3フィールド催促・判定不能NG条件のNG行・注意表示・保存API接続(active/draft。03 第10節の既知差分解消) | M1-7 / 03 §3・§10 | ws-2〜ws-4 | 完了 |
 
 実行wave: (ws-1 ∥ ws-2) → ws-3 → ws-4 → ws-5
 
 ## G1(完了条件 — 12 M1より)
 
-- [ ] 02#1(下書き経路含む)〜#4がci環境でグリーン(10 第3節の振り分け)
-- [ ] Parser構造化精度ゲート: 入力セット30件以上で category 85% / time.start 90% / location 90% / participants 80% / budget 90%(07 D-17)
-- [ ] alcohol_involved精度ゲート: recall 100%・precision下限90%(09 第4.3節)
-- [ ] プロンプト変更のたびに両ゲートを再実行できる状態(09 第4.3節)
+- [x] 02#1(下書き経路含む)〜#3がci環境でグリーン(2026-09-28。マージ後main test-ci 561 passed。下書き経路=CRUD試験のdraft系。10 第3節の振り分けどおりbackend integration試験が本体。**02#4は保存時検証(過去不可・+7日)まで実施済み・「期限経過後expired遷移」の確認はexpiry_sweeper不在(M3-3)のため未実施〔ws-3設計§6-2の裁定待ち〕**)
+- [ ] Parser構造化精度ゲート: 入力セット30件以上で category 85% / time.start 90% / location 90% / participants 80% / budget 90%(07 D-17)。**実施にはT1(実プロバイダ契約)とT3草案確定が前提**
+- [ ] alcohol_involved精度ゲート: recall 100%・precision下限90%(09 第4.3節)。同上
+- [x] プロンプト変更のたびに両ゲートを再実行できる状態(2026-09-28。PARSER_SYSTEM_PROMPT定数+全文ピン試験+docs/testassets/入力セット〔草案〕。ゲートharnessの実行部はT1確定後に実装)
 
-※G1精度ゲートはT3部分資産(Parser入力セット30件+・飲酒判定セット30件+)を入力とする。T3整備進め方はユーザー確認が必要
+## G1判定の待ち事項(人間領域)
+
+1. **T1 LLMプロバイダ契約**(08 §3のD-14基準6件+契約5条件) — 精度ゲートは実プロバイダでの実測が前提。契約未確定プロバイダは技術基準を満たしても不採用
+2. **T3草案の確認**(docs/testassets/・5a28a0e) — 要確認7件の裁定を含む確定作業
+3. **02#4の期限経過確認の扱い**(ws-3設計§6-2) — (a)保存時検証+Clock操作による期限切れ値の保存で代替、(b)期限切れバッチをM1へ前倒し、のいずれかをユーザーが裁定
 
 ## G0(完了条件 — 12 M0より)
 
@@ -108,6 +112,11 @@
   - 経過メモ: 実装中にエージェント側API接続断(EAI_AGAIN)でターン中断 → スーパーバイザーが再開指示して完了( Task 4の途中から継続・成果物に影響なし)
   - supervisor承認(design §5の5件): resumeも更新6回/時に計上・期限切れactiveはActive数計上から除外・auth系429はprovider+subject単位・INCR先行(429・422失敗も消費)・固定バケット窓の境界2倍は許容
 - ws-5 / 設計 79718c0(supervisor承認: E2E不導入・expiry-options API追加〔05 §5追記は後日ユーザー確認〕・トークン保存場所固定・debounce 1秒・frontend/新設+prototype温存)/ 2026-09-28
+
+- ws-5 / マージ b9769ff(計画 c38ff80・実装はad684cdまで・13コミット)/ docs/plans/M1/ws-5-report.md / 2026-09-28
+  - 実装中に1回BLOCKED: expiry-options追加がws-4の契約カウンタ試験(test_rate_limit_wiring.py)の期待値と衝突 → スーパーバイザーが期待値1行追加を許可(承認済み設計変更の機械的追随)して完了
+  - スーパーバイザー独立検証: backend 561 passed(api再ビルド後・マージ後mainでも同値)・frontend vitest 81 passed・npm build成功・preview実機結合確認(フロント配信200・API無認証401)
+- 学習資産追従: ws-4分 89922d6(第7章「レート制限」+Lab 3新設)。ws-5分はagent4で実施予定
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
