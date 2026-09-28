@@ -166,7 +166,7 @@ LATCHのPostgreSQLには2つの拡張が入っています。
 - **PostGIS(ポストジス)**: 位置(緯度経度)を扱う専門機能を追加する拡張。「この2点は半径1km内か」
   「この点に最も近い地名はどこか」のような地理計算がSQLで書けるようになります
 - **pgvector**: 「意味の近さ」を数値のベクトル(長さ768の数字の列)で表し、近い順に検索する機能を
-  追加する拡張。マッチングで「内容が似たIntent」を探すのに使います(M2で実装)
+  追加する拡張。マッチングで「内容が似たIntent」を探すのに使います(第10章・第11章)
 
 **Alembic(アレンビック)** という道具もここで紹介します。テーブルの定義を変えたいとき、
 本番のデータベースを手作業で変えるのは危険です。「バージョン001→002の変更内容」をコードとして
@@ -195,12 +195,12 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **575件を約3〜4秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **643件を約5秒**(`make test`)。フロントエンドも
   **81件を約0.6秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
-- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 102件を含め計
-  **677件を約30秒**
+- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 126件を含め計
+  **769件を約30秒**
 
-3秒台で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
+数秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
 「壊して試す」学習法(Lab 2)が気軽にできます。この速さ自体が、このプロジェクトの
 設計(次章のClock)の成果物です。フロントエンドも同じ構造で、画面の部品から
 外部環境(ブラウザ・通信)を切り離して置いてあるため、81件が0.6秒ほどで
@@ -249,7 +249,7 @@ latch/
 │   │   ├── llm/           AI(LLM)呼び出しの単一経路
 │   │   ├── geo/           地名⇔座標の変換(ジオコーディング)
 │   │   ├── events/        知らせの運搬(EventBusポート・Pub/Sub実装・回収リレー)(第9章)
-│   │   └── worker/        裏方プロセス(debounceと第1段処理)(第9章)
+│   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチング)(第9章〜第11章)
 │   └── tests/             テスト(unit/=部品単体, integration/=組み合わせ)
 ├── compose.yaml           5サービス(db/redis/pubsub/api/worker)の定義
 ├── Makefile               よく使うコマンドのショートカット集
@@ -267,12 +267,13 @@ latch/
 | `make ps` | 5サービスの状態一覧。`(healthy)` は健康診断合格の印 |
 | `make logs` | 5サービスのログを流し見る。Ctrl+Cで停止 |
 | `make lint` | コードの書式・静的検査(ruff)。コミット前に緑を確認 |
-| `make test` | unit テスト575件。約3〜4秒。最もよく使う |
+| `make test` | unit テスト643件。約5秒。最もよく使う |
 | `make test-ci` | unit+integration。実DB・実Redis・実Pub/Subエミュレータを使う。実行中は常設workerを一時停止し、終わると復帰する(第9章9.8) |
 | `make migrate` | DB定義を最新版に更新(Alembic) |
 | `make geo-import` | 鹿児島の地物データをDBへ取り込み(数分) |
 | `make geo-verify` | 「天文館」の正転・逆転の動作確認 |
 | `make g1-gate` | G1精度ゲート(実APIでParserの精度を測定)。`.env` に鍵と `LATCH_LLM_MODE=real` が必要。手順は `howtos/g1-gate.md` |
+| `make embed-smoke` | Embeddingの実APIスモーク(1呼び出し・約$0.000015)。`.env` に `LATCH_LLM_MODE=real` と `LATCH_GEMINI_API_KEY` が必要(第10章10.4) |
 | `cd frontend && npm install` | フロントエンドの依存を導入。初回と、`package.json` が変わった後に実行 |
 | `cd frontend && npm run dev` | 画面の開発サーバーを起動(http://localhost:5173/)。`/v1` をapiへ転送する |
 | `cd frontend && npm test` | フロントエンドのunit テスト81件。約0.6秒 |

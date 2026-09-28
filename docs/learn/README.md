@@ -2,8 +2,9 @@
 
 - 種別: 参照(この教科書の使い方と構成の説明)
 - 読み手: プログラミング学習中のあなた。前提知識は第1章から積み上げるので、何も知らない状態で始めて大丈夫です
-- 最終更新: 2026-09-29(M2 ws-1「イベント駆動基盤」のマージに同期。第9章を新設し、
-  第1章の容器数・コマンド・テスト件数を現況へ更新)
+- 最終更新: 2026-09-29(M2 ws-2「Embedding Worker」・ws-3「Layer 1 Hard Filter +
+  Layer 2 Candidate Retrieval」のマージに同期。第10章・第11章を新設し、
+  第1章のコマンド表・テスト件数を現況へ更新)
 
 ## この教科書は何をするものか
 
@@ -40,7 +41,9 @@
 | 11 | `concepts/08-frontend-bridge.md`(第8章 フロントエンドとbackendの合流) | frontend/とprototype/の住み分け・vite proxy・トークンの保管と401回復・エラーenvelopeの画面分岐・expiry-optionsの単一実装原則を説明できる |
 | 12 | `labs/lab4-frontend.md`(Lab 4 画面の裏側を全部見る) | 画面の入力から保存までの裏で走るHTTPをcurlで全部送り、ブラウザで同じ流れを確かめられる |
 | 13 | `concepts/09-event-pipeline.md`(第9章 知らせを運ぶ仕組み) | 保存で書かれたoutboxの1行がPub/Sub経由でWorkerに届きprocessedになるまでを、at-least-once配信と冪等性・debounce・version検査とともに追える |
-| 14 | 以降 | 実装の進行とともに追加される章(Embeddingの実体・Layer 1〜5・ジオコーディングのトレース・フロントの後続画面) |
+| 14 | `concepts/10-embedding.md`(第10章 Intentを意味の数値へ変える) | Embeddingがなぜ必要か、raw_textを送らず正規化テキストだけ外部APIへ渡す設計、timeout 2秒・再試行なしとバックフィルの関係を説明できる |
+| 15 | `concepts/11-matching-retrieval.md`(第11章 マッチング前半) | 5層の漏斗の前半2層——SQLで落とすHard Filterの条件と、cosine類似度で上位50件を取る仕組み、決定性とHNSW索引のトレードオフ、match_candidatesへの記録を説明できる |
+| 16 | 以降 | 実装の進行とともに追加される章(Layer 3以降の評価・配線・ジオコーディングのトレース・フロントの後続画面) |
 
 通読物とは別に、**目的ができたときにだけ開く作業レシピ**を `howtos/` に置きます。
 章とは違い、読む順路には並びません。目的が生まれたときに増える文書です。
