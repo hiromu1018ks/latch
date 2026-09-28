@@ -76,16 +76,18 @@ def test_llm_settings_env_reads_anthropic_base_url(monkeypatch):
     assert s.llm_anthropic_base_url == "https://proxy.example/api"
 
 
-def test_llm_settings_are_exactly_six_fields(monkeypatch):
+def test_llm_settings_are_exactly_seven_fields(monkeypatch):
     # Review Focus #5: timeout・failフラグのenv経路を作らない(design §2.4・§2.6)。
-    # LLM系設定はこの6項目のみであることを機械検査する(base_urlはdesign §3.2の
-    # supervisor承認済み拡張・ws-6のANTHROPIC_BASE_URL汚染対策)。
+    # LLM系設定はこの7項目のみであることを機械検査する(base_urlはdesign §3.2の
+    # supervisor承認済み拡張・ws-6のANTHROPIC_BASE_URL汚染対策。
+    # gemini_api_keyはM2 ws-2のsupervisor許可による追従 — 期待値1項目追加のみ)。
     _clean_settings(monkeypatch)
     llm_fields = {f for f in Settings.model_fields if f.startswith("llm_")}
     assert llm_fields == {
         "llm_mode",
         "llm_anthropic_api_key",
         "llm_anthropic_base_url",
+        "llm_gemini_api_key",
         "llm_stub_delay_parser_ms",
         "llm_stub_delay_embedding_ms",
         "llm_stub_delay_jev_ms",

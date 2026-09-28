@@ -87,3 +87,17 @@ class Settings(BaseSettings):
     event_fallback_poll_sec: int = 5
     event_debounce_window_sec: int = 10  # 06 §9-1(初期値。調整はQueue lag計測で)
     event_retry_max: int = 5  # 06 §9-4(初回+再試行5回。バックオフ1,2,4,8,16秒)
+
+    # --- Embedding Worker(M2 ws-2。design §3.2)---
+    # Gemini API鍵(Embedding系統real化・T1 v0.2 §2.4)。実値は.env(git管理外)へ
+    # 書き、make embed-smoke(uv run --env-file ../.env)経由でのみプロセスへ渡す
+    # (g1-gateと同じ規律)。ci環境(compose)へは渡さない(workerはstubのため)。
+    # SDKは環境変数GEMINI_API_KEY/GOOGLE_API_KEYを自動採用するため、aliasで
+    # 明示渡し経路のみとする(llm_anthropic_api_keyと同じAliasChoices形式)
+    llm_gemini_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("LATCH_GEMINI_API_KEY", "llm_gemini_api_key"),
+    )
+    # バックフィル周期タスク(06 D-15・design §2.5)。初期値(計測後に調整 — 06 §9-10)
+    embedding_backfill_interval_sec: int = 300
+    embedding_backfill_batch_limit: int = 50
