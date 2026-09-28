@@ -116,7 +116,14 @@
 - ws-5 / マージ b9769ff(計画 c38ff80・実装はad684cdまで・13コミット)/ docs/plans/M1/ws-5-report.md / 2026-09-28
   - 実装中に1回BLOCKED: expiry-options追加がws-4の契約カウンタ試験(test_rate_limit_wiring.py)の期待値と衝突 → スーパーバイザーが期待値1行追加を許可(承認済み設計変更の機械的追随)して完了
   - スーパーバイザー独立検証: backend 561 passed(api再ビルド後・マージ後mainでも同値)・frontend vitest 81 passed・npm build成功・preview実機結合確認(フロント配信200・API無認証401)
-- 学習資産追従: ws-4分 89922d6(第7章「レート制限」+Lab 3新設)。ws-5分はagent4で実施予定
+- 学習資産追従: ws-4分 89922d6(第7章「レート制限」+Lab 3新設)。ws-5分 d301868(第8章「フロントエンドとbackendの合流」+Lab 4新設)。**M1の5単位分すべて同期完了**
+
+## M1 実装完了時点のサマリ(2026-09-28 13:05)
+
+- マージ済み単位: ws-1〜ws-5(マージコミット e5f830d・326ae51・f222416・b4c4740・b9769ff)
+- 検証最終値: マージ後main test-ci **561 passed(除外なし)**・frontend vitest 81 passed・lintクリーン・alembic 0002(マイグレーション追加なし)・geo実データ復旧済み
+- 検証で発見・修正した欠陥: 計5件(ws-1 IntegrityError分類503化・タイムボム・ws-3 bind paramリテラル落ち503化・test_7_delete期待値・ws-5契約カウンタ期待値〔裁定〕)
+- G1判定は「G1判定の待ち事項」の3項目(T1・T3・02#4扱い)が揃い次第実行
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
