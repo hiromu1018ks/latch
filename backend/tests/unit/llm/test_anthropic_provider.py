@@ -113,7 +113,9 @@ async def test_request_shape():
     assert call["model"] == ANTHROPIC_PARSER_MODEL
     assert call["system"] == "現在日付は 2026-10-01 とする。"  # {current_date}差し替え
     assert call["messages"] == [{"role": "user", "content": "テキスト"}]
-    assert call["temperature"] == 0
+    # SDK 1.xはcreate()からtemperature引数を廃止(渡すとTypeError)。出力の決定性
+    # はstructured outputs(output_config.format)がAPI側で保証する
+    assert "temperature" not in call
     assert call["max_tokens"] == ANTHROPIC_PARSER_MAX_TOKENS
     assert call["output_config"]["format"]["type"] == "json_schema"
     schema = call["output_config"]["format"]["schema"]

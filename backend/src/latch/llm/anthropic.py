@@ -1,7 +1,8 @@
 """Parser系統の実プロバイダ(Anthropic Claude API・Haiku 4.5。T1 v0.2・07 §1)。
 
 design §2.1-A(公式SDK)・§2.2-A(structured outputs)・§2.5(SDK timeout=10秒・
-max_retries=0)・§2.6(temperature=0・thinkingなし・max_tokens=1024)。
+max_retries=0)・§2.6(thinkingなし・max_tokens=1024。temperature=0はSDK 1.x
+が引数を廃止したため省略 — 決定性はstructured outputsが保証)。
 SDK例外はこの層で握らず素通り — Gatewayの既存wrap(LLMTimeoutError/
 LLMProviderError)と送信記録が最終関門(design §2.5)。
 """
@@ -105,7 +106,9 @@ class AnthropicParserProvider(ParserProvider):
             ),
             messages=[{"role": "user", "content": text}],
             output_config={"format": {"type": "json_schema", "schema": self._schema}},
-            temperature=0,
+            # design §2.6のtemperature=0はSDK 1.xがcreate()から引数を廃止
+            # (渡すとTypeError)したため省略 — 出力の決定性はstructured
+            # outputs(output_config.format)がAPI側で保証する
             max_tokens=ANTHROPIC_PARSER_MAX_TOKENS,
         )
         # structured outputsの保証: 最初のtextブロックはvalid JSON(design §2.2)。
