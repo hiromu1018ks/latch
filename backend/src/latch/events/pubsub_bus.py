@@ -47,7 +47,10 @@ class PubsubEventBus(EventBus):
 
         def _ensure() -> None:
             try:
-                self._publisher.create_topic(self._topic_path)
+                # gapic形式: 位置引数はrequestと解釈され、素の文字列は
+                # Topic(request)のコンストラクタでTypeErrorになる
+                # (google-cloud-pubsub 2.41.0・スーパーバイザー検証で検出)
+                self._publisher.create_topic(request={"name": self._topic_path})
                 logger.info("pubsub topic created: %s", self._topic_path)
             except AlreadyExists:
                 pass
@@ -121,7 +124,11 @@ class PubsubEventBus(EventBus):
         from google.api_core.exceptions import NotFound
 
         try:
-            self._subscriber.delete_subscription(self._subscription_path)
+            # gapic形式(create_topicと同じ理由でrequest辞書。位置引数の素文字列は
+            # Subscription(request)のコンストラクタでTypeErrorになる)
+            self._subscriber.delete_subscription(
+                request={"subscription": self._subscription_path}
+            )
         except NotFound:
             pass
 
