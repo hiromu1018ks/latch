@@ -186,10 +186,10 @@ make test
 期待される出力の末尾(2026-09-28に実行しました):
 
 ```
-====================== 463 passed, 91 deselected in 3.28s ======================
+====================== 467 passed, 94 deselected in 3.27s ======================
 ```
 
-**何を見ているか**。463件のunit テストが全部合格し、91件のintegration テストは
+**何を見ているか**。467件のunit テストが全部合格し、94件のintegration テストは
 「選別から外された(deselected)」状態です。integrationは実DB・実Redisを使うので、
 `make test-ci` で別途走らせる運用になっています(第1章1.11、第3章3.6)。
 
@@ -236,7 +236,7 @@ cd backend && uv run --group geo python -m latch.geo verify --reverse 130.5581 3
 
 1. `(healthy)` が付くサービスと付かないサービスの違いと、その理由
 2. `curl -i /v1/health` が404を返すことは何の仕様か(`test_health_not_under_v1` と照合)
-3. `make test` の「463 passed, 91 deselected」の両方の数字が意味すること
+3. `make test` の「467 passed, 94 deselected」の両方の数字が意味すること
 4. psqlとredis-cliの使い方の共通点(どちらも「容器の中で、専門ツールを起動する」構造)
 5. ログの1行 `INFO: ... "GET /health HTTP/1.1" 200 OK` を、第1章の用語で全文解釈する
 
