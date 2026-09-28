@@ -202,6 +202,7 @@ def build_llm_gateway(
             api_key=settings.llm_anthropic_api_key,
             system_prompt=parser_system_prompt,
             output_schema=parser_output_schema,
+            base_url=settings.llm_anthropic_base_url,
         )
         return LLMGateway(clock=clock, parser=parser, embedding=stub, jev=stub)
     raise ValueError(f"unknown llm_mode: {settings.llm_mode!r} ('stub' or 'real')")

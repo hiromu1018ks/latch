@@ -28,6 +28,15 @@ class Settings(BaseSettings):
             "LATCH_ANTHROPIC_API_KEY", "llm_anthropic_api_key"
         ),
     )
+    # 接続先API URL。SDKは明示api_key指定でも環境変数ANTHROPIC_BASE_URLを自動
+    # 採用するため、プロキシ設定混在環境(z.ai等)で鍵が別系統へ送られる事故を
+    # 防ぐ(公式APIを明示渡しする。design §3.2のsupervisor承認済み拡張)
+    llm_anthropic_base_url: str = Field(
+        default="https://api.anthropic.com",
+        validation_alias=AliasChoices(
+            "LATCH_ANTHROPIC_BASE_URL", "llm_anthropic_base_url"
+        ),
+    )
     # 10 第1節レイテンシ注入(既定は無効)。p50/p95分布はM4でスタブ内で拡張
     llm_stub_delay_parser_ms: int = 0
     llm_stub_delay_embedding_ms: int = 0

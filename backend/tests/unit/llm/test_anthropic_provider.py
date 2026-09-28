@@ -91,6 +91,27 @@ def test_default_client_options():
     assert client.timeout == ANTHROPIC_PARSER_TIMEOUT_S
 
 
+def test_default_client_targets_official_api(monkeypatch):
+    # ws-6 supervisor裁定: SDKは明示api_key指定でも環境変数ANTHROPIC_BASE_URLを
+    # 自動採用する。汚染値があってもproviderの接続先は既定の公式APIであること
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://evil-proxy.example/api")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "polluting-token")
+    provider = AnthropicParserProvider(
+        api_key="test-key", system_prompt=SYSTEM_PROMPT, output_schema=MIN_SCHEMA
+    )
+    assert str(provider._client.base_url) == "https://api.anthropic.com"
+
+
+def test_base_url_is_injectable():
+    provider = AnthropicParserProvider(
+        api_key="test-key",
+        system_prompt=SYSTEM_PROMPT,
+        output_schema=MIN_SCHEMA,
+        base_url="https://api.anthropic.com/",
+    )
+    assert str(provider._client.base_url) == "https://api.anthropic.com/"
+
+
 def test_provider_is_parser_provider():
     provider = AnthropicParserProvider(
         api_key="test-key", system_prompt=SYSTEM_PROMPT, output_schema=MIN_SCHEMA

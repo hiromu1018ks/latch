@@ -18,6 +18,9 @@ from anthropic import AsyncAnthropic
 from latch.llm.providers import ParserProvider
 
 ANTHROPIC_PARSER_MODEL = "claude-haiku-4-5"  # T1 v0.2 Parser契約(2026-09-28確定)
+# 接続先公式API(supervisor裁定・design §3.2拡張)。SDKは明示api_key指定でも
+# 環境変数ANTHROPIC_BASE_URLを自動採用するため、常に明示渡しで上書きする
+ANTHROPIC_PARSER_BASE_URL = "https://api.anthropic.com"
 # Gateway TIMEOUT_PARSER_Sと同値(design §2.5: SDK側で過剰に待つ時間を作らない)。
 # 循環import回避のため値を自前定義し、同値性はunit試験が強制する
 ANTHROPIC_PARSER_TIMEOUT_S = 10.0
@@ -97,6 +100,7 @@ class AnthropicParserProvider(ParserProvider):
         api_key: str,
         system_prompt: str,
         output_schema: dict,
+        base_url: str = ANTHROPIC_PARSER_BASE_URL,
         client: AsyncAnthropic | None = None,
     ) -> None:
         if not api_key:
@@ -110,6 +114,7 @@ class AnthropicParserProvider(ParserProvider):
             if client is not None
             else AsyncAnthropic(
                 api_key=api_key,
+                base_url=base_url,  # 環境変数ANTHROPIC_BASE_URLに左右されない
                 timeout=ANTHROPIC_PARSER_TIMEOUT_S,
                 max_retries=0,
             )

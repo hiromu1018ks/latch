@@ -22,6 +22,7 @@ LLM_ENV_VARS = (
     "LATCH_LLM_STUB_DELAY_EMBEDDING_MS",
     "LATCH_LLM_STUB_DELAY_JEV_MS",
     "LATCH_ANTHROPIC_API_KEY",
+    "LATCH_ANTHROPIC_BASE_URL",
 )
 
 
@@ -40,6 +41,7 @@ def test_llm_settings_defaults(monkeypatch):
     s = _clean_settings(monkeypatch)
     assert s.llm_mode == "stub"
     assert s.llm_anthropic_api_key == ""
+    assert s.llm_anthropic_base_url == "https://api.anthropic.com"
     assert s.llm_stub_delay_parser_ms == 0
     assert s.llm_stub_delay_embedding_ms == 0
     assert s.llm_stub_delay_jev_ms == 0
@@ -65,14 +67,25 @@ def test_llm_settings_env_reads_anthropic_key(monkeypatch):
     assert s.llm_anthropic_api_key == "env-key"
 
 
-def test_llm_settings_are_exactly_five_fields(monkeypatch):
+def test_llm_settings_env_reads_anthropic_base_url(monkeypatch):
+    # API鍵と同一パターンの写像(ws-6 supervisor裁定・design §3.2拡張)
+    for var in LLM_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("LATCH_ANTHROPIC_BASE_URL", "https://proxy.example/api")
+    s = Settings()
+    assert s.llm_anthropic_base_url == "https://proxy.example/api"
+
+
+def test_llm_settings_are_exactly_six_fields(monkeypatch):
     # Review Focus #5: timeout・failフラグのenv経路を作らない(design §2.4・§2.6)。
-    # LLM系設定はこの5項目のみであることを機械検査する。
+    # LLM系設定はこの6項目のみであることを機械検査する(base_urlはdesign §3.2の
+    # supervisor承認済み拡張・ws-6のANTHROPIC_BASE_URL汚染対策)。
     _clean_settings(monkeypatch)
     llm_fields = {f for f in Settings.model_fields if f.startswith("llm_")}
     assert llm_fields == {
         "llm_mode",
         "llm_anthropic_api_key",
+        "llm_anthropic_base_url",
         "llm_stub_delay_parser_ms",
         "llm_stub_delay_embedding_ms",
         "llm_stub_delay_jev_ms",
@@ -118,6 +131,24 @@ def test_factory_real_builds_anthropic_parser(clock, monkeypatch):
     assert gw._parser.name == "anthropic"
     assert isinstance(gw._embedding, StubLLM)
     assert isinstance(gw._jev, StubLLM)
+    # settingsのbase_urlがproviderの接続先へ明示渡しされる(環境変数非依存)
+    assert str(gw._parser._client.base_url) == "https://api.anthropic.com"
+
+
+def test_factory_real_passes_custom_base_url(clock, monkeypatch):
+    gw = build_llm_gateway(
+        clock,
+        _clean_settings(
+            monkeypatch,
+            llm_mode="real",
+            llm_anthropic_api_key="test-key",
+            llm_anthropic_base_url="https://mirror.example/api",
+        ),
+        parser_system_prompt="p",
+        parser_output_schema={"type": "object", "properties": {}},
+    )
+    # httpx2はURL末尾へスラッシュを正規化する
+    assert str(gw._parser._client.base_url) == "https://mirror.example/api/"
 
 
 def test_factory_real_requires_api_key(clock, monkeypatch):
