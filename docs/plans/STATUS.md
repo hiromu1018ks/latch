@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: ws-1(イベント駆動基盀)agent1設計
+- 次の着手: (ws-2 ∥ ws-3)並行wave(Embedding Worker・Layer 1+2)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -29,7 +29,7 @@
 
 | 単位 | 内容 | 出典(12) | 依存 | 状態 |
 |---|---|---|---|---|
-| ws-1 | イベント駆動基盤: Match Event 5種の発行網羅(intents CRUD組み込み・resumeはversion+1のupdate種発行)・Pub/Sub連携(ci環境の具象は設計で確定)・Matching Worker第1段(draft対象外・作成即時/更新のみdebounce 10秒トレーリング窓・idempotency key(event_type, source_intent_id, version)・version検査・5回再試行→quarantined・削除Eventの候補無効化・参照先不在=processed破棄とpayload不正=隔離の区別) | M2-1 / 06 §9・01 §16・10 §4.7 | M1 ws-3(intents)・M0(worker・Redis) | 未着手 |
+| ws-1 | イベント駆動基盤: Match Event 5種の発行網羅(intents CRUD組み込み・resumeはversion+1のupdate種発行)・Pub/Sub連携(ci環境の具象は設計で確定)・Matching Worker第1段(draft対象外・作成即時/更新のみdebounce 10秒トレーリング窓・idempotency key(event_type, source_intent_id, version)・version検査・5回再試行→quarantined・削除Eventの候補無効化・参照先不在=processed破棄とpayload不正=隔離の区別) | M2-1 / 06 §9・01 §16・10 §4.7 | M1 ws-3(intents)・M0(worker・Redis) | 完了 |
 | ws-2 | Embedding Worker: 正規化テキスト生成(raw_text不使用)・LLM Gateway Embedding系統real化(gemini-embedding-001・timeout 2秒・再試行なし)・intents.embedding/embedding_model書き込み・embedding_completed発行・バックフィル・embedding既存はスキップして第2段相当へ直接投入 | M2-2 / 07 §3・06 §9・D-15 | ws-1 | 未着手 |
 | ws-3 | Layer 1 Hard Filter+Layer 2 Candidate Retrieval: SQL+PostGIS判定(自己除外・時間交差+flexibility・ST_DWithin(r_a+r_b)・ペア予算min 500円未満fail・人数2∈双方・ブロック・category_primary完全一致・飲酒ペアは双方20歳以上)・正規化テキストHNSW cosine上位K_v=50(同点intent_id昇順)・embedding IS NULL/draft対象外。02#9 Hard Filter単体試験 | M2-3, M2-4 / 06 §2〜§3・05 §3 | ws-2(fixture直入れで並行可) | 未着手 |
 | ws-4 | Layer 3 Cheap Judge+コスト保護: cheap_score=0.5×類似度+0.3×ルール+0.2×語彙重なり(D-04降格NGは計算対象外)上位K_c=20・Jev予算(1Intent 40回/日・1ユーザー120回/日・Redis JST日付キー)・再評価頻度30分(reeval:{intent_id} TTL)・D-16カウンタ(日次30,000・月次600,000・80% alertに第一候補/フォールバック内訳) | M2-5, M2-9 / 06 §4〜§5・04 §5 | ws-3 | 未着手 |
@@ -180,6 +180,15 @@
 ### M2(2026-09-28〜)
 
 - M2開始 / 2026-09-28ユーザーGoサイン+単位表承認(ws-1〜ws-8)。プロバイダ3系統契約済み申告とAPI鍵実値確認を記録
+- ws-1 / マージ 0bb6a2d(設計 7743e05・計画 a34fa4d・実装は5a59208まで・16コミット)/ docs/plans/M2/ws-1-report.md / 2026-09-29
+  - スーパーバイザー独立検証(実機test-ci 5巡)で欠陥5件を検出(4件はagent3へ修正指示・1件はsupervisor直接修正):
+    (1) PubsubEventBusのgapic呼び出し形式(create_topic等への素の文字列渡しでTypeError・**worker起動クラッシュループ**。unitのスタブでは検出不能。回帰ピン3件追加)
+    (2) integration試験のAPI応答ラップ参照ミス3箇所({"intent":{}}を外さずKeyError)
+    (3) stage1のUUID復元3箇所がasyncpg UUIDインスタンスでAttributeError(**M0 ws-3・M1 ws-1と同種の3度目**。_coerce_uuid導入+回帰ピン3件)
+    (4) test_6のteardown順序(close→delete)と処理ログ待ち不足
+    (5) user_env teardownのmatch_candidates削除漏れFK違反(supervisor直接修正 5a59208)
+  - 運用メモ: ci-dbに残存した古いpending行126行(9/27由来・event_type='create'等6値外)をフォールバックリレーが再publishし続け障害に見えたため掃除。以後の同種残行は6値外→quarantinedで自然終端する設計
+  - 修正後: worktree基準 test-ci 677 passed・**マージ後main test-ci 677 passed**(api再ビルド後)・worker常設復帰確認・pubsubエミュレータ導入(旧イメージパスの匿名pull拒否により公式鏡像 gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators へ)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
