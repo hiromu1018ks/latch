@@ -296,7 +296,7 @@ anthropic SDK(Anthropic公式の、APIを呼ぶための便利ライブラリ)�
 - 鍵は `uv run --env-file ../.env` によって make の経路でのみプロセスへ渡ります。
   composeのapi/workerへは渡らないので、CI・開発環境は常にstubです
 
-だから `make test`(533件・3秒台)は、鍵なしでも、オフラインでも緑のままです。
+だから `make test`(575件・3秒台)は、鍵なしでも、オフラインでも緑のままです。
 
 ## 関連
 

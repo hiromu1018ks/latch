@@ -1,4 +1,4 @@
-# Lab 1 動いているものを観察する: 4サービスの生きている姿を見る
+# Lab 1 動いているものを観察する: 5サービスの生きている姿を見る
 
 - 種別: チュートリアル(手を動かして必ず成功体験を得る。何も壊しません)
 - 前提知識: 第1章(特に1.3 HTTP・1.4 Docker・1.11 コマンド集)
@@ -15,7 +15,7 @@
 
 すべての操作はリポジトリのルート(`latch/`)で実行します。何も壊さないので安心してください。
 
-## 1. 4サービスの生存確認
+## 1. 5サービスの生存確認
 
 ```bash
 make ps
@@ -27,19 +27,23 @@ make ps
 SERVICE   STATUS
 api       Up 3 hours (healthy)
 db        Up 3 hours (healthy)
+pubsub    Up 3 hours
 redis     Up 3 hours (healthy)
 worker    Up 3 hours
 ```
 
 **何を見ているか**。`make ps` は `docker compose ps` のショートカットで、compose.yaml から
-起動した4つの容器の状態を一覧します。`(healthy)` は各容器に付いている健康診断
+起動した5つの容器の状態を一覧します。`(healthy)` は各容器に付いている健康診断
 (定期的に「本当に仕事できる状態か」を自己点検する仕組み)に合格している印です。
 apiの点検は「自分の `/health` を自分で叩く」、db は `pg_isready` という専用コマンド、
 redis は `PING` に `PONG` が返るか、で判定します。
 
-**観察のポイント**。worker だけ `(healthy)` が付いていません。workerには健康診断そのものが
-定義されていません。理由は、workerがHTTPの窓口を持たない裏方プロセスだからです
-(判断の経緯は `docs/plans/M0/scaffold-design.md` §5 に記録があります)。
+**観察のポイント**。worker と pubsub には `(healthy)` が付きません。この2つには
+健康診断そのものが定義されていません。workerはHTTPの窓口を持たない裏方プロセス
+だからです(判断の経緯は `docs/plans/M0/scaffold-design.md` §5 に記録があります)。
+pubsubは知らせを運ぶ郵便局(第9章)で、点検にはgRPCという専用の作法しか使えないため、
+あえて付けていません(compose.yamlのpubsubサービスにコメントで理由が書いてあり、
+接続の確立はapi・worker側が再試行で担います)。
 「全部healthyであるべき」と思い込んで質問するより、「なぜここだけ違うのか」と理由を
 探せる方が、コードベースとの付き合い方は上手くなります。
 
@@ -90,7 +94,7 @@ curl -i http://127.0.0.1:8000/v1/health
 make logs
 ```
 
-画面に4サービスのログが流れ続けます(Ctrl+Cで止めます)。この状態で**別のターミナル**を
+画面に5サービスのログが流れ続けます(Ctrl+Cで止めます)。この状態で**別のターミナル**を
 開いて、もう一度 `curl http://127.0.0.1:8000/health` を実行してください。
 
 apiのログにこういう行が現れます。
@@ -104,8 +108,11 @@ api-1  | INFO:     172.18.0.1:54321 - "GET /health HTTP/1.1" 200 OK
 認証まわりの試験を行うと、`auth.error code=INVALID_IDP_TOKEN` のような行が流れるのを
 観察できます(試すなら `make test-ci` を走らせている間に眺めてみてください)。
 
-workerのログには起動時の `worker started` と停止時の行しかありません。今のworkerは
-「終了指示を待つだけ」の土台だからです(中身はM2以降)。
+workerのログは、起動時の `pubsub topic created: ...`・`subscription created: ...`・
+`worker started (app_env=...)` の行まではにぎやかで、その後は静かになります。
+イベントの処理が順調に進んでいてもログを出さない作りだからです(処理の記録は
+ログではなくDBのmatch_events行が持つ。第9章)。失敗が続いたときだけWARNINGの行が
+流れます。
 
 ## 4. データベースの中を覗く: 表の世界
 
@@ -183,13 +190,13 @@ docker compose exec -T redis redis-cli --scan --pattern 'auth:*'
 make test
 ```
 
-期待される出力の末尾(2026-09-28に実行しました):
+期待される出力の末尾(2026-09-29に実行しました):
 
 ```
-====================== 533 passed, 94 deselected in 3.69s ======================
+====================== 575 passed, 102 deselected in 4.33s ======================
 ```
 
-**何を見ているか**。533件のunit テストが全部合格し、94件のintegration テストは
+**何を見ているか**。575件のunit テストが全部合格し、102件のintegration テストは
 「選別から外された(deselected)」状態です。integrationは実DB・実Redisを使うので、
 `make test-ci` で別途走らせる運用になっています(第1章1.11、第3章3.6)。
 
@@ -236,7 +243,7 @@ cd backend && uv run --group geo python -m latch.geo verify --reverse 130.5581 3
 
 1. `(healthy)` が付くサービスと付かないサービスの違いと、その理由
 2. `curl -i /v1/health` が404を返すことは何の仕様か(`test_health_not_under_v1` と照合)
-3. `make test` の「533 passed, 94 deselected」の両方の数字が意味すること
+3. `make test` の「575 passed, 102 deselected」の両方の数字が意味すること
 4. psqlとredis-cliの使い方の共通点(どちらも「容器の中で、専門ツールを起動する」構造)
 5. ログの1行 `INFO: ... "GET /health HTTP/1.1" 200 OK` を、第1章の用語で全文解釈する
 

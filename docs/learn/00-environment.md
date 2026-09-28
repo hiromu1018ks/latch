@@ -89,15 +89,16 @@ LATCHの窓口一覧は `docs/05-data-model-api.md` の第5節に全部載って
 「冷凍食品を買って電子レンジで温める」と「鍋と材料から作る」の差に例えられます。味(動作)が一定で、
 作る人(動かすマシン)の腕に依存しません。
 
-LATCHではコンテナを4つ動かします。複数のコンテナを「どう組み合わせて起動するか」を1つのファイルに
+LATCHではコンテナを5つ動かします。複数のコンテナを「どう組み合わせて起動するか」を1つのファイルに
 書いたのが `compose.yaml` で、この定義に従って一括起動してくれる道具が **docker compose** です。
 
 | サービス名 | 役割 | 一言でいうと |
 |---|---|---|
 | `db` | データベース(PostgreSQL+PostGIS) | 全データの長期記憶 |
 | `redis` | Redis | 速く読み書きしたい小物の置き場 |
+| `pubsub` | メッセージキュー(Pub/Subのエミュレータ) | 保存と裏方をつなぐ知らせの配達係(第9章) |
 | `api` | FastAPIのアプリ | HTTPリクエストを受ける窓口 |
-| `worker` | 裏方プロセス | 時間のかかる処理の土台(今はまだ中身が薄い) |
+| `worker` | 裏方プロセス | 知らせを受けてマッチング処理を進める(第9章) |
 
 ## 1.5 言語とその管理: Python と uv
 
@@ -194,9 +195,10 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **533件を約3〜4秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **575件を約3〜4秒**(`make test`)。フロントエンドも
   **81件を約0.6秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
-- integration テスト(実DB・実Redis・実サーバーでの組み合わせ試験): 94件を含め計 **627件を約30秒**
+- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 102件を含め計
+  **677件を約30秒**
 
 3秒台で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
 「壊して試す」学習法(Lab 2)が気軽にできます。この速さ自体が、このプロジェクトの
@@ -246,9 +248,10 @@ latch/
 │   │   ├── ratelimit/     レート制限(Redisカウンタと上限判定)(第7章)
 │   │   ├── llm/           AI(LLM)呼び出しの単一経路
 │   │   ├── geo/           地名⇔座標の変換(ジオコーディング)
-│   │   └── worker/        裏方プロセスの土台
+│   │   ├── events/        知らせの運搬(EventBusポート・Pub/Sub実装・回収リレー)(第9章)
+│   │   └── worker/        裏方プロセス(debounceと第1段処理)(第9章)
 │   └── tests/             テスト(unit/=部品単体, integration/=組み合わせ)
-├── compose.yaml           4サービス(db/redis/api/worker)の定義
+├── compose.yaml           5サービス(db/redis/pubsub/api/worker)の定義
 ├── Makefile               よく使うコマンドのショートカット集
 └── docker/postgres/       DBイメージの定義(PostGIS+pgvector同梱)
 ```
@@ -260,12 +263,12 @@ latch/
 | コマンド | 何が起きるか |
 |---|---|
 | `make setup` | `backend/.venv/` に依存を導入。初回と、`pyproject.toml` が変わった後に実行 |
-| `make up` | `compose.yaml` に従い4サービスを起動。すでに起動していれば何もしない(冪等) |
-| `make ps` | 4サービスの状態一覧。`(healthy)` は健康診断合格の印 |
-| `make logs` | 4サービスのログを流し見る。Ctrl+Cで停止 |
+| `make up` | `compose.yaml` に従い5サービスを起動。すでに起動していれば何もしない(冪等) |
+| `make ps` | 5サービスの状態一覧。`(healthy)` は健康診断合格の印 |
+| `make logs` | 5サービスのログを流し見る。Ctrl+Cで停止 |
 | `make lint` | コードの書式・静的検査(ruff)。コミット前に緑を確認 |
-| `make test` | unit テスト533件。約3〜4秒。最もよく使う |
-| `make test-ci` | unit+integration。実DB・実Redisを使う |
+| `make test` | unit テスト575件。約3〜4秒。最もよく使う |
+| `make test-ci` | unit+integration。実DB・実Redis・実Pub/Subエミュレータを使う。実行中は常設workerを一時停止し、終わると復帰する(第9章9.8) |
 | `make migrate` | DB定義を最新版に更新(Alembic) |
 | `make geo-import` | 鹿児島の地物データをDBへ取り込み(数分) |
 | `make geo-verify` | 「天文館」の正転・逆転の動作確認 |
@@ -315,6 +318,7 @@ LATCHの実装は、人間が仕様を決め、AIエージェントが設計・�
 | PostGIS / pgvector | 位置情報拡張 / ベクトル(意味の近さ)検索拡張 |
 | マイグレーション / Alembic | DB定義のバージョン付き変更 / それを管理する道具 |
 | Redis / TTL | メモリ上の超高速な小物置き / データの生存時間 |
+| メッセージキュー / Pub/Sub | 知らせを預かって受取人に渡す係 / LATCHが使うその実装(Google Cloud) |
 | テスト / pytest / TDD | 自動検証 / その定番ツール / テストを先に書く作り方 |
 | コミット / git / GitHub | 変化の記録 / 記録する道具 / 記録の保管・共有サービス |
 | frontend / prototype | APIに接続する画面の本体 / 見本として残す画面の試作 |
