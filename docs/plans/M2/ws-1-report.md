@@ -131,3 +131,19 @@ e8e3968 feat: イベント駆動の設定とgoogle-cloud-pubsub依存を追加(M
 2. **`assert 0 >= 6` 失敗(caplog件数)**: stage1のWARNログ(初回+再試行5回)のcaplog到達が、DBのquarantined行ポーリング検知より後に出るタイミングがあるため、`_wait_invalid_event_logs` ヘルパ(caplogの該当件数が揃うまで最大10秒ポーリング)を追加してからassertする形へ変更。※caplogはロギング伝播設定に依存するため、実機で本修正後も0件が続く場合は計画Task 10注記(「DBポーリングでquarantined行を待つ検証を主とし、ログ確認は報告の補足とする」)に従いログ検証を補足扱いへ緩める判断をスーパーバイザーが行う余地あり
 
 **検証**: `make lint` グリーン / `make test` **572 passed** / integration収集8件・basename一意。**実機test-ciの再実行(3巡目)はスーパーバイザーが行う**
+
+## スーパーバイザー検証3巡目で検出した欠陥と修正(2026-09-29・fixコミット de09111)
+
+検証結果 8 failed / 666 passed。単独実行で根原因特定済みの実装バグ(M0 ws-3・M1 ws-1と同種のasyncpg系統)を修正した。
+
+**検出事象**: `stage1.py:358` の `_quarantine_direct` 内で `AttributeError: 'asyncpg.pgproto.pgproto.UUID' object has no attribute 'replace'`。`uuid.UUID(row[0])` 形式の再構築が、asyncpgが返すUUIDインスタンス(uuid.UUIDのサブクラス)に対して走ったため。unit試験のスタブconnは `str(ROW_ID)` を返すため検出不能だった経路(STATUS.md M0 ws-3の記録と同種の落ち穴)。
+
+**再現状況**(スーパーバイザー記録): DBに `event_type='create'`(6値外)の古いfixture残行があり、フォールバックリレーが再publish → Workerがinvalid eventとして `_quarantine_direct` で隔離を試み → UUID再構築でAttributeError → ackされず再配信ループ。該当pending行126行はスーパーバイザーがDB掃除済みのため再現しないが、`_quarantine_direct` 自体の欠陥は残っていた。
+
+**修正**(commit de09111・TDD: 回帰ピンRED→修正→GREEN):
+
+- `_coerce_uuid(value)` ヘルパを導入(UUIDインスタンスはそのまま・それ以外は `uuid.UUID(str(value))` — `intents/store.py` の同名対策と同じ流儀)
+- **全数点検**: stage1.py内のSELECT/RETURNING結果のUUID列再構築は3箇所あり、すべて置換 — ①`_claim` のINSERT RETURNING id(挿入成功経路)・②`_claim` のUNIQUE競合後のSELECT id(duplicate判定経路)・③`_quarantine_direct` のUNIQUE競合後のSELECT id(検出箇所)。`_NIL_UUID` 定数(int=0生成)は無関係
+- **回帰ピンunit試験3件**(`test_worker_stage1.py`): スタブconnの結果行にUUIDインスタンス(pgproto.UUID相当)を返すケースで ①claim RETURNING経路・②duplicate経路・③quarantine_direct競合経路 が落ちないことを検証。修正前に3件とも実際にFAIL(`AttributeError: 'UUID' object has no attribute 'replace'` — 検出事象の正確な再現)したことを確認
+
+**検証**: `make lint` グリーン / `make test` **575 passed**(572+回帰ピン3)/ `test_worker_stage1.py` 21 passed。**3巡目ではテストの応答参照(test_1等の結果)は未確認のため、UUID修正後のtest-ci(4巡目)でまだ失敗が残る可能性がある**(その場合は次のスーパーバイザー指示に従う)。実機test-ciの再実行はスーパーバイザーが実施
