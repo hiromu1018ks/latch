@@ -5,15 +5,19 @@
 SELECTがraw_textを含まないこと(確定値#10)。Worker配線はTask 8で追記。
 """
 
+import asyncio
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from latch.core.clock import FakeClock
+from latch.events import IncomingEvent
 from latch.intents.events import EVENT_EMBEDDING_COMPLETED
 from latch.llm.errors import LLMProviderError, LLMTimeoutError
 from latch.llm.providers import EMBEDDING_DIMENSIONS
 from latch.worker.embedding import EmbeddingWorker
+from latch.worker.main import Worker
+from latch.worker.stage1 import IntakeResult
 
 NOW = datetime(2026, 9, 29, 12, 0, 0, tzinfo=UTC)
 IID = uuid.UUID("00000000-0000-4000-8000-0000000000ee")
@@ -243,3 +247,177 @@ def test_select_does_not_read_raw_text():
     assert "raw_text" not in sql
     assert "embedding IS NOT NULL" in sql
     assert "time_end" in sql  # 正規化テキスト導出に必要な列は選択している
+
+
+# -- Worker配線(M2 ws-2・design §2.1-B・§4.1)--
+# test_worker.py(ws-1資産)は触らない(§0競合回避4)。embedding注入で配線を検証。
+
+
+class _FakeBus:
+    def __init__(self):
+        self.subscribers: list = []
+        self.ensured = 0
+        self.closed = 0
+
+    async def ensure(self):
+        self.ensured += 1
+
+    async def publish_match_event(self, *, event_type, intent_id, version):
+        raise AssertionError("worker配線試験ではpublishしない")
+
+    async def subscribe(self, on_message):
+        self.subscribers.append(on_message)
+        return _FakeSubscription()
+
+    async def close(self):
+        self.closed += 1
+
+
+class _FakeSubscription:
+    def __init__(self):
+        self.stopped = 0
+
+    def stop(self):
+        self.stopped += 1
+
+
+class _RecordingStage1:
+    def __init__(self, kind: str):
+        self.kind = kind
+        self.processed: list[tuple] = []
+        self.discarded: list[uuid.UUID] = []
+
+    async def intake(self, event):
+        return IntakeResult(kind=self.kind, triple=event.triple(), row_id=uuid.uuid4())
+
+    async def process(self, event, triple, row_id):
+        self.processed.append((triple, row_id))
+        return "processed"
+
+    async def discard(self, row_id, *, reason):
+        self.discarded.append(row_id)
+
+
+class _RecordingEmbedding:
+    def __init__(self, *, error: Exception | None = None):
+        self.calls: list[tuple[uuid.UUID, int]] = []
+        self.error = error
+
+    async def handle(self, intent_id, version):
+        self.calls.append((intent_id, version))
+        if self.error is not None:
+            raise self.error
+
+
+def _make_event(event_type: str, iid, version) -> IncomingEvent:
+    acks: list[int] = []
+
+    def _ack() -> None:
+        acks.append(1)
+
+    payload = b'{"event_type": "%s", "source_intent_id": "%s", "version": %d}' % (
+        event_type.encode(),
+        str(iid).encode(),
+        version,
+    )
+    event = IncomingEvent.from_payload(
+        message_id=f"{event_type}-{version}", payload=payload, ack=_ack
+    )
+    event.ack_count = acks  # type: ignore[attr-defined]
+    return event
+
+
+async def _started_worker(fake_clock, stage1, embedding):
+    worker = Worker(
+        clock=fake_clock, bus=_FakeBus(), stage1=stage1, embedding=embedding
+    )
+    task = asyncio.create_task(worker.run())
+    await asyncio.sleep(0.01)
+    return worker, task
+
+
+async def _stop(worker, task) -> None:
+    worker.request_shutdown()
+    await asyncio.wait_for(task, timeout=1.0)
+
+
+async def test_dispatch_processed_created_kicks_embedding(fake_clock):
+    """processed × created → handle(intent_id, version)をackの前に呼ぶ。"""
+    embedding = _RecordingEmbedding()
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker(fake_clock, stage1, embedding)
+    try:
+        iid = uuid.uuid4()
+        event = _make_event("created", iid, 1)
+        await worker._dispatch(event)
+        assert embedding.calls == [(iid, 1)]
+        assert event.ack_count == [1]
+    finally:
+        await _stop(worker, task)
+
+
+async def test_dispatch_duplicate_created_kicks_embedding(fake_clock):
+    """duplicate × created → handleを呼ぶ(実行中クラッシュの即時回収 — §2.1-B)。"""
+    embedding = _RecordingEmbedding()
+    stage1 = _RecordingStage1("duplicate")
+    worker, task = await _started_worker(fake_clock, stage1, embedding)
+    try:
+        iid = uuid.uuid4()
+        await worker._dispatch(_make_event("created", iid, 1))
+        assert embedding.calls == [(iid, 1)]
+    finally:
+        await _stop(worker, task)
+
+
+async def test_dispatch_quarantined_no_kick(fake_clock):
+    """quarantined(毒ペイロード等)ではキックしない(§4.1配線表)。"""
+    embedding = _RecordingEmbedding()
+    stage1 = _RecordingStage1("quarantined")
+    worker, task = await _started_worker(fake_clock, stage1, embedding)
+    try:
+        await worker._dispatch(_make_event("created", uuid.uuid4(), 1))
+        assert embedding.calls == []
+    finally:
+        await _stop(worker, task)
+
+
+async def test_dispatch_non_create_update_types_no_kick(fake_clock):
+    """deleted/expired/scheduled/embedding_completedではキックしない。"""
+    for event_type in ("deleted", "expired", "scheduled", "embedding_completed"):
+        embedding = _RecordingEmbedding()
+        stage1 = _RecordingStage1("processed")
+        worker, task = await _started_worker(fake_clock, stage1, embedding)
+        try:
+            await worker._dispatch(_make_event(event_type, uuid.uuid4(), 1))
+            assert embedding.calls == [], event_type
+        finally:
+            await _stop(worker, task)
+
+
+async def test_on_release_kicks_latest_only(fake_clock):
+    """debounce窓解放: latestの処理後にhandle 1回(absorbedでは呼ばない)。"""
+    embedding = _RecordingEmbedding()
+    stage1 = _RecordingStage1("debounce")
+    worker, task = await _started_worker(fake_clock, stage1, embedding)
+    try:
+        iid = uuid.uuid4()
+        await worker._dispatch(_make_event("updated", iid, 2))
+        await worker._dispatch(_make_event("updated", iid, 3))
+        fake_clock.advance(timedelta(seconds=10))
+        await asyncio.sleep(0.2)  # debouncer tick(0.05秒)が解放を実行
+        assert embedding.calls == [(iid, 3)]  # latestのみ
+    finally:
+        await _stop(worker, task)
+
+
+async def test_kick_failure_skips_ack(fake_clock):
+    """handleの例外(DB失敗)→ackしない=ack_deadline後に再配信が回収(§2.1-B)。"""
+    embedding = _RecordingEmbedding(error=RuntimeError("db down"))
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker(fake_clock, stage1, embedding)
+    try:
+        event = _make_event("created", uuid.uuid4(), 1)
+        await worker._dispatch(event)  # 既存exceptが握るため例外は外へ出ない
+        assert event.ack_count == []  # ackされない
+    finally:
+        await _stop(worker, task)
