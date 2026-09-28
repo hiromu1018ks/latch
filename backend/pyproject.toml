@@ -5,6 +5,7 @@ description = "LATCH backend (FastAPI)"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
+    "google-cloud-pubsub>=2.21",
     "uvicorn>=0.32",
     "pydantic-settings>=2.6",
     "sqlalchemy[asyncio]>=2.0",

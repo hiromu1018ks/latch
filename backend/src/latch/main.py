@@ -10,6 +10,7 @@ auth_service / users_service / intent_parse_service はcreate_app引数で注入
 M1 ws-2 design §2.7)。engineは全サービスの共有資産、user_lookupはauthとintentsの共有。
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -25,6 +26,7 @@ from latch.auth.service import build_auth_service, make_user_lookup
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.core.deps import get_clock
+from latch.events import FallbackRelay, make_event_bus
 from latch.intents import IntentsError, make_intent_parse_service, parse_router
 from latch.intents.routes import intents_crud_router
 from latch.intents.service import make_intent_service
@@ -49,12 +51,14 @@ async def _lifespan(app: FastAPI):
     build_intents = not hasattr(app.state, "intent_parse_service")
     build_intents_crud = not hasattr(app.state, "intent_service")
     build_rate_limit = not hasattr(app.state, "rate_limiter")
+    build_events = not hasattr(app.state, "event_bus")
     if not (
         build_auth
         or build_users
         or build_intents
         or build_intents_crud
         or build_rate_limit
+        or build_events
     ):
         yield
         return
@@ -98,17 +102,51 @@ async def _lifespan(app: FastAPI):
             settings=settings,
             user_lookup=user_lookup,
         )
-    if build_intents_crud:
+    event_relay_task = None
+    event_relay_stop = None
+    if build_events:
+        # ci=エミュレータ・本番=実GCP(settings切替のみ — design §2.1)。
+        # ensure(topic作成)は呼ばない: unit試験のlifespan(app fixtureがbus未注入)
+        # で実GCPへのRPC接続待ちが発生するため。topicはWorker起動時のensureが
+        # 作り、APIはpublish失敗(NotFound)を握ってフォールバックリレーが回収する
+        event_bus = make_event_bus(settings)
+        app.state.event_bus = event_bus
         app.state.intent_service = make_intent_service(
             clock=app.state.clock,
             engine=engine,
             limiter=app.state.rate_limiter if build_rate_limit else None,
+            event_bus=event_bus,
+        )
+        relay = FallbackRelay(
+            engine=engine, clock=app.state.clock, bus=event_bus, settings=settings
+        )
+        event_relay_stop = asyncio.Event()
+        app.state.event_relay_stop = event_relay_stop
+        event_relay_task = asyncio.create_task(relay.run(stop=event_relay_stop))
+        app.state.event_relay_task = event_relay_task
+    elif build_intents_crud:
+        # event_bus注入済み(テスト)でもintent_service未構築なら構築する
+        app.state.intent_service = make_intent_service(
+            clock=app.state.clock,
+            engine=engine,
+            limiter=app.state.rate_limiter if build_rate_limit else None,
+            event_bus=getattr(app.state, "event_bus", None),
         )
     try:
         yield
     finally:
+        if event_relay_stop is not None:
+            event_relay_stop.set()
+        if event_relay_task is not None:
+            event_relay_task.cancel()
+            try:
+                await event_relay_task
+            except asyncio.CancelledError:
+                pass
         if redis_client is not None:
             await redis_client.aclose()
+        if build_events:
+            await app.state.event_bus.close()
         await engine.dispose()
 
 

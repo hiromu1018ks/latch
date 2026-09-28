@@ -32,6 +32,19 @@ services:
       retries: 12
     restart: unless-stopped
 
+  pubsub:
+    # ci環境のMessage Queue具象(10 §1「本番と同じ種類で規模縮小」・04 §3選定=Pub/Sub)。
+    # Pub/Subエミュレータ。10 §1原則によりRedis Streams等の代替は採らない
+    # (design §2.1-A)。healthcheckはgRPCのみのため付けない(--waitはrunningで通る)。
+    # 接続の確立は各プロセス側で再試行(publish失敗→リレー・ensure失敗→コンテナ再起動)。
+    # 旧パスgcr.io/google-cloudsdk/cloud-pubsub-emulatorは匿名pull拒否のため
+    # 公式の現行置き場所(cloud-sdk-docker)の:emulatorsタグを使用(ws-1報告書参照)
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: ["gcloud", "beta", "emulators", "pubsub", "start", "--host-port=0.0.0.0:8085"]
+    ports:
+      - "127.0.0.1:8085:8085"
+    restart: unless-stopped
+
   api:
     build:
       context: backend
@@ -40,6 +53,7 @@ services:
     environment:
       LATCH_DATABASE_URL: postgresql+asyncpg://latch:latch@db:5432/latch
       LATCH_REDIS_URL: redis://redis:6379/0
+      LATCH_PUBSUB_EMULATOR_HOST: pubsub:8085
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -47,6 +61,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      pubsub:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
       interval: 10s
@@ -60,11 +76,15 @@ services:
       context: backend
     # Worker 1(10 第1節)
     command: python -m latch.worker
+    environment:
+      LATCH_PUBSUB_EMULATOR_HOST: pubsub:8085
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      pubsub:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Protocol
 from pydantic import ValidationError
 
 from latch.core.clock import Clock
+from latch.events import EventBus
 from latch.geo.service import Geofeature
 from latch.intents.errors import (
     ActiveIntentLimitError,
@@ -255,6 +256,7 @@ class IntentService:
         reader: Reader,
         geocoder: SupportsForwardGeocoding,
         limiter: RateLimiter | None = None,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._clock = clock
         self._store = store
@@ -262,6 +264,7 @@ class IntentService:
         self._reader = reader
         self._geocoder = geocoder
         self._limiter = limiter
+        self._event_bus = event_bus
 
     # -- 共通の検証・参照ヘルパー --
 
@@ -324,6 +327,25 @@ class IntentService:
         if count >= self._limiter.active_limit:  # type: ignore[union-attr]
             raise ActiveIntentLimitError(
                 "active intent limit reached; pause or let expire an intent"
+            )
+
+    async def _publish(
+        self, *, event_type: str, intent_id: uuid.UUID, version: int
+    ) -> None:
+        """uowコミット後のpublish(design §2.2-B)。失敗は握り、フォールバック
+        リレー(30秒超のpending行)が回収する。publishはuowの外でのみ呼ぶ。"""
+        if self._event_bus is None:
+            return
+        try:
+            await self._event_bus.publish_match_event(
+                event_type=event_type, intent_id=intent_id, version=version
+            )
+        except Exception:
+            logger.warning(
+                "event publish failed event_type=%s intent_id=%s version=%s",
+                event_type,
+                intent_id,
+                version,
             )
 
     @staticmethod
@@ -419,6 +441,9 @@ class IntentService:
                     version=cols.version,
                     now=now,
                 )
+            await self._publish(
+                event_type=EVENT_CREATED, intent_id=intent_id, version=cols.version
+            )
             return self._row_from_cols(
                 cols, intent_id=intent_id, user_id=user.id, status="active", now=now
             )
@@ -529,7 +554,7 @@ class IntentService:
                 raise ForbiddenError("not owner")
             target = status if status is not None else row.status
             if row.status == "draft":
-                return await self._update_draft(
+                updated = await self._update_draft(
                     conn,
                     row=row,
                     target=target,
@@ -538,8 +563,9 @@ class IntentService:
                     user=user,
                     now=now,
                 )
-            if row.status in ("active", "paused"):
-                return await self._update_active(
+                publish_type = EVENT_CREATED if target == "active" else None
+            elif row.status in ("active", "paused"):
+                updated = await self._update_active(
                     conn,
                     row=row,
                     target=target,
@@ -548,7 +574,16 @@ class IntentService:
                     user=user,
                     now=now,
                 )
-            raise InvalidTransitionError("intent is not editable")
+                publish_type = EVENT_UPDATED
+            else:
+                raise InvalidTransitionError("intent is not editable")
+        # uowコミット後にpublish(draft→active化のversion据え置きでも発行 —
+        # insert_match_eventと同一条件・06 §9-0)
+        if publish_type is not None:
+            await self._publish(
+                event_type=publish_type, intent_id=intent_id, version=updated.version
+            )
+        return updated
 
     async def _update_active(
         self,
@@ -780,12 +815,18 @@ class IntentService:
                         version=new_version,
                         now=now,
                     )
-                return replace(
+                result = replace(
                     row,
                     status=new_status,
                     version=new_version,
                     updated_at=now,
                 )
+            # uowコミット後にpublish(pauseはevent_type=Noneのため対象外)
+            if event_type is not None:
+                await self._publish(
+                    event_type=event_type, intent_id=intent_id, version=new_version
+                )
+            return result
         except (IntentsError, RateLimitedError):
             # RateLimitedError(429)は透過(design §2.4: 429は503にしない)
             raise
@@ -794,13 +835,18 @@ class IntentService:
 
 
 def make_intent_service(
-    *, clock: Clock, engine: AsyncEngine, limiter: RateLimiter | None = None
+    *,
+    clock: Clock,
+    engine: AsyncEngine,
+    limiter: RateLimiter | None = None,
+    event_bus: EventBus | None = None,
 ) -> IntentService:
     """実SQL束ねてIntentServiceを構築する(design §2.10)。
 
     latch.geoへのimportはこのファクトリとProtocol戻り値型に限る
     (design §2.5)。保存APIは同期LLM非依存(C8)のためllm/を参照しない。
     limiterはNone=無効(unit試験既定)。main.py lifespanがrate_limiterを渡す。
+    event_busはM2 ws-1(lifespanがPubsubEventBusを渡す・None=発行しない)。
     """
     from latch.geo.service import GeoService
 
@@ -811,4 +857,5 @@ def make_intent_service(
         reader=engine.connect,
         geocoder=GeoService(engine),
         limiter=limiter,
+        event_bus=event_bus,
     )
