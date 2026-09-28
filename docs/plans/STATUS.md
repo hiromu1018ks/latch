@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)
-- 次の着手: **Jev系統・Parser系統とも確定済み**(Jev: 2026-09-28 C案裁定=第一候補TypeSafe Jev+フォールバックAnthropic Sonnet 5・docs v0.5改版 132ee7b。Parser: 2026-09-28 Anthropic Haiku 4.5で契約確定・LATCH_ANTHROPIC_API_KEYを.envに設定済み〔gemini・typesafe鍵は未設定=Embedding系統契約はM2前の残課題〕)。→ **ws-6(実プロバイダadapter+G1精度ゲートharness)→G1精度ゲート実測→G1判定**。T3確定済み・02#4は(a)裁定済み
+- 次の着手: **ws-6完了**(2026-09-28マージ 8fbf91b。Parser実adapter+G1ゲートharness稼働・make g1-gateで再実行可)。→ **G1精度ゲート全件実行(71件・約$0.3)→G1判定をユーザー承認へ**。T3確定済み・02#4は(a)裁定済み・Jev系統はC案確定(132ee7b)。gemini・typesafe鍵は未設定=Embedding系統契約はM2前の残課題
 
 ## M0 作業単位
 
@@ -33,7 +33,7 @@
 | ws-3 | intents CRUD: POST(active/draft)・GET・PATCH・DELETE・pause/resume・draft→active遷移(全検証通過後に受理・初回MatchEvent発行)。ジオコーディング正転の保存組み込み・alcohol_involvedのサーバ側確定・時刻検証(過去不可・+7日上限・active時のみ) | M1-4, M1-5 / 05 §5〜§6 | ws-1・ws-2 | 完了 |
 | ws-4 | レート制限: Active 5件・作成20件/日・更新6回/時・API 60req/分(Redis・JST日付キー) | M1-6 / 08 §5.4・04 §5 | ws-3・M0(Redis) | 完了 |
 | ws-5 | フロントエンド(prototype準拠): parse連携・条件リストの動的連結・有効期限の既定選択計算+disabled化・必須3フィールド催促・判定不能NG条件のNG行・注意表示・保存API接続(active/draft。03 第10節の既知差分解消) | M1-7 / 03 §3・§10 | ws-2〜ws-4 | 完了 |
-| ws-6 | 実プロバイダadapter(Parser=Anthropic Haiku 4.5・llm_mode=real・鍵はLATCH_ANTHROPIC_API_KEY)+G1精度ゲートharness(Parser入力セット+飲酒判定セットをdocs/testassets/で実行・合格基準は07 D-17/09 §4.3) | 12 M1完了条件 / 07 §1〜§2・09 §4.3・T1 v0.2 | ws-2・T1 Parser契約(2026-09-28済) | 着手(2026-09-28) |
+| ws-6 | 実プロバイダadapter(Parser=Anthropic Haiku 4.5・llm_mode=real・鍵はLATCH_ANTHROPIC_API_KEY)+G1精度ゲートharness(Parser入力セット+飲酒判定セットをdocs/testassets/で実行・合格基準は07 D-17/09 §4.3) | 12 M1完了条件 / 07 §1〜§2・09 §4.3・T1 v0.2 | ws-2・T1 Parser契約(2026-09-28済) | 完了 |
 
 実行wave: (ws-1 ∥ ws-2) → ws-3 → ws-4 → ws-5
 
@@ -42,7 +42,7 @@
 - [x] 02#1(下書き経路含む)〜#3がci環境でグリーン(2026-09-28。マージ後main test-ci 561 passed。下書き経路=CRUD試験のdraft系。10 第3節の振り分けどおりbackend integration試験が本体。**02#4は保存時検証(過去不可・+7日)まで実施済み・「期限経過後expired遷移」の確認はexpiry_sweeper不在(M3-3)のため未実施〔ws-3設計§6-2の裁定待ち〕**)
 - [ ] Parser構造化精度ゲート: 入力セット30件以上で category 85% / time.start 90% / location 90% / participants 80% / budget 90%(07 D-17)。**実施にはT1(実プロバイダ契約)とT3草案確定が前提**
 - [ ] alcohol_involved精度ゲート: recall 100%・precision下限90%(09 第4.3節)。同上
-- [x] プロンプト変更のたびに両ゲートを再実行できる状態(2026-09-28。PARSER_SYSTEM_PROMPT定数+全文ピン試験+docs/testassets/入力セット〔草案〕。ゲートharnessの実行部はT1確定後に実装)
+- [x] プロンプト変更のたびに両ゲートを再実行できる状態(2026-09-28。PARSER_SYSTEM_PROMPT定数+全文ピン試験+docs/testassets/入力セット〔confirmed〕。**ゲートharness実装済み=ws-6マージ 8fbf91b・make g1-gateで1コマンド再実行可**)
 
 ## G1判定の待ち事項(人間領域)
 
@@ -138,6 +138,9 @@
 - ws-6 / 2026-09-28着手(T1 Parser契約確定: Anthropic Haiku 4.5。LATCH_ANTHROPIC_API_KEY設定済み・gemini/typesafe鍵は未設定)
 - ws-6 / 設計 7522662(supervisor承認・design §6の7件: temperature=0・structured outputs+スキーマ供給源=ParserOutput.model_json_schema()の段階的判断・realはParser系統のみでEmbedding/Jevはstub継続〔M2で系統別へ拡張〕・.env読み込みはmake g1-gateのuv run --env-file経路のみ・alcohol参考値は集計のみで判定外・error_casesは422相当の発生まで・レポートへ生応答記録)。supervisor検算でコスト試算の100倍誤りを設計書§2.11に訂正(71回全体で$0.3未満・1回あたり約$0.004)/ 2026-09-28
 - ws-6 / 計画 61ddd77(コード全文記載・Task 9・47ステップ。§0に鍵規律・worktreeコミット規律・basename一意性を規定)/ 2026-09-28実装着手
+- ws-6 / マージ 8fbf91b(実装はe195324まで・14コミット)/ docs/plans/M1/ws-6-report.md(+スモーク証拠 docs/testassets/results/g1-result-20260928-202115.yaml)/ 2026-09-28
+  - supervisor独立検証: lint緑・unit 533 passed(再実行で一致)・差分スコープ準拠(依存追加はanthropic・pyyamlのみ)・実APIスモーク(--limit 5)exit 0・**マージ後main test-ci 627 passed**(api再ビルド後)・geo実データ復旧済み(46+563行)
+  - 経過: 実APIスモークが401で一度BLOCKED → 原因はAPI鍵ではなく**環境変数ANTHROPIC_BASE_URL(z.aiプロキシ)をSDKが自動採用**したため(supervisorが特定・公式API直接curl=200で鍵の有効性を証明)。Settingsへllm_anthropic_base_url(既定=公式API)追加+AsyncAnthropicへの明示渡しで解消(b769308・supervisor裁定=design §3.2承認済み拡張)。詳細は報告書§5.1
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
