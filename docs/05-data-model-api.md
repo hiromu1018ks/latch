@@ -430,6 +430,7 @@ completed遷移後のLATCHに対し、参加者が「実際に会いましたか
 | メソッド/パス | 目的 | 認可・備考 |
 |---|---|---|
 | GET /v1/intents | 自Intent一覧(statusフィルタ可: `?status=draft`等。フィルタなしは全status) | 所有者のみ。ページネーション共通規定を適用。既定ソートはcreated_at降順。下書き一覧とActive Intent一覧の表示に使う(v0.4) |
+| GET /v1/intents/expiry-options | 有効期限4選択肢と既定選択の取得(03 第3節FR-13。UIの期限計算がcompletion.pyの単一実装〔07 第2節〕を消費するための経路・v0.4) | 認証済みユーザー全員。クエリ`time_start`(任意・ISO 8601 tz-aware・naiveは422 VALIDATION_ERROR)がある場合は`default_index`=`time_start+3時間に最も近い選択可能候補`の位置(なしはnull)。応答は`{"options": [{"label", "expires_at", "selectable"}×4], "default_index": <int\|null>}`。実装はcompletion.pyの呼び出しのみ(新規計算ロジックなし) |
 | GET /v1/intents/{id} | Intent取得 | 所有者のみ |
 | PATCH /v1/intents/{id} | 更新(raw_text+structured_intentの全置換。version+1、Event発行)/ status遷移(下書き→預けるのactive化を含む、v0.4) | 所有者のみ。検証はPOSTと同一(時刻検証・ジオコーディング・年齢検証を含む)。構造データの変更でalcohol_involved=trueとなる場合(category変更を含む)は作成者の年齢検証を行い、20歳未満なら422 UNDER_AGE(08 D-10)。**draft中のPATCH(v0.4)**: status=draftのIntentへのPATCH(下書き内容の更新・再保存)では、raw_textの必須(最大300字)以外の検証・ジオコーディング・Embedding・Match Event発行を行わない(下書き保存と同一の扱い。06 v0.4第9節)。**draft→activeの遷移(v0.4)**: statusを`active`に変更するPATCHはactive作成と同一の全検証(必須3フィールド・時刻検証・ジオコーディング・年齢検証)を通過して初めて受理し、検証不通なら422でstatusはdraftのまま据え置く。受理時にgeo_center・embeddingを確定し、初回のMatch Eventを発行する。条件内容の実質変更を伴わないactive化はversionを据え置く(全置換後のstructured_dataが同一の場合)。active→draftへの逆遷移は不可(打切りはcancel) |
 | DELETE /v1/intents/{id} | 削除(01第21節の削除範囲を適用) | 所有者のみ |
