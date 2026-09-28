@@ -144,6 +144,7 @@
   - 経過: 実APIスモークが401で一度BLOCKED → 原因はAPI鍵ではなく**環境変数ANTHROPIC_BASE_URL(z.aiプロキシ)をSDKが自動採用**したため(supervisorが特定・公式API直接curl=200で鍵の有効性を証明)。Settingsへllm_anthropic_base_url(既定=公式API)追加+AsyncAnthropicへの明示渡しで解消(b769308・supervisor裁定=design §3.2承認済み拡張)。詳細は報告書§5.1
 - 学習資産追従: ws-6分 cbb5e9c(how-to「G1精度ゲートを実行するには」新設・第5章拡張・00-environment.mdコマンド表へmake g1-gate追加・lab追従。教材検証の部分実行レポート203258も保管)
 - G1プロンプト修正(ws-6-g1fix) / マージ 064053b(規則7改訂 ee54bb4・実測証拠 e491661・報告書 a164e4f)/ docs/plans/M1/ws-6-g1fix-report.md + docs/testassets/results/g1-result-20260928-210042.yaml / 2026-09-28
+  - 学習資産追従(g1fix分): 5002500(第5章へピン試験の仕組みと規則7改訂の実例・how-toへ「不合格原因の切り分け(揺らぎと仕様の隙)」節を新設)。当初この追従を飛ばしていたのをユーザー指摘で補正
   - 規則7へ「場所の語の優先」と「ノンアルコール明示」を追記(07 v0.6・ユーザー文面承認)。両ゲート再実行=**Parser合格・alcohol合格(recall/precision 100%・A-034はTP是正)・overall_passed=true**
   - supervisor独立検証: 証拠数値・プロンプトSHA変更(改訂版で実測された証左)・unit 533 passed再実行一致・**マージ後main test-ci 627 passed**(api再ビルド後)・geo復旧済み
 
