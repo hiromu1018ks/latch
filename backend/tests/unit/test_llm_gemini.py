@@ -5,10 +5,12 @@ client注入スタブで実APIなしに検証する。実機挙動(HttpRetryOpti
 初回検証する — design §5-1(ws-6の401事故と同じ位置づけ)。
 """
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
 
+from latch.core.clock import FakeClock
 from latch.llm.errors import LLMProviderError
 from latch.llm.gateway import TIMEOUT_EMBEDDING_S
 from latch.llm.gemini import (
@@ -18,6 +20,7 @@ from latch.llm.gemini import (
     GeminiEmbeddingProvider,
 )
 from latch.llm.providers import EMBEDDING_DIMENSIONS
+from latch.settings import Settings
 
 
 class FakeAioModels:
@@ -90,3 +93,38 @@ def test_name_is_google_for_send_record():
     """name='google'(08 §3送信記録の送信先・design §2.6)。"""
     provider, _ = _provider()
     assert provider.name == "google"
+
+
+# -- build_embedding_gateway(design §2.8-B・§4.1 Gateway構成)--
+
+
+def _clock() -> FakeClock:
+    return FakeClock(datetime(2026, 9, 29, 12, 0, 0, tzinfo=UTC))
+
+
+def test_build_embedding_gateway_stub_mode_all_stub():
+    from latch.llm import StubLLM, build_embedding_gateway
+
+    gw = build_embedding_gateway(_clock(), Settings())
+    assert isinstance(gw._embedding, StubLLM)
+    assert isinstance(gw._parser, StubLLM)
+    assert isinstance(gw._jev, StubLLM)
+
+
+def test_build_embedding_gateway_real_embeds_only():
+    from latch.llm import StubLLM, build_embedding_gateway
+    from latch.llm.gemini import GeminiEmbeddingProvider
+
+    settings = Settings(llm_mode="real", llm_gemini_api_key="gk-test")
+    gw = build_embedding_gateway(_clock(), settings)
+    assert isinstance(gw._embedding, GeminiEmbeddingProvider)
+    assert isinstance(gw._parser, StubLLM)  # parser/jevはstub継続(design §2.8-B)
+    assert isinstance(gw._jev, StubLLM)
+
+
+def test_build_embedding_gateway_real_without_key_fails_fast():
+    from latch.llm import build_embedding_gateway
+
+    settings = Settings(llm_mode="real", llm_gemini_api_key="")
+    with pytest.raises(ValueError):
+        build_embedding_gateway(_clock(), settings)

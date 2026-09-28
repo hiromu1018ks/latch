@@ -10,8 +10,10 @@ from latch.llm.gateway import (
     TIMEOUT_PARSER_S,
     LLMGateway,
     Timeouts,
+    build_embedding_gateway,
     build_llm_gateway,
 )
+from latch.llm.gemini import GeminiEmbeddingProvider
 from latch.llm.providers import (
     EMBEDDING_DIMENSIONS,
     EmbeddingProvider,
@@ -24,6 +26,7 @@ from latch.llm.stub import StubLLM
 __all__ = [
     "EMBEDDING_DIMENSIONS",
     "EmbeddingProvider",
+    "GeminiEmbeddingProvider",
     "JevProvider",
     "LLMError",
     "LLMGateway",
@@ -36,6 +39,7 @@ __all__ = [
     "TIMEOUT_JEV_S",
     "TIMEOUT_PARSER_S",
     "Timeouts",
+    "build_embedding_gateway",
     "build_llm_gateway",
     "send_log",
 ]
