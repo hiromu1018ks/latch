@@ -1,5 +1,6 @@
 """アプリ設定(design §2.8: コードが消費しない設定は作らない)。"""
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,8 +19,15 @@ class Settings(BaseSettings):
     llm_mode: str = "stub"
     # T1 Parser契約(2026-09-28・Anthropic Haiku 4.5)のAPI鍵。実値は.env
     # (git管理外)へ書き、make g1-gate(uv run --env-file ../.env)経由で
-    # のみプロセスへ渡す。ci環境(compose)へは渡さない
-    llm_anthropic_api_key: str = ""
+    # のみプロセスへ渡す。ci環境(compose)へは渡さない。
+    # env名はLATCH_ANTHROPIC_API_KEY(.env・Makefileと同一) — env_prefixの
+    # 自動写像(LATCH_LLM_ANTHROPIC_API_KEY)を探させないためalias必須
+    llm_anthropic_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "LATCH_ANTHROPIC_API_KEY", "llm_anthropic_api_key"
+        ),
+    )
     # 10 第1節レイテンシ注入(既定は無効)。p50/p95分布はM4でスタブ内で拡張
     llm_stub_delay_parser_ms: int = 0
     llm_stub_delay_embedding_ms: int = 0

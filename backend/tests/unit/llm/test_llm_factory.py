@@ -54,6 +54,17 @@ def test_llm_settings_env_override(monkeypatch):
     assert s.llm_stub_delay_jev_ms == 120
 
 
+def test_llm_settings_env_reads_anthropic_key(monkeypatch):
+    # design §2.3/§2.4: API鍵のenv名はLATCH_ANTHROPIC_API_KEY(T1・.env・
+    # make g1-gateと同一)。env_prefix=LATCH_の自動写像だと
+    # LATCH_LLM_ANTHROPIC_API_KEYを探してしまうためaliasが必要
+    for var in LLM_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("LATCH_ANTHROPIC_API_KEY", "env-key")
+    s = Settings()
+    assert s.llm_anthropic_api_key == "env-key"
+
+
 def test_llm_settings_are_exactly_five_fields(monkeypatch):
     # Review Focus #5: timeout・failフラグのenv経路を作らない(design §2.4・§2.6)。
     # LLM系設定はこの5項目のみであることを機械検査する。
