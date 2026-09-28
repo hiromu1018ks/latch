@@ -122,6 +122,31 @@ async def _wait_status(
     )
 
 
+def _invalid_event_log_count(caplog) -> int:
+    return sum(
+        1
+        for r in caplog.records
+        if "stage1 invalid event" in r.getMessage() and "attempt=" in r.getMessage()
+    )
+
+
+async def _wait_invalid_event_logs(caplog, minimum: int, timeout: float = 10.0) -> None:
+    """stage1のinvalid event警告がcaplogへ出そろうまで待つ。
+
+    DBのquarantined行よりWARNログのcaplog到達が遅れ得る(スーパーバイザー検証で
+    assert 0 >= 6 を検出)ため、カウントが揃うまでポーリングする。
+    """
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        if _invalid_event_log_count(caplog) >= minimum:
+            return
+        await asyncio.sleep(0.2)
+    pytest.fail(
+        f"timeout: stage1 invalid event logs not reached"
+        f" ({_invalid_event_log_count(caplog)}/{minimum})"
+    )
+
+
 # -- fixture: 試験専用subscription + テストプロセス内Worker --
 
 
@@ -160,8 +185,11 @@ async def worker_env(db_engine):
             await asyncio.wait_for(task, timeout=5.0)
         except TimeoutError:
             task.cancel()
+        # 残余メッセージを次試験へ残さない。**closeの前に**削除する
+        # (close後のgRPCチャネルはクローズ済みで "Cannot invoke RPC on
+        # closed channel" になる — スーパーバイザー検証で検出)
+        bus.delete_subscription()
         await bus.close()
-        bus.delete_subscription()  # 残余メッセージを次試験へ残さない
 
 
 @pytest.fixture
@@ -189,7 +217,9 @@ async def user_env(api_client, db_engine):
 async def _create_active(api_client, headers) -> dict:
     resp = await api_client.post("/v1/intents", headers=headers, json=_active_payload())
     assert resp.status_code == 201, resp.text
-    return resp.json()
+    # POST /v1/intents応答は {"intent": {...}} ラップ(IntentEnvelope。
+    # M1 test_intents_crud_api.py:141 と同一流儀)
+    return resp.json()["intent"]
 
 
 # -- §4.2の8試験 --
@@ -242,7 +272,7 @@ async def test_3_draft_to_active_emits_created(
         json={"raw_text": "下書き", "status": "draft", "structured_intent": None},
     )
     assert draft.status_code == 201, draft.text
-    intent_id = draft.json()["id"]
+    intent_id = draft.json()["intent"]["id"]  # IntentEnvelopeラップ
     async with db_engine.connect() as conn:
         res = await conn.execute(
             text("SELECT count(*) FROM match_events WHERE source_intent_id = :i"),
@@ -255,7 +285,9 @@ async def test_3_draft_to_active_emits_created(
         json=dict(_active_payload()),
     )
     assert act.status_code == 200, act.text
-    row = await _wait_status(db_engine, "created", intent_id, act.json()["version"])
+    row = await _wait_status(
+        db_engine, "created", intent_id, act.json()["intent"]["version"]
+    )
     assert row[0] == "processed"
 
 
@@ -333,15 +365,10 @@ async def test_6_poison_payload_quarantined(db_engine, worker_env, caplog):
             await asyncio.sleep(0.2)
         else:
             pytest.fail("poison payload not quarantined")
-    # 再試行5回の確認(実ログ — 10 §4.7)
-    assert (
-        sum(
-            1
-            for r in caplog.records
-            if "stage1 invalid event" in r.getMessage() and "attempt=" in r.getMessage()
-        )
-        >= 6
-    )  # 初回+再試行5回の警告ログ
+    # 再試行5回の確認(実ログ — 10 §4.7)。WARNのcaplog到達はDB行コミットより
+    # 遅れ得るため、揃うまで待ってから数える(assert 0>=6 を検出した対策)
+    await _wait_invalid_event_logs(caplog, 6)
+    assert _invalid_event_log_count(caplog) >= 6  # 初回+再試行5回の警告ログ
     # 後続が滞らない: 正常Eventを続けて投入しprocessedになる
     normal = uuid_mod.uuid4()
     await worker_env.bus.publish_match_event(
@@ -395,7 +422,7 @@ async def test_8_resume_update_event(api_client, db_engine, worker_env, user_env
     assert resp.status_code == 200, resp.text
     resp = await api_client.post(f"/v1/intents/{intent['id']}/resume", headers=headers)
     assert resp.status_code == 200, resp.text
-    new_version = resp.json()["version"]
+    new_version = resp.json()["intent"]["version"]  # IntentEnvelopeラップ
     assert new_version == intent["version"] + 1  # 05 §6・06 §9
     # Worker受信(submit)完了後にClockを進ける(test_2と同じsettle — 時計進行レース回避)
     await asyncio.sleep(1.0)
