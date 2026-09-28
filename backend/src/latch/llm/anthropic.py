@@ -23,8 +23,26 @@ ANTHROPIC_PARSER_MODEL = "claude-haiku-4-5"  # T1 v0.2 Parser契約(2026-09-28�
 ANTHROPIC_PARSER_TIMEOUT_S = 10.0
 ANTHROPIC_PARSER_MAX_TOKENS = 1024  # §2.6: 出力想定0.4k+マージンの打ち切り防御
 
-# 後加工で保持しないpydanticメタデータ(出力保証に不要・スキーマを小さく保つ)
-_STRIP_KEYS = ("title", "description", "default", "$defs", "examples")
+# 後加工で保持しないキー。前半=pydanticメタデータ(出力保証に不要・スキーマを
+# 小さく保つ)。後半=Anthropic structured outputsが対応しない文字列/数値制約
+# (残すと実APIが400で拒否し得る — Review Focus #1。検証関門はサービス層の
+# ParserOutput.model_validateが保持する)
+_STRIP_KEYS = (
+    "title",
+    "description",
+    "default",
+    "$defs",
+    "examples",
+    "minLength",
+    "maxLength",
+    "minimum",
+    "maximum",
+    "multipleOf",
+    "pattern",
+    "minItems",
+    "maxItems",
+    "uniqueItems",
+)
 
 
 def _resolve_refs(node: Any, defs: dict) -> Any:

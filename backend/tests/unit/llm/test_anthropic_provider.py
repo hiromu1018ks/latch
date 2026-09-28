@@ -193,3 +193,33 @@ def test_adapt_schema_is_deterministic():
     a = adapt_schema_for_anthropic(ParserOutput.model_json_schema())
     b = adapt_schema_for_anthropic(ParserOutput.model_json_schema())
     assert a == b
+
+
+def test_adapt_schema_strips_unsupported_keywords():
+    # Review Focus #1(負のピン): Anthropic structured outputsが対応しない
+    # 制約キーワードは残らない — 残ると実APIが400で拒否し得る(合成モックでは
+    # 検出不能)。検証関門はサービス層ParserOutput.model_validateが保持する
+    def _collect_keys(node, acc):
+        if isinstance(node, dict):
+            acc.update(node.keys())
+            for value in node.values():
+                _collect_keys(value, acc)
+        elif isinstance(node, list):
+            for item in node:
+                _collect_keys(item, acc)
+        return acc
+
+    adapted = adapt_schema_for_anthropic(ParserOutput.model_json_schema())
+    keys = _collect_keys(adapted, set())
+    unsupported = (
+        "minLength",
+        "maxLength",
+        "minimum",
+        "maximum",
+        "multipleOf",
+        "pattern",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+    )
+    assert not keys & set(unsupported)
