@@ -35,14 +35,21 @@
 - `layer1.py` blocks句のE501折り返し(行長89/90>88)、`candidates.py` return文の1行化、`__init__.py` import順のisort、`test_matching_hardfilter.py` のformat適用 — いずれも計画書掲載コードがruffを行長88/規約で通らない箇所への機械的整形
 - `test_matching_hardfilter.py` test_13の `own2`/`t_cat`/`t_499` のF841(未使用変数)解消のため代入を `await _intent(...)` 直接呼び出しへ変更(assertは元から変数非参照・行の作成という試験意図不変)
 
+### 最終レビュー(ブランチ全体・レビューエージェント)による修正
+- **Critical 1件(修正済み)**: `test_4_idempotent_upsert` がFakeClock固定時刻のまま2回実行するため、2回の `:now` が同一マイクロ秒となり `created_at == updated_at` で最終assert `created_at < updated_at` が**必ず失敗**する(計画書§8 Task 6掲載試験コード由来の欠陥)。2回目の実行前に `clock.advance(timedelta(seconds=1))` を追加して修正。判定本体(1行維持・score DO UPDATE・status='pending'維持)は元から正しい
+- **Important 1件(軽減措置のみ・本格対応は次単位以降)**: pass_count等の正確値assert(`== 1`/`== 55`)が共有ci-dbの過去失敗残渣(teardown未走のactive Intent)に恒久汚染されうる。レビュー推奨どおり下記「スーパーバイザー検証手順」へ残渣掃除を1行追加。assertをfield内id集合一致へ置き換える本格対応は次単位(ws-4以降)へ先送り
+- **Minor(見送り・記録のみ)**: (a) `origin.py` の `user_ge_20`(jst_date)と `evaluated_at`(now)が別々のClock呼び出しで、JST深夜0時丁度の跨ぎでのみ基準日が1日ずれうる(実害極小。次単位で evaluated_at 一本化を検討) (b) `layer1.py` の `interval '3 hours'` が completion.DEFAULT_DURATION と重複定義(防御COALESCEのためやむを得ず。将来の定数変更時は注意)
+
 ## スーパーバイザー検証手順(test-ci実行時)
 1. `docker compose build api` — apiイメージ再ビルド(monitoring対象コードは本単位にないが ws-2 と同時検証になる可能性があるため STATUS運用ルール4どおり。マイグレーション追加なしのため `make migrate` は不要)
-2. `make test-ci` — 既存全数+test_matching_hardfilter 13件+test_matching_retrieval 4件がグリーンで完了条件2を検証(本単位はDBスキーマを変えないが、ws-2と検証タイミングを重ねない — STATUS運用ルール1)
-3. マージ前: `find backend/tests -name "test_*.py" | awk -F/ '{print $NF}' | sort | uniq -d` が空(運用ルール5)
+2. 過去失敗残渣の掃除(本単位試験が途中失敗した履歴がある場合のみ): `m2ws3-%`/`m2ws3r-%` のauth_subjectを持つusersを起点にFK順に削除(正確値assertの汚染防止 — レビューImportant対策)
+3. `make test-ci` — 既存全数+test_matching_hardfilter 13件+test_matching_retrieval 4件がグリーンで完了条件2を検証(本単位はDBスキーマを変えないが、ws-2と検証タイミングを重ねない — STATUS運用ルール1)
+4. マージ前: `find backend/tests -name "test_*.py" | awk -F/ '{print $NF}' | sort | uniq -d` が空(運用ルール5)
 
 ## コミット一覧
 ```
-7d33acc docs: M2 ws-3の実行報告(完了条件7項目の証拠・test-ciは検証待ち)
+c906c10 fix: test_4の冪等試験でFakeClock時刻を進める(レビューCritical修正)
+9709357 docs: M2 ws-3の実行報告(完了条件7項目の証拠・test-ciは検証待ち)
 adcaaa3 test: 02#10・K_v決定性・冪等の4試験(作成のみ・実行はスーパーバイザー)
 e2b0915 test: 02#9 Hard Filter単体試験13件(作成のみ・実行はスーパーバイザー)
 4e1b009 feat: run_candidate_retrieval(起点検証→Layer2→UPSERTのオーケストレータ)
@@ -57,3 +64,5 @@ c907a78 feat: matching起点読み込み(no-op判定・補完・bind params)
 3. **`make test` 全件数の内訳**: 600 = main 575 + 本単位unit 25(test_origin 12・test_layer_sql 10・test_matching_runner 3)
 4. integration 2ファイルの実行は§0(docker系禁止)どおり行っていない。`make test` が収集(import)まで行うため構文・importの正当性はunit実行で検証済み(収集17件・exit 0)
 5. 計画書Task 5/Task 6のコミット前 `git status --short` 確認・§0の每コミット検査(lint+testグリーン)を全コミットで実施。Task 2で一時的にlint失敗のままコミットしたがE501整形をamendで解消済み(履歴上は単一コミット)
+6. **最終レビュー(ブランチ全体)**: レビューエージェント(opus)による差分全体レビューを実施。verdict=With fixes(Critical 1件を修正し再検証)。レビューは製品コード(matchingパッケージ6ファイル)の計画書§8/§9固定値への忠実性・SQL論理・alembic 0001との整合・既存ファイル変更ゼロ・basename一意を確認済み
+7. Critical修正の検証: integration試験は§0規約により実行しないため、`FakeClock.now()` が固定値を返すこと(core/clock.py実装確認)による欠陥原因の論理確認と、修正後の収集確認(4件)・`make lint`(exit 0)・`make test`(600 passed)で検証

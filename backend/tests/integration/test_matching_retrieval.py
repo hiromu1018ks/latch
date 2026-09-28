@@ -321,6 +321,9 @@ async def test_4_idempotent_upsert(api_client, db_engine, field):
     await _run(db_engine, clock, a["id"])  # 1回目(score ≈ 1.0)
     # 対象のembeddingを直交ベクトルへ → 2回目のscoreは ≈ 0.0 に変わる
     await _set_embedding(db_engine, b["id"], E2)
+    # FakeClockは固定のため時刻を進めないと2回目の :now が1回目と同一に
+    # なり created_at == updated_at で最終assertが失敗する(レビュー修正)
+    clock.advance(timedelta(seconds=1))
     await _run(db_engine, clock, a["id"])  # 2回目
 
     async with db_engine.connect() as conn:
