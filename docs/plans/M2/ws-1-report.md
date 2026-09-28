@@ -103,3 +103,31 @@ e8e3968 feat: イベント駆動の設定とgoogle-cloud-pubsub依存を追加(M
 **回帰ピンunit試験の追加**(`backend/tests/unit/test_pubsub_bus_sdk_calls.py`・3件): 修正要求にあった「SDKの呼び出し形式が正しいことの検証」を実SDK不要の形で追加した — SDKクライアントを記録スタブへ差し替え、`ensure()`/`delete_subscription()` が①位置引数なし・②`request` 辞書/kw-onlyの所定形式で呼ぶことをassert(修正前に2件が実際にFAILすることを確認=検出欠陥の再現)。実RPCの挙動自体は引き続きintegration(test-ci)が担保する。`bus_with_stubs` fixtureはPUBSUB_EMULATOR_HOSTを一時設定してクライアント生成の認証をバイパスしテスト終了時に復元(§最終レビュー補足5の前提と同じ)
 
 **検証**: `make lint` グリーン / `make test` **572 passed**(569+回帰ピン3)/ テストbasename一意(新ファイル `test_pubsub_bus_sdk_calls.py`)。**実機test-ciの再実行はスーパーバイザーが行う**(本修正の実SDK検証は `docker compose build api worker` → `make test-ci` で完了条件2・worker起動を再検証)
+
+## スーパーバイザー検証2巡目で検出した欠陥と修正(2026-09-28・fixコミット 132dd0e)
+
+前回のgapic形式修正の効果は出た(エミュレータ接続・setup解消・workerコンテナ起動)。しかしintegration 8試験が全件失敗に変化したため、次の3点を修正・切り分けした。
+
+### 検出事象1(確定・テストコード欠陥): IntentEnvelopeラップ参照のミスマッチ
+
+- **現象**: `_create_active` が `resp.json()` をそのまま返し、呼び出し側の `intent["id"]` が `KeyError` になる(全8試験がこの型で失敗)
+- **原因**: POST /v1/intents の応答は `{"intent": {...}}` ラップ構造(IntentEnvelope。M1 `test_intents_crud_api.py:141` の `resp.json()["intent"]` が既存流儀)
+- **修正**(3箇所): `_create_active` → `resp.json()["intent"]`、test_3のdraft作成 → `draft.json()["intent"]["id"]`・active化 → `act.json()["intent"]["version"]`、test_8のresume → `resp.json()["intent"]["version"]`
+- **全数点検**(全8試験+ヘルパーの応答参照): `tok.json()['access_token']`(auth)・`created.json()["user"]["id"]`(users)はM1流儀どおりで修正不要。PATCH r2/r3・pause・DELETEはstatus_codeのみの参照で本文参照なし。bus直publishのtest_5〜7は応答参照なし。**上記3箇所以外に同型ミスマッチなし**
+
+### 検出事象2(原因切り分け): Retryable "claim conflicted but row not found" の繰り返し
+
+- **結論: 実装側(stage1.py・main.py)に欠陥なし。事象1の修正で解消する見込み**(テスト失敗に起因するteardown競合のアーティファクト)
+- **判断根拠**(確認事実):
+  1. UNIQUE索引の定義(alembic 0001:295)は `ux_match_events_idempotency ON match_events (event_type, source_intent_id, (payload->>'version'))` であり、`_SELECT_CLAIM` のWHERE(event_type = :et AND source_intent_id = :iid AND payload->>'version' = :v)は**索引式と完全一致**する
+  2. `insert_match_event`(intents/events.py:47)のpayloadは `{"version": N}` のみで、Stage1._claim のINSERTと同一形式(`payload->>'version'` の値も一致)
+  3. よって「INSERTがUNIQUE競合したのにSELECT FOR UPDATEで行が見つからない」は、**その行が競合検出後に削除された場合にしか発生しない**。製品コードはmatch_events行を削除しない(status遷移のみ・cancelled遷移も行残存)。行を削除するのはテストteardownの `DELETE FROM match_events ...`(user_env fixture)のみ
+  4. 再現経路: 事象1のKeyErrorでテストが応答直後に失敗 → teardownのDELETE(user_env)が、並走中のテストWorkerのclaim(SELECT FOR UPDATE)と競合 → DELETEが先ならSELECT 0行→Retryable。Retryableはintakeの再試行ループ(_validateのPayloadInvalidのみ)の対象外のため例外伝播→`Worker._dispatch` が握り(ackなし)→ 再配信のたびに同じログ(**「繰り返し」の正体は再試行5回ではなく再配信の反復**)。2回目の受信では既に競合行がないためINSERTが成功し自然回復するが、teardownがsubscriptionを削除・Workerを停止するため観察上「pendingのまま残る」
+- 事象1修正後はテストが成功しteardownが正常順序(テスト完了→後始末)で走るため、この競合は発生しない。**実装修正は行っていない**(设计どおりのat-least-once回収経路)
+
+### test_6の実機失敗2点(スーパーバイザー追加情報・同一コミットで修正)
+
+1. **teardownの `ValueError: Cannot invoke RPC on closed channel!`**: `worker_env` teardownが `bus.close()` の後に `bus.delete_subscription()` を呼んでいたため、**delete→closeの順へ入れ替え**(close後のgRPCチャネルでは削除RPCが不可能)
+2. **`assert 0 >= 6` 失敗(caplog件数)**: stage1のWARNログ(初回+再試行5回)のcaplog到達が、DBのquarantined行ポーリング検知より後に出るタイミングがあるため、`_wait_invalid_event_logs` ヘルパ(caplogの該当件数が揃うまで最大10秒ポーリング)を追加してからassertする形へ変更。※caplogはロギング伝播設定に依存するため、実機で本修正後も0件が続く場合は計画Task 10注記(「DBポーリングでquarantined行を待つ検証を主とし、ログ確認は報告の補足とする」)に従いログ検証を補足扱いへ緩める判断をスーパーバイザーが行う余地あり
+
+**検証**: `make lint` グリーン / `make test` **572 passed** / integration収集8件・basename一意。**実機test-ciの再実行(3巡目)はスーパーバイザーが行う**
