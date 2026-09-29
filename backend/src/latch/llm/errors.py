@@ -16,3 +16,11 @@ class LLMTimeoutError(LLMError):
 
 class LLMProviderError(LLMError):
     """プロバイダ側の失敗(10 第4.5節の100%エラー注入が再現する状態)。"""
+
+
+class JevOutputInvalidError(LLMError):
+    """出力検証失敗(07 §4)。再試行も切替もしない(実装不整合として扱う)。"""
+
+    def __init__(self, msg: str, *, provider: str | None = None) -> None:
+        super().__init__(msg)
+        self.provider = provider  # 検証対象の経路("typesafe_jev" | "fallback_llm")
