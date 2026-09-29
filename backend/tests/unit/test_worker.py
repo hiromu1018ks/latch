@@ -240,14 +240,16 @@ class _RecordingJev:
 async def _started_worker_with_jev(fake_clock, stage1, jev, embedding=None):
     from latch.worker.main import Worker
 
-    worker = Worker(clock=fake_clock, bus=_FakeBus(), stage1=stage1, embedding=embedding, jev=jev)
+    worker = Worker(
+        clock=fake_clock, bus=_FakeBus(), stage1=stage1, embedding=embedding, jev=jev
+    )
     task = asyncio.create_task(worker.run())
     await asyncio.sleep(0.01)
     return worker, task
 
 
 async def test_dispatch_processed_embedding_completed_kicks_jev(fake_clock):
-    """processed × embedding_completed → handle(intent_id)をackの前に呼ぶ(design §2.1案B)。"""
+    """processed × embedding_completed → ackの前にhandleを呼ぶ(§2.1案B)。"""
     jev = _RecordingJev()
     stage1 = _RecordingStage1("processed")
     worker, task = await _started_worker_with_jev(fake_clock, stage1, jev)
@@ -273,7 +275,7 @@ async def test_dispatch_duplicate_embedding_completed_kicks_jev(fake_clock):
 
 
 async def test_dispatch_created_does_not_kick_jev(fake_clock):
-    """created/updatedでは_kick_jevしない(06 §1: Layer 4はembedding_completed起点のみ)。"""
+    """created/updatedでは呼ばない(06 §1: embedding_completed起点のみ)。"""
     jev = _RecordingJev()
     stage1 = _RecordingStage1("processed")
     worker, task = await _started_worker_with_jev(fake_clock, stage1, jev)

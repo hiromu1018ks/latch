@@ -232,7 +232,9 @@ class Worker:
             return
         await self._embedding.handle(intent_id, version)
 
-    async def _kick_jev(self, event_type: str, intent_id: uuid.UUID, version: int) -> None:
+    async def _kick_jev(
+        self, event_type: str, intent_id: uuid.UUID, version: int
+    ) -> None:
         """Stage1処理コミット後・ack前のLayer 4キック(design §2.1案B)。
 
         embedding_completedのみ(06 §1「Layer 1〜5はembedding_completed起点」)。
