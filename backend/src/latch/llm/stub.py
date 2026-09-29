@@ -36,15 +36,20 @@ DEFAULT_PARSER_RESPONSE: dict = {
     "ng_unverifiable": [],
 }
 
-# 07 第4節 7設問JSONスキーマ適合の固定応答(根拠なき0.50=規則3)
+# 10 §1 v0.4: System One互換のanswers形式(model+answers同キー+noul[0,1]・
+# score[0,4]+confidence+usage)。スタブ値は決定的に固定(§9-7)
 DEFAULT_JEV_RESPONSE: dict = {
-    "would_a_accept_b": {"score": 0.5, "reason": "根拠なしのため0.50(規則3)"},
-    "would_b_accept_a": {"score": 0.5, "reason": "根拠なしのため0.50(規則3)"},
-    "purpose_fit": 0.5,
-    "mood_fit": 0.5,
-    "timing_fit": 0.5,
-    "social_fit": 0.5,
-    "latent_yes": 0.5,
+    "model": "jev-1.13.0",
+    "answers": {
+        "would_a_accept_b": {"type": "noul", "noul": 0.5},
+        "would_b_accept_a": {"type": "noul", "noul": 0.5},
+        "latent_yes": {"type": "noul", "noul": 0.5},
+        "purpose_fit": {"type": "score", "score": 2.0, "confidence": 0.5},
+        "mood_fit": {"type": "score", "score": 2.0, "confidence": 0.5},
+        "timing_fit": {"type": "score", "score": 2.0, "confidence": 0.5},
+        "social_fit": {"type": "score", "score": 2.0, "confidence": 0.5},
+    },
+    "usage": {"input_tokens": 0, "output_tokens": 0},
 }
 
 

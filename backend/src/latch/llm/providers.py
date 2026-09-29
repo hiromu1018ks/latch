@@ -36,4 +36,10 @@ class JevProvider(ABC):
     name: str
 
     @abstractmethod
-    async def judge(self, intent_a: str, intent_b: str) -> dict: ...
+    async def judge(self, intent_a: str, intent_b: str) -> dict:
+        """System One envelopeを返す(呼び出し元はGatewayのみ・M2 ws-5)。
+
+        `{"model": ..., "answers": {7キー: answer}, "usage": ...}`。
+        noul応答は{"type": "noul", "noul": 0〜1}・score応答は
+        {"type": "score", "score": 0〜4, "confidence": 0〜1 | None}。
+        """

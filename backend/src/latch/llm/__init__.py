@@ -3,7 +3,15 @@
 M1/M2の呼び出し側はこのパッケージ越しにGatewayを利用する(design §3.1)。
 """
 
-from latch.llm.errors import LLMError, LLMProviderError, LLMTimeoutError
+from latch.llm.errors import (
+    JevOutputInvalidError,
+    LLMConnectionError,
+    LLMError,
+    LLMOverloadedError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+)
 from latch.llm.gateway import (
     TIMEOUT_EMBEDDING_S,
     TIMEOUT_JEV_S,
@@ -27,10 +35,14 @@ __all__ = [
     "EMBEDDING_DIMENSIONS",
     "EmbeddingProvider",
     "GeminiEmbeddingProvider",
+    "JevOutputInvalidError",
     "JevProvider",
+    "LLMConnectionError",
     "LLMError",
     "LLMGateway",
+    "LLMOverloadedError",
     "LLMProviderError",
+    "LLMRateLimitError",
     "LLMTimeoutError",
     "ParserProvider",
     "SendRecord",
