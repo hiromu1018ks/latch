@@ -7,9 +7,11 @@ design §2.2〜2.7・§4.1。DB操作はlatch_engineのモジュール関数をm
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from latch.core.clock import FakeClock
 from latch.worker.matching import latch_engine as le
+from latch.worker.matching import layer4
 from latch.worker.matching.latch_engine import (
     NOTIFICATION_NEARBY,
     NOTIFICATION_PROPOSAL,
@@ -238,7 +240,7 @@ def _patch(
     monkeypatch.setattr(le, "_insert_latch_event", fake_event)
     monkeypatch.setattr(le, "_insert_notification", fake_notification)
     monkeypatch.setattr(le, "_count_daily_notifications", fake_daily)
-    monkeypatch.setattr(le.LatchEngine, "_try_promote", fake_promote)
+    monkeypatch.setattr(le.LatchEngine, "try_promote", fake_promote)
     monkeypatch.setattr(le, "_drain_candidates", fake_drain)
     return log
 
@@ -285,11 +287,14 @@ async def test_mutual_score_is_min_times_c(monkeypatch):
 
 
 async def test_record_score_conflict_returns_early(monkeypatch):
-    """_record_score None(他の実行が先に計算済み) → 以降の読取なし。"""
+    """_record_score None(他の実行が先に計算済み) → 生成物なし。
+
+    I-1改修(ws-7)で読取はtx前に移動したためread_inputsは呼ばれるが、
+    latches生成・イベントは行わない。
+    """
     log = _patch(monkeypatch, org=_origin(1), rows=[_row(1)], record_result=None)
     await _engine().handle(_uid(1))
     assert log["record"]
-    assert log["read_inputs"] == []
     assert log["insert"] == []
 
 
@@ -665,9 +670,16 @@ LID = _uid(7000)
 
 
 def _latch_row(status="candidate", ids=None, expires=None):
-    """_select_latch_for_updateの1行(id, status, intent_ids, expires_at)。"""
+    """_select_latch_for_updateの1行(6要素・group_candidate_id=Noneは1対1)。"""
     ids = ids or [_uid(1), _uid(101)]
-    return (LID, status, ids, expires or NOW + timedelta(days=5))
+    return (
+        LID,
+        status,
+        ids,
+        expires or NOW + timedelta(days=5),
+        None,
+        Decimal("0.85"),
+    )
 
 
 def _participant(n: int, **over):
@@ -708,8 +720,8 @@ def _patch_promote(
         log["row"] = latch_id
         return row
 
-    async def fake_read_parts(conn, a_id, b_id):
-        log["parts"] = (a_id, b_id)
+    async def fake_read_parts(conn, intent_ids):
+        log["parts"] = tuple(intent_ids)
         return (
             list(parts)
             if parts is not None
@@ -762,7 +774,7 @@ async def test_75min_rule_expires_without_notification(monkeypatch):
         _participant(101, time_start=NOW + timedelta(minutes=70)),
     ]
     log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert log["expire"] == [(LID, NOW)]
     assert log["events"] == [(LID, "candidate", "expired", None)]
     assert log["promote"] == [] and log["notifications"] == []
@@ -774,7 +786,7 @@ async def test_75min_rule_expires_without_notification(monkeypatch):
 async def test_promote_skips_non_candidate_status(monkeypatch):
     """FOR UPDATEでstatus='proposed' → 何もしない(他経路で遷移済み)。"""
     log = _patch_promote(monkeypatch, row=_latch_row(status="proposed"))
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert log["parts"] is None
     assert log["expire"] == [] and log["promote"] == []
     assert log["notifications"] == []
@@ -785,7 +797,7 @@ async def test_promote_skips_non_candidate_status(monkeypatch):
 
 async def test_promote_skips_missing_row(monkeypatch):
     log = _patch_promote(monkeypatch, row=None)
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert log["parts"] is None and log["promote"] == []
 
 
@@ -795,7 +807,7 @@ async def test_promote_skips_missing_row(monkeypatch):
 async def test_promote_skips_expired_row(monkeypatch):
     """latches.expires_at<=now → 対象外化のみ(expiry_sweeper=M3-3担当)。"""
     log = _patch_promote(monkeypatch, row=_latch_row(expires=NOW))
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert log["parts"] is not None  # 手順2(参加者読取)までは進む
     assert log["expire"] == [] and log["promote"] == []
     assert log["events"] == [] and log["notifications"] == []
@@ -821,7 +833,7 @@ async def test_promote_deadline_past_notify_time_expires(monkeypatch):
     log = _patch_promote(
         monkeypatch, row=_latch_row(expires=NOW + timedelta(hours=1)), parts=parts
     )
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert log["expire"] == [(LID, NOW)]
     assert log["events"] == [(LID, "candidate", "expired", None)]
     assert log["promote"] == [] and log["notifications"] == []
@@ -836,7 +848,7 @@ async def test_promote_daily_limit_keeps_candidate(monkeypatch):
     log = _patch_promote(
         monkeypatch, row=_latch_row(), parts=parts, daily={_participant(1).user_id: 6}
     )
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert log["promote"] == []
     assert log["events"] == [] and log["notifications"] == []
 
@@ -847,7 +859,7 @@ async def test_promote_daily_limit_keeps_candidate(monkeypatch):
 async def test_promote_concurrent_limit_keeps_candidate(monkeypatch):
     """参加Intentの開いているproposedが3件 → candidateのまま(muted含む計上)。"""
     log = _patch_promote(monkeypatch, row=_latch_row(), open_counts=3)
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert log["promote"] == []
     assert log["events"] == [] and log["notifications"] == []
 
@@ -863,7 +875,7 @@ async def test_promote_muted_writes_no_notifications(monkeypatch):
         _participant(101, notification_level="muted"),
     ]
     log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert len(log["promote"]) == 1  # proposed遷移は行う(引用#10)
     assert log["events"] == [(LID, "candidate", "proposed", None)]
     assert log["notifications"] == []
@@ -877,7 +889,7 @@ async def test_promote_success_writes_event_and_notifications(monkeypatch):
     """上限内 → promote(D-05再計算deadline)・イベント・通知対象2名へnotifications。"""
     parts = [_participant(1), _participant(101, notification_level="muted")]
     log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     expected_deadline = le.latch_calc.response_deadline(
         NOW, NOW + timedelta(hours=30), NOW + timedelta(days=5)
     )
@@ -902,7 +914,7 @@ async def test_promote_deadline_uses_now_after_lock(monkeypatch):
 
     log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
     monkeypatch.setattr(le, "_select_latch_for_update", fake_select_lu)
-    await _engine(clock=clock)._try_promote(LID)
+    await _engine(clock=clock).try_promote(LID)
     expected = le.latch_calc.response_deadline(
         NOW + timedelta(minutes=5),
         NOW + timedelta(hours=30),
@@ -917,7 +929,7 @@ async def test_promote_deadline_uses_now_after_lock(monkeypatch):
 async def test_promote_conflict_writes_nothing(monkeypatch):
     """条件付きUPDATEが行数0 → イベント・notifications不呼出。"""
     log = _patch_promote(monkeypatch, row=_latch_row(), promote_ok=False)
-    await _engine()._try_promote(LID)
+    await _engine().try_promote(LID)
     assert log["promote"]
     assert log["events"] == [] and log["notifications"] == []
 
@@ -936,7 +948,7 @@ async def test_drain_promotes_in_order(monkeypatch):
         order.append(latch_id)
 
     monkeypatch.setattr(le, "_drain_candidates", fake_drain_ids)
-    monkeypatch.setattr(le.LatchEngine, "_try_promote", fake_try)
+    monkeypatch.setattr(le.LatchEngine, "try_promote", fake_try)
     await _engine()._drain()
     assert order == [_uid(11), _uid(12), _uid(13)]
 
@@ -986,7 +998,7 @@ async def test_promote_daily_window_is_jst_day(monkeypatch):
 
     log = _patch_promote(monkeypatch, row=_latch_row())
     clock = FakeClock(NOW)
-    await _engine(clock=clock)._try_promote(LID)
+    await _engine(clock=clock).try_promote(LID)
     day_start = jst_day_start(clock.jst_date())
     assert log["daily"][0][1:] == (day_start, day_start + timedelta(days=1))
 
@@ -1055,12 +1067,12 @@ class _ScriptedConn:
 
 
 async def test_count_daily_notifications_single_user_no_unpack_error():
-    """通知対象1名(片方muted等)でもValueErrorしない(u1=u0の同一IN・意味等価)。"""
+    """通知対象1名(片方muted等)でも正常動作(ANY配列で要素数に依存しない)。"""
     uid = _uid(1)
     conn = _ScriptedConn([(uid, 3)])
     out = await le._count_daily_notifications(conn, [uid], NOW, NOW + timedelta(days=1))
     assert out == {uid: 3}
-    assert conn.calls[0]["u0"] == uid and conn.calls[0]["u1"] == uid
+    assert conn.calls[0]["users"] == "{" + f'"{uid}"' + "}"
 
 
 async def test_count_daily_notifications_empty_users_skips_sql():
@@ -1078,4 +1090,198 @@ async def test_count_daily_notifications_two_users():
         conn, [u_a, u_b], NOW, NOW + timedelta(days=1)
     )
     assert out == {u_a: 2, u_b: 6}
-    assert conn.calls[0]["u0"] == u_a and conn.calls[0]["u1"] == u_b
+    assert conn.calls[0]["users"] == (
+        "{" + f'"{u_a}"' + "," + f'"{u_b}"' + "}"
+    )  # uuid_array_text形式
+
+
+# -- グループ共存改修・I-1改修(M2 ws-7・design §2.6〜2.7) --
+
+
+def test_select_targets_excludes_group_pairs():
+    """グループ所属ペアはlatch_score計算対象外(design §2.7-1)。"""
+    sql = str(le._SELECT_TARGETS)
+    assert f"AND NOT {layer4.GROUP_PAIR_EXISTS}" in sql
+
+
+def test_count_daily_notifications_uses_any_uuid_array():
+    """|S|人対応: user_id = ANY(:users)(design §2.7-2)。"""
+    sql = str(le._COUNT_DAILY_NOTIFICATIONS)
+    assert "user_id = ANY(CAST(:users AS uuid[]))" in sql
+    assert "IN (CAST(:u0" not in sql
+
+
+def test_select_latch_for_update_carries_group_columns():
+    sql = str(le._SELECT_LATCH_FOR_UPDATE)
+    assert "group_candidate_id" in sql
+    assert ", score" in sql
+
+
+def test_higher_group_latch_sql_pins():
+    sql = str(le._SELECT_HIGHER_GROUP_LATCH)
+    assert "l.group_candidate_id IS NOT NULL" in sql
+    assert "l.intent_ids && CAST(:my_ids AS uuid[])" in sql
+    assert "l.id <> CAST(:self AS uuid)" in sql
+
+
+def _patch_for_promote(
+    monkeypatch,
+    *,
+    group_candidate_id=None,
+    score=Decimal("0.85"),
+    higher=False,
+):
+    """try_promoteのDB部品を記録スタブへ(グループ列つき6要素行・D-06制御)。
+
+    _select_latch_for_updateは(latch_id, status, ids, expires,
+    group_candidate_id, score)を返す。_read_participantsは3要素idsに
+    対しParticipant 3件を返す。
+    """
+    log = {
+        "row": None,
+        "parts": None,
+        "higher": [],
+        "daily": [],
+        "open": [],
+        "expire": [],
+        "promote_latch": [],
+        "events": [],
+        "notifications": [],
+    }
+    ids = [_uid(1), _uid(2), _uid(3)]
+
+    async def fake_select_lu(conn, latch_id):
+        log["row"] = latch_id
+        return (
+            NEW_LATCH_ID,
+            "candidate",
+            ids,
+            NOW + timedelta(days=5),
+            group_candidate_id,
+            score,
+        )
+
+    async def fake_read_parts(conn, intent_ids):
+        log["parts"] = tuple(intent_ids)
+        return [
+            le.Participant(
+                intent_id=iid,
+                user_id=_uid(500 + i),
+                notification_level="proposals_only",
+                time_start=NOW + timedelta(hours=30),
+                expires_at=NOW + timedelta(days=5),
+            )
+            for i, iid in enumerate(intent_ids)
+        ]
+
+    async def fake_higher(conn, self_id, self_ids, self_score):
+        log["higher"].append((self_id, tuple(self_ids), self_score))
+        return higher
+
+    async def fake_daily(conn, user_ids, day_start, day_next):
+        log["daily"].append((tuple(user_ids), day_start, day_next))
+        return {}
+
+    async def fake_open(conn, intent_id):
+        log["open"].append(intent_id)
+        return 0
+
+    async def fake_expire(conn, latch_id, now):
+        log["expire"].append((latch_id, now))
+        return True
+
+    async def fake_promote_latch(conn, latch_id, deadline, now):
+        log["promote_latch"].append((latch_id, deadline, now))
+        return True
+
+    async def fake_event(conn, latch_id, from_status, to_status, user_id, now):
+        log["events"].append((latch_id, from_status, to_status, user_id))
+
+    async def fake_notification(conn, user_id, ntype, latch_id, now):
+        log["notifications"].append((user_id, ntype, latch_id))
+
+    monkeypatch.setattr(le, "_select_latch_for_update", fake_select_lu)
+    monkeypatch.setattr(le, "_read_participants", fake_read_parts)
+    monkeypatch.setattr(le, "_has_higher_group_latch", fake_higher)
+    monkeypatch.setattr(le, "_count_daily_notifications", fake_daily)
+    monkeypatch.setattr(le, "_count_open_proposed", fake_open)
+    monkeypatch.setattr(le, "_expire_latch", fake_expire)
+    monkeypatch.setattr(le, "_promote_latch", fake_promote_latch)
+    monkeypatch.setattr(le, "_insert_latch_event", fake_event)
+    monkeypatch.setattr(le, "_insert_notification", fake_notification)
+    return log
+
+
+async def test_try_promote_skips_when_higher_group_latch_exists(monkeypatch):
+    """D-06: メンバーが重なる上位集合があればproposed化しない(design §2.6)。"""
+
+    class _Conn:  # _has_higher_group_latchがTrueを返すスタブ
+        async def execute(self, stmt, params=None):
+            class _R:
+                def fetchall(self):
+                    return [(Decimal("0.9"), [_uid(1), _uid(2), _uid(9)])]
+
+            return _R()
+
+    assert (
+        await le._has_higher_group_latch(
+            _Conn(), _uid(5), [_uid(1), _uid(2), _uid(3)], 0.85
+        )
+        is True
+    )  # 0.9 > 0.85で上位
+
+    # try_promote本体内: 上位あり→_promote_latch呼ばれない
+    log = _patch_for_promote(
+        monkeypatch, group_candidate_id=_uid(80), score=Decimal("0.85"), higher=True
+    )
+    await _engine().try_promote(NEW_LATCH_ID)
+    assert log["promote_latch"] == []
+    assert log["events"] == []  # proposed遷移イベントなし(candidateのまま)
+
+
+async def test_try_promote_promotes_group_when_no_higher(monkeypatch):
+    """上位なし(または1対1行)は従来どおりproposed化。"""
+    log = _patch_for_promote(
+        monkeypatch, group_candidate_id=_uid(80), score=Decimal("0.85"), higher=False
+    )
+    await _engine().try_promote(NEW_LATCH_ID)
+    assert [e[0] for e in log["promote_latch"]] == [NEW_LATCH_ID]
+    assert ("candidate", "proposed") in [(e[1], e[2]) for e in log["events"]]
+
+
+async def test_try_promote_one_on_one_skips_d06_check(monkeypatch):
+    """group_candidate_id NULL(1対1)はD-06チェックを行わない。"""
+    log = _patch_for_promote(
+        monkeypatch, group_candidate_id=None, score=Decimal("0.85"), higher=True
+    )
+    await _engine().try_promote(NEW_LATCH_ID)
+    assert [e[0] for e in log["promote_latch"]] == [NEW_LATCH_ID]  # higher=Trueでも昇格
+
+
+async def test_evaluate_pair_missing_peer_inputs_keeps_score_null(monkeypatch):
+    """I-1改修: peer入力欠損→_record_scoreを呼ばない(latch_score NULL維持)。"""
+    log = _patch(
+        monkeypatch,
+        org=_origin(),
+        rows=[_row(1)],
+        inputs={_uid(1): _inputs(1)},  # peer(_uid(101))の入力なし
+    )
+    await _engine().handle(_uid(1))
+    assert log["record"] == []  # 計算だけ成功させて生成物なし、を作らない
+    assert log["insert"] == []
+
+
+async def test_evaluate_pair_completes_after_peer_inputs_restored(monkeypatch):
+    """復旧後の再handleでlatches生成まで完走(I-1改修の回収経路)。"""
+    org = _origin()
+    inputs = {_uid(1): _inputs(1), _uid(101): _inputs(101)}
+    # 1回目: peer欠損
+    log1 = _patch(monkeypatch, org=org, rows=[_row(1)], inputs={_uid(1): _inputs(1)})
+    await _engine().handle(_uid(1))
+    assert log1["record"] == []
+    # 2回目: 完全な入力(latch_score IS NULLガードで再選択される)
+    log2 = _patch(monkeypatch, org=org, rows=[_row(1, wa=0.9, wb=0.85)], inputs=inputs)
+    await _engine().handle(_uid(1))
+    assert [c[1] for c in log2["record"]] == [0.85]  # LATCH_C×min(0.9,0.85)
+    assert log2["insert"]  # latches生成
+    assert (None, "candidate") in [(e[1], e[2]) for e in log2["events"]]
