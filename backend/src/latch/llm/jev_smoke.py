@@ -17,7 +17,12 @@ from datetime import datetime
 
 from latch.core.clock import SystemClock
 from latch.llm.gateway import build_worker_gateway
-from latch.llm.jev import JEV_MODEL, JevTextInput, build_jev_text, validate_and_normalize
+from latch.llm.jev import (
+    JEV_MODEL,
+    JevTextInput,
+    build_jev_text,
+    validate_and_normalize,
+)
 from latch.settings import Settings
 
 
@@ -65,7 +70,9 @@ async def main() -> int:
         print("[jev-smoke] FAIL: LATCH_TYPESAFE_API_KEY が未設定(.env)")
         return 1
     if not settings.llm_anthropic_api_key:
-        print("[jev-smoke] FAIL: LATCH_ANTHROPIC_API_KEY が未設定(.env・フォールバック用)")
+        print(
+            "[jev-smoke] FAIL: LATCH_ANTHROPIC_API_KEY が未設定(.env・フォールバック用)"
+        )
         return 1
     if not settings.llm_gemini_api_key:
         print("[jev-smoke] FAIL: LATCH_GEMINI_API_KEY が未設定(.env・realは3鍵必須)")
