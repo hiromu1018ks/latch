@@ -439,7 +439,7 @@ async def test_5_guard_deny_records_reason(
     ha = await _user(api_client, field)
     a = await _intent(api_client, db_engine, ha, _structured())
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured())
+    await _intent(api_client, db_engine, hb, _structured())  # 相手(値で参照しない)
     await _run_retrieval(db_engine, clock, a["id"])
     guard_store = JevCostStore(redis_client, key_prefix=redis_sweep)
     day = clock.jst_date().strftime("%Y%m%d")
