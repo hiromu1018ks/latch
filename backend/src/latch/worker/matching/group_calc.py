@@ -40,12 +40,15 @@ def group_target_time(time_starts: Iterable[datetime]) -> datetime:
     return max(time_starts)
 
 
-def uuid_array_text(ids: Iterable[uuid.UUID]) -> str:
-    """uuid[]のbind param文字列(§9-14): CAST(:x AS uuid[]) へ渡す。
+def uuid_array(ids: Iterable[uuid.UUID]) -> list[uuid.UUID]:
+    """uuid[]のbind param値(§9-14修正版): CAST(:x AS uuid[]) へ渡す list。
 
-    asyncpgの配列型推論に頼らない(ws-6 §2規律の可変長版)。
+    asyncpgはuuid[]パラメータにシーケンスを要求する(文字列リテラルは
+    「a sized iterable container expected」で拒否 — ws-7スーパーバイザー検証で発見)。
+    SQL側のCAST(:x AS uuid[])がパラメータ型をuuid[]へ確定させるため、
+    配列型推論への依存も起きない(ws-6 §2規律の可変長版)。
     """
-    return "{" + ",".join(f'"{u}"' for u in ids) + "}"
+    return list(ids)
 
 
 def aggregate_score(mutual_scores: list[float]) -> float:

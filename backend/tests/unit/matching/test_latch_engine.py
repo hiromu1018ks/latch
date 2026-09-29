@@ -1072,7 +1072,7 @@ async def test_count_daily_notifications_single_user_no_unpack_error():
     conn = _ScriptedConn([(uid, 3)])
     out = await le._count_daily_notifications(conn, [uid], NOW, NOW + timedelta(days=1))
     assert out == {uid: 3}
-    assert conn.calls[0]["users"] == "{" + f'"{uid}"' + "}"
+    assert conn.calls[0]["users"] == [uid]  # uuid_array形式(§9-14修正版)
 
 
 async def test_count_daily_notifications_empty_users_skips_sql():
@@ -1090,9 +1090,7 @@ async def test_count_daily_notifications_two_users():
         conn, [u_a, u_b], NOW, NOW + timedelta(days=1)
     )
     assert out == {u_a: 2, u_b: 6}
-    assert conn.calls[0]["users"] == (
-        "{" + f'"{u_a}"' + "," + f'"{u_b}"' + "}"
-    )  # uuid_array_text形式
+    assert conn.calls[0]["users"] == [u_a, u_b]  # uuid_array形式(§9-14修正版)
 
 
 # -- グループ共存改修・I-1改修(M2 ws-7・design §2.6〜2.7) --

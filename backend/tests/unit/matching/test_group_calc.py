@@ -14,7 +14,7 @@ from latch.worker.matching.group_calc import (
     dominates,
     group_target_time,
     normalize_ids,
-    uuid_array_text,
+    uuid_array,
 )
 
 NOW = datetime(2026, 10, 1, 12, 0, 0, tzinfo=UTC)
@@ -194,10 +194,9 @@ def test_group_target_time_takes_max():
     assert group_target_time([t1, t2, NOW]) == t2
 
 
-def test_uuid_array_text_format():
-    assert uuid_array_text([_uid(1), _uid(2)]) == (
-        "{" + f'"{_uid(1)}"' + "," + f'"{_uid(2)}"' + "}"
-    )
+def test_uuid_array_returns_sequence():
+    ids = [_uid(1), _uid(2)]
+    assert uuid_array(ids) == ids  # asyncpg uuid[]はシーケンス受付(§9-14修正版)
 
 
 def test_dominates_ordering():

@@ -9,7 +9,7 @@ finalize(集約)はdesign §2.5(I-1対策のtx構成)。
 経由で origin/layer1(BASE)/layer3/candidates/latch_calc/group_calc を呼ぶ
 (runnerと同一規律・unit試験がmonkeypatchで差し替え可能)。SQLはtext()生SQL・
 CAST(:x AS ...)形式(§2グローバル制約)。uuid[]のbindは文字列リテラル形式
-(group_calc.uuid_array_text・§9-14)。
+(group_calc.uuid_array・§9-14)。
 """
 
 from __future__ import annotations
@@ -333,7 +333,7 @@ async def _pair_compat(
     rows = (
         await conn.execute(
             _PAIR_COMPAT,
-            {"ids": group_calc.uuid_array_text(ids), "now": now},
+            {"ids": group_calc.uuid_array(ids), "now": now},
         )
     ).all()
     out: dict[tuple[uuid.UUID, uuid.UUID], tuple[float, float]] = {}
@@ -356,9 +356,7 @@ async def _select_group_versions(
 ) -> list[tuple]:
     """集合メンバーの現行version・user_id・人数(INSERT前検査・世代判定)。"""
     rows = (
-        await conn.execute(
-            _SELECT_GROUP_VERSIONS, {"ids": group_calc.uuid_array_text(ids)}
-        )
+        await conn.execute(_SELECT_GROUP_VERSIONS, {"ids": group_calc.uuid_array(ids)})
     ).all()
     return [(_coerce_uuid(r[0]), r[1], _coerce_uuid(r[2]), r[3], r[4]) for r in rows]
 
@@ -374,7 +372,7 @@ async def _insert_group(
     res = await conn.execute(
         _INSERT_GROUP,
         {
-            "ids": group_calc.uuid_array_text(ids),
+            "ids": group_calc.uuid_array(ids),
             "member_scores": json.dumps(member_scores, ensure_ascii=False),
             "now": now,
         },
@@ -401,9 +399,7 @@ async def _select_group_pairs(
 ) -> list[tuple]:
     """集合内ペア行(全ペア揃い判定とMutualScore計算の材料)。"""
     rows = (
-        await conn.execute(
-            _SELECT_GROUP_PAIRS, {"ids": group_calc.uuid_array_text(ids)}
-        )
+        await conn.execute(_SELECT_GROUP_PAIRS, {"ids": group_calc.uuid_array(ids)})
     ).all()
     return [
         (
@@ -460,7 +456,7 @@ async def _insert_group_latch(
     res = await conn.execute(
         _INSERT_GROUP_LATCH,
         {
-            "ids": group_calc.uuid_array_text(ids),
+            "ids": group_calc.uuid_array(ids),
             "gid": gid,
             "proposal": json.dumps(proposal, ensure_ascii=False),
             "score": score,
@@ -478,7 +474,7 @@ async def _find_open_group_latch(
 ) -> tuple[uuid.UUID, str] | None:
     """ON CONFLICTで飛んだ場合の既存開いている行特定。"""
     res = await conn.execute(
-        _FIND_OPEN_GROUP_LATCH, {"ids": group_calc.uuid_array_text(ids)}
+        _FIND_OPEN_GROUP_LATCH, {"ids": group_calc.uuid_array(ids)}
     )
     row = res.first()
     if row is None:
@@ -491,7 +487,7 @@ async def _select_group_latch_responses(
 ) -> list[dict]:
     """D-07履歴(集合版・uuid[]等値・responses空は除外)。マージ済みlistを返す。"""
     res = await conn.execute(
-        _SELECT_GROUP_LATCH_RESPONSES, {"ids": group_calc.uuid_array_text(ids)}
+        _SELECT_GROUP_LATCH_RESPONSES, {"ids": group_calc.uuid_array(ids)}
     )
     merged: list[dict] = []
     for row in res.fetchall():

@@ -434,7 +434,7 @@ async def _count_daily_notifications(
     res = await conn.execute(
         _COUNT_DAILY_NOTIFICATIONS,
         {
-            "users": group_calc.uuid_array_text(user_ids),
+            "users": group_calc.uuid_array(user_ids),
             "day_start": day_start,
             "day_next": day_next,
         },
@@ -472,7 +472,7 @@ async def _has_higher_group_latch(
     """自分より上位(aggregate降順→サイズ昇順→辞書順)の重複集合があるか。"""
     res = await conn.execute(
         _SELECT_HIGHER_GROUP_LATCH,
-        {"self": self_id, "my_ids": group_calc.uuid_array_text(self_ids)},
+        {"self": self_id, "my_ids": group_calc.uuid_array(self_ids)},
     )
     for score, ids in res.fetchall():
         other_ids = sorted(_coerce_uuid(x) for x in ids)

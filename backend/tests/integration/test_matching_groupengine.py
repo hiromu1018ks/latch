@@ -28,6 +28,7 @@ from sqlalchemy import text
 
 from latch.core.clock import FakeClock, SystemClock
 from latch.geo.service import GeoService
+from latch.llm.errors import LLMError
 from latch.llm.gateway import LLMGateway
 from latch.llm.stub import DEFAULT_JEV_RESPONSE, StubLLM
 from latch.settings import Settings
@@ -189,7 +190,9 @@ def _structured(
     *,
     start: str | None = None,
     expires: str | None = None,
-    visibility: str | None = None,
+    # 既定summary_only: 全フィールドproposalを期待する試験が既定で通るように
+    # (ws-6 test_matching_latchengine.pyと同一規約。hidden混在はtest_7が明示渡し)
+    visibility: str = "summary_only",
     notification_level: str | None = None,
     secondary: str | None = None,
     budget_max: int | None = None,
@@ -203,8 +206,7 @@ def _structured(
     }
     if expires is not None:
         d["expires_at"] = expires
-    if visibility is not None:
-        d["visibility"] = visibility
+    d["visibility"] = visibility
     if notification_level is not None:
         d["notification_level"] = notification_level
     if budget_max is not None:
@@ -290,21 +292,27 @@ def _jev_worker(db_engine, clock, redis_client, sweep, wa=0.9, wb=0.85):
     )
 
 
-class _LimitedGuard:
-    """n件目まで許可・以降deny(guard層で1イベントの評価数を制限・試験3)。"""
+class _FailAfterJev:
+    """n件目までは正常応答・以降はLLMError(試験3)。
 
-    def __init__(self, inner, limit: int) -> None:
-        self._inner = inner
-        self._limit = limit
+    guard拒否(intent_daily等)で落とすと当該ペアは日次リセットまで再選択され
+    ない(D-15)ため、「同じ日の次評価で未判定ペアが消化される」を観察するには
+    再選択可能なllm_failureで落とす必要がある。jev/jev_fallbackへ同一インスタンス
+    を渡しカウンタを共有する(第一候補失敗→フォールバックも失敗→llm_failure)。
+    """
+
+    name = "stub"  # JevProvider規約(Gatewayの送信記録が参照)
+
+    def __init__(self, response: dict, ok: int) -> None:
+        self._response = response
+        self._ok = ok
         self.calls = 0
 
-    async def request_execution(self, intent_id, user_id):
+    async def judge(self, intent_a: str, intent_b: str) -> dict:
         self.calls += 1
-        if self.calls > self._limit:
-            from latch.worker.cost import JevDecision
-
-            return JevDecision(allowed=False, deny_reason="intent_daily")
-        return await self._inner.request_execution(intent_id, user_id)
+        if self.calls > self._ok:
+            raise LLMError("test flaky after ok")
+        return await StubLLM(jev_response=self._response).judge(intent_a, intent_b)
 
 
 def _group_engine(db_engine, clock) -> GroupEngine:
@@ -570,13 +578,14 @@ async def test_3_incomplete_group_continues_next_eval(
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
     ids: list[str] = []
-    for _ in range(4):  # 種+候補3 → 4人集合(6ペア)
+    # 全員min=4: 貪欲法は3人で確定しない(design §2.3手順4)→4人集合(6ペア)を強制
+    for _ in range(4):
         h, _ = await _user(api_client, field)
         it = await _intent(
             api_client,
             db_engine,
             h,
-            _structured(start=start, expires=expires, participants=(2, 4)),
+            _structured(start=start, expires=expires, participants=(4, 4)),
         )
         ids.append(it["id"])
     a, g1, g2, g3 = ids
@@ -588,13 +597,20 @@ async def test_3_incomplete_group_continues_next_eval(
     assert gc is not None and gc[1] == "candidate"
 
     # 1イベント(種起点のみ)で6ペア揃えない: 種起点が選べる種×メンバー3ペアの
-    # うち2件のみ評価(guardが3件目以降deny)→ 未判定4件残る
+    # うち2件のみ評価(3件目はllm_failureでskipped=再選択可能)→ 未判定4件残る
     store = JevCostStore(redis_client, key_prefix=redis_sweep)
+    flaky = _FailAfterJev(_jev_response(0.9, 0.85), 2)
     jev_limited = JevWorker(
         engine=db_engine,
         clock=clock,
-        gateway=_stub_gateway(0.9, 0.85),
-        guard=_LimitedGuard(JevCostGuard(store=store, clock=clock), 2),
+        gateway=LLMGateway(
+            clock=clock,
+            parser=StubLLM(),
+            embedding=StubLLM(),
+            jev=flaky,
+            jev_fallback=flaky,
+        ),
+        guard=JevCostGuard(store=store, clock=clock),
         cost_store=store,
     )
     await jev_limited.handle(uuid_mod.UUID(a), ctx)
@@ -658,7 +674,8 @@ async def test_4_kj_mixed_allocation(
                 )
             )["id"]
         )
-    # グループ候補3件(min2max4)
+    # グループ候補3件(min4max4: 3人打ち切りを回避し4人集合{a,G1..3}を強制。
+    # a×Gは1対1Layer1の人数条件を満たさない→1対1候補とはならない)
     g_ids: list[str] = []
     for _ in range(3):
         h, _ = await _user(api_client, field)
@@ -668,7 +685,7 @@ async def test_4_kj_mixed_allocation(
                     api_client,
                     db_engine,
                     h,
-                    _structured(start=start, expires=expires, participants=(2, 4)),
+                    _structured(start=start, expires=expires, participants=(4, 4)),
                 )
             )["id"]
         )
@@ -776,8 +793,12 @@ async def test_6_d06_top1_notification(
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
+    # 決定的な2集合(距離でPool分離): a,b,c=天文館クラスタ・d,e=東約2.9km。
+    # bだけ半径5km(橋)→a種のPool={b,c}(d,eは距離超過)・d種のPool={b,e}。
+    # 生成集合は{a,b,c}(高位)と{d,b,e}(低位)の2つ・共有メンバーbで重複
+    # (貪欲法の同点順はuuid順だが、Pool候補が確定2件ずつなので順序に依存しない)
     ids: list[str] = []
-    for _ in range(5):  # a=種, b,c,d,e
+    for _ in range(5):  # a=種(高位), b=橋, c, d=種(低位), e
         h, _ = await _user(api_client, field)
         ids.append(
             (
@@ -790,26 +811,42 @@ async def test_6_d06_top1_notification(
             )["id"]
         )
     a, b, c, d, e = ids
+    async with db_engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE intents SET geo_radius_m = 5000 WHERE id = CAST(:i AS uuid)"),
+            {"i": b},
+        )
+        await conn.execute(
+            text(
+                "UPDATE intents SET geo_center ="
+                " ST_SetSRID(ST_MakePoint("
+                "ST_X(geo_center::geometry) + 0.03, ST_Y(geo_center::geometry)"
+                "), 4326)::geography"
+                " WHERE id = ANY(CAST(:ids AS uuid[]))"
+            ),
+            {"ids": [d, e]},
+        )
     group = _group_engine(db_engine, clock)
-    await group.handle(uuid_mod.UUID(a))  # {a,b,c}(3人打ち切り)
-    await group.handle(uuid_mod.UUID(d))  # {a,b,d}(d種・Pool=[a,b,c,e]上位2)
+    await group.handle(uuid_mod.UUID(a))  # Pool={b,c} → {a,b,c}
+    await group.handle(uuid_mod.UUID(d))  # Pool={b,e} → {d,b,e}
     gc_hi = await _group_of(db_engine, [a, b, c])
-    gc_lo = await _group_of(db_engine, [a, b, d])
+    gc_lo = await _group_of(db_engine, [d, b, e])
     assert gc_hi is not None and gc_lo is not None
 
-    # jev値を直接UPDATEで差をつける(a×bは共有=高値)
+    # jev値を直接UPDATEで差をつける(2集合に共有ペアなし・b経由ペアのみ重複メンバー)
     await _seed_jev_pair(db_engine, a, b, 0.9, 0.9)
     await _seed_jev_pair(db_engine, a, c, 0.9, 0.9)
     await _seed_jev_pair(db_engine, b, c, 0.9, 0.9)
-    await _seed_jev_pair(db_engine, a, d, 0.82, 0.82)
-    await _seed_jev_pair(db_engine, b, d, 0.82, 0.82)
+    await _seed_jev_pair(db_engine, d, b, 0.82, 0.82)
+    await _seed_jev_pair(db_engine, d, e, 0.82, 0.82)
+    await _seed_jev_pair(db_engine, b, e, 0.82, 0.82)
     await group.finalize(uuid_mod.UUID(a))  # {a,b,c} aggregate=0.9
-    await group.finalize(uuid_mod.UUID(d))  # {a,b,d} aggregate=0.82
+    await group.finalize(uuid_mod.UUID(d))  # {d,b,e} aggregate=0.82
     hi = await _group_latch_of(db_engine, [a, b, c])
-    lo = await _group_latch_of(db_engine, [a, b, d])
+    lo = await _group_latch_of(db_engine, [d, b, e])
     assert hi is not None and lo is not None  # 両方candidateとしては作成
     assert hi[1] == "proposed"  # 上位1集合のみproposed化
-    assert lo[1] == "candidate"  # 重複上位あり→candidateのまま
+    assert lo[1] == "candidate"  # 重複上位あり(b共有)→candidateのまま
     # 上位を閉じた後のdrain(LatchEngine.handle再実行)で第2集合がproposed化
     async with db_engine.begin() as conn:
         await conn.execute(
@@ -817,8 +854,8 @@ async def test_6_d06_top1_notification(
             {"l": str(hi[0])},
         )
     latch_engine = LatchEngine(engine=db_engine, clock=clock, geo=GeoService(db_engine))
-    await latch_engine.handle(uuid_mod.UUID(a))
-    lo2 = await _group_latch_of(db_engine, [a, b, d])
+    await latch_engine.handle(uuid_mod.UUID(d))  # lo={d,b,e}はd起点のdrainで回収
+    lo2 = await _group_latch_of(db_engine, [d, b, e])
     assert lo2 is not None and lo2[1] == "proposed"
 
 
@@ -867,26 +904,25 @@ async def test_8_delete_event_closes_group(api_client, db_engine, field):
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
     ids: list[str] = []
+    headers_of: dict[str, dict] = {}
     for _ in range(3):
         h, _ = await _user(api_client, field)
-        ids.append(
-            (
-                await _intent(
-                    api_client,
-                    db_engine,
-                    h,
-                    _structured(start=start, expires=expires, participants=(2, 4)),
-                )
-            )["id"]
+        it = await _intent(
+            api_client,
+            db_engine,
+            h,
+            _structured(start=start, expires=expires, participants=(2, 4)),
         )
+        ids.append(it["id"])
+        headers_of[it["id"]] = h
     a, b, c = ids
     group = _group_engine(db_engine, clock)
     assert await group.handle(uuid_mod.UUID(a)) is not None
     gc = await _group_of(db_engine, ids)
     assert gc is not None and gc[1] == "candidate"
 
-    # メンバーbを削除(API) → Stage1へ削除Eventを直接投入
-    resp = await api_client.delete(f"/v1/intents/{b}")
+    # メンバーbを削除(API・認証付き) → Stage1へ削除Eventを直接投入
+    resp = await api_client.delete(f"/v1/intents/{b}", headers=headers_of[b])
     assert resp.status_code in (200, 204), resp.text
     from latch.events import IncomingEvent
 
@@ -1003,6 +1039,9 @@ async def test_10_one_on_one_and_group_parallel(
         h,
         _structured(start=start, expires=expires, participants=(2, 2)),
     )
+    # グループ面々はmin=3: a(2,2)・b(2,2)との1対1Layer1が不成立になり、
+    # a起点の1対1候補がa×bのみに確定(D-08同時3件上限の非決定的抑制を回避)。
+    # 3人集合{ s,c,d }は max(min)=3 <= 3 で確定
     g_ids: list[str] = []
     for _ in range(3):  # s, c, d
         h, _ = await _user(api_client, field)
@@ -1012,7 +1051,7 @@ async def test_10_one_on_one_and_group_parallel(
                     api_client,
                     db_engine,
                     h,
-                    _structured(start=start, expires=expires, participants=(2, 4)),
+                    _structured(start=start, expires=expires, participants=(3, 4)),
                 )
             )["id"]
         )
@@ -1026,6 +1065,8 @@ async def test_10_one_on_one_and_group_parallel(
     ctx_a = await group.handle(uuid_mod.UUID(a["id"]))
     assert ctx_a is None  # 起点 max=2 → グループ生成no-op(承認事項2)
     await jev.handle(uuid_mod.UUID(a["id"]), ctx_a)
+    latch_engine = LatchEngine(engine=db_engine, clock=clock, geo=GeoService(db_engine))
+    await latch_engine.handle(uuid_mod.UUID(a["id"]))  # 1対1{latch}生成(proposed)
     await group.finalize(uuid_mod.UUID(a["id"]))
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(s))
@@ -1036,6 +1077,9 @@ async def test_10_one_on_one_and_group_parallel(
     await group.finalize(uuid_mod.UUID(s))
 
     # 1対1提案(2要素)とグループ提案(3要素)が両方存在
+    # (latches.intent_idsはsorted正規化で格納されるため照会も sorted で — ws-6
+    #  _latch_ofと同一規約。作成順のまま渡すとuuid順で非決定的に不一致する)
+    lo_id, hi_id = sorted([a["id"], b["id"]], key=str)
     async with db_engine.connect() as conn:
         latch_11 = (
             await conn.execute(
@@ -1044,7 +1088,7 @@ async def test_10_one_on_one_and_group_parallel(
                     " WHERE intent_ids = ARRAY[CAST(:a AS uuid),"
                     " CAST(:b AS uuid)]::uuid[]"
                 ),
-                {"a": a["id"], "b": b["id"]},
+                {"a": lo_id, "b": hi_id},
             )
         ).first()
     assert latch_11 is not None and latch_11[1] == "proposed"
