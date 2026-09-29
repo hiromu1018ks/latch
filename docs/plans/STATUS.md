@@ -228,6 +228,8 @@
   - 運用メモ(観察): ci常設workerがテストのAPI発行Intentを非同期処理し、teardown後にgroup_candidates/latchesの孤立行を作ることがある(uuidは毎回新規なので試験結果には無影響・掃除で対処。ws-8のE2E整備で対抗策を検討)
   - 引継ぎ(Minor・ws-8/M3): _SELECT_GROUP_PAIRSのORDER BYなし・世代リセット後のメンバー間ペア再生成は相手起点経路のみ・aggregate計算済み集合の早期continue・ON CONFLICT昇格でlatches.group_candidate_idが旧gidのまま残りうる(M3-1設計確認候補)
 
+- 学習資産追従: ws-7分 55518d6(第15章「3人以上を結ぶ: グループマッチ」新設+既存5ファイル更新。演習は実行出力つき・agent4がmake test 965・test-ci 1125を再実行確認。純min=3起点fallbackの話題はM3回答APIの章で拾う予定)
+
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
 共有ci-db(compose常設・名前付きボリューム)の `alembic_version` はworktree間で取り合う状態になる。
