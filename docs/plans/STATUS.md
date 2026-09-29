@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: ws-5(Layer 4 Jev)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)
+- 次の着手: ws-5(Layer 4 Jev・設計41b7ab8承認済み・計画書作成へ)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: 07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要)**
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
