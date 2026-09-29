@@ -145,3 +145,36 @@ def test_upsert_writes_cheap_judge_score():
     assert "cheap_judge_score" in insert_part
     update_clause = sql.split("DO UPDATE SET", 1)[1]
     assert "cheap_judge_score = EXCLUDED.cheap_judge_score" in update_clause
+
+
+# -- layer1 最小分割(M2 ws-7・design §2.2) --
+
+
+def test_layer1_split_composes_identical_where():
+    """BASE+人数行の分割。LAYER1_WHERE は HEAD+ONE_ON_ONE+TAIL と一致。"""
+    assert layer1.LAYER1_WHERE == (
+        f"{layer1.LAYER1_WHERE_HEAD}"
+        f"{layer1.ONE_ON_ONE_PARTICIPANTS}"
+        f"{layer1.LAYER1_WHERE_TAIL}"
+    )
+    assert layer1.LAYER1_WHERE_BASE == (
+        f"{layer1.LAYER1_WHERE_HEAD}{layer1.LAYER1_WHERE_TAIL}"
+    )
+
+
+def test_layer1_base_excludes_participants_conditions():
+    """BASEに人数行なし(POOL_SEARCH・_H_RECHECK_GROUPが人数を差し替える)。"""
+    assert "participants" not in layer1.LAYER1_WHERE_BASE
+    # 人数以外の全条件はBASEにも残る
+    where = layer1.LAYER1_WHERE_BASE
+    assert "i.status = 'active'" in where
+    assert "ST_DWithin" in where
+    assert "NOT EXISTS" in where and "blocks" in where
+    assert "EXTRACT(YEAR FROM AGE(" in where
+    assert "LEAST(" in where
+
+
+def test_layer1_where_keeps_participants_and_unchanged_pins():
+    """合成後のLAYER1_WHEREは人数込み(既存ピンの回帰確認)。"""
+    assert "i.participants_min <= 2" in layer1.LAYER1_WHERE
+    assert "i.participants_max >= 2" in layer1.LAYER1_WHERE
