@@ -84,7 +84,11 @@ def _stub_envelope(model: str = "jev-1.13.0") -> dict:
 
 def _gateway(first: JevProvider, fallback: JevProvider) -> LLMGateway:
     return LLMGateway(
-        clock=FakeClock(NOW), parser=StubLLM(), embedding=StubLLM(), jev=first, jev_fallback=fallback
+        clock=FakeClock(NOW),
+        parser=StubLLM(),
+        embedding=StubLLM(),
+        jev=first,
+        jev_fallback=fallback,
     )
 
 
