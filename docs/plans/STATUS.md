@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: ws-5(Layer 4 Jev・設計41b7ab8承認済み・計画書作成へ)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: 07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要)**
+- 次の着手: ws-6(Layer 5 LATCH Engine)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: 07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要)**
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -33,7 +33,7 @@
 | ws-2 | Embedding Worker: 正規化テキスト生成(raw_text不使用)・LLM Gateway Embedding系統real化(gemini-embedding-001・timeout 2秒・再試行なし)・intents.embedding/embedding_model書き込み・embedding_completed発行・バックフィル・embedding既存はスキップして第2段相当へ直接投入 | M2-2 / 07 §3・06 §9・D-15 | ws-1 | 完了 |
 | ws-3 | Layer 1 Hard Filter+Layer 2 Candidate Retrieval: SQL+PostGIS判定(自己除外・時間交差+flexibility・ST_DWithin(r_a+r_b)・ペア予算min 500円未満fail・人数2∈双方・ブロック・category_primary完全一致・飲酒ペアは双方20歳以上)・正規化テキストHNSW cosine上位K_v=50(同点intent_id昇順)・embedding IS NULL/draft対象外。02#9 Hard Filter単体試験 | M2-3, M2-4 / 06 §2〜§3・05 §3 | ws-2(fixture直入れで並行可) | 完了 |
 | ws-4 | Layer 3 Cheap Judge+コスト保護: cheap_score=0.5×類似度+0.3×ルール+0.2×語彙重なり(D-04降格NGは計算対象外)上位K_c=20・Jev予算(1Intent 40回/日・1ユーザー120回/日・Redis JST日付キー)・再評価頻度30分(reeval:{intent_id} TTL)・D-16カウンタ(日次30,000・月次600,000・80% alertに第一候補/フォールバック内訳) | M2-5, M2-9 / 06 §4〜§5・04 §5 | ws-3 | 完了 |
-| ws-5 | Layer 4 Jev: LLM GatewayへSystem One IF追加(state+型つき質問→answers)・TypeSafe Jev(jev-1.13.0)・429/529/timeoutでフォールバックLLM(Sonnet 5)へ切替(SDK backoff無効化・再試行なし)・jev_resultへprovider/model記録・K_j=8配分(1対1最低4回保証・未判定ペア継続優先)・同一評価世代スキップ(同バージョン組はH再検証のみ) | M2-6 / 06 §5・07 v0.5 §1・§4・04 §4 D-16 | ws-4・T1(確定済み) | 未着手 |
+| ws-5 | Layer 4 Jev: LLM GatewayへSystem One IF追加(state+型つき質問→answers)・TypeSafe Jev(jev-1.13.0)・429/529/timeoutでフォールバックLLM(Sonnet 5)へ切替(SDK backoff無効化・再試行なし)・jev_resultへprovider/model記録・K_j=8配分(1対1最低4回保証・未判定ペア継続優先)・同一評価世代スキップ(同バージョン組はH再検証のみ) | M2-6 / 06 §5・07 v0.5 §1・§4・04 §4 D-16 | ws-4・T1(確定済み) | 完了 |
 | ws-6 | Layer 5 LATCH Engine: L=H×MutualScore×C(mutual=min)・閾値0.80・D-08上限(日6件/ユーザー・同時3件/Intent)超過はlatches candidate保留・提示順(対象時刻昇順・Score降順)・提示時D-05式再計算・proposal生成(visibility分岐: summary_only全フィールド/hidden_until_matchはheadcount+match_level)・nearby_also存在通知・muted通知抑制・D-07再提案制御(defer抑制min(24時間,残時間/2)・\|Δscore\|≧0.05・世代変化は無条件)・latch_status_events記録・再評価経路(30分Bucket・catch-upスキャン2時間/30分) | M2-7 / 06 §6・§9〜§10・03 D-05/D-07/D-08 | ws-5 | 未着手 |
 | ws-7 | グループマッチ: 候補Pool(同一Bucket・地域・カテゴリ・Layer 3通過・上限15・cheap_score降順)・貪欲法(種max>=3+Hard互換追加・3〜4人・作成user_id相異)・group_candidates記録+全ペアmatch_candidates生成・集約=H×min(ペアMutualScore)×C・通知はaggregate降順1集合のみ・未判定ペアはstatus=candidate保持し次評価のJev予算最優先 | M2-8 / 06 §5・§7〜§8・D-06・D-24 | ws-6 | 未着手 |
 | ws-8 | 縮退運転+G2ハーネス: circuit breaker(窓1分・第一候補エラー率50%超 or p95>6秒で開放・開放中フォールバックLLM継続・60秒後半開・1リクエスト試験)・フォールバックも失敗でskipped保留・02#5〜#12 E2E・K上限裏付け試験・冪等性(同一Event2回投入)・障害注入 | M2-10 / 06 D-15・10 §4.5〜§4.7 | ws-1〜ws-7 | 未着手 |
@@ -206,6 +206,12 @@
   - 修正後: worktreeで5件PASS → マージ後main **test-ci 818 passed**(769+unit44+integration5)・残存確認(Redis ws4-*・users m2ws4-%・intents ws4cheapとも0件=teardown対抗策の実効性を実証)
   - 運用メモ: mainのtest_matching_hardfilter.pyがws-3マージ由来のruff format落ち(意味変化なし。agent3が独立choreコミット0479b77で解消。**test-ciにlintが含まれないためws-3検証時は未検出** — マージ後のlint再実行を検証手順に足す価値あり)
 - 学習資産追従: ws-4分 c488846(第12章「費用ゼロの審査と、お金を守る番人: Layer 3 Cheap Judgeとコスト保護」新設+既存5ファイル更新。guard系の动手Labはws-5でdenyが観察できるようになってから、として見送り)
+- ws-5 / マージ d18efb7+修正207c59e(設計 41b7ab8・計画 71135e9・実装は30コミット+報告)/ docs/plans/M2/ws-5-report.md / 2026-09-29
+  - **context7運用の初適用**(2026-09-29ユーザー指示): agent1がSDK事実を出典つきで記録(§1.3・RetryPolicy(max_retries=0)でretry無効化を解消)・スーパーバイザーも独立突合で一致確認。実装時確認の結果: **typesafe-sdk==0.7.2・retry引数名=retry**。実APIスモークで**model=jev-1.13.0が実証**(noul応答はSDK型どおりfloat確率 — design §5-7解消)。フォールバック直接呼び出しもOK
+  - supervisor承認(design §5): skip_reason列+マイグレーション0003・既存試験機械的追随。解釈記録2件(score正規化分母=4・Guard課税は起点側のみ)は上記G2時確認事項へ注記
+  - スーパーバイザー独立検証(test-ci初回)で4件失敗を検出 → supervisor直接修正207c59e: (1)test_geoのheadピン0002→0003もれ(機械的追随) (2)ペア行のintent_a_id<intent_b_id正規化に対する方向バイアスクエリ(test_2・4) (3)asyncpgへstrでなくdatetimeを渡す(test_4) (4)active保存時のtime_end補完(start+3h)により窓全体を動かす必要(test_4) (5)同一関数内パート間の時間窓分離もれ(test_7・fallback計上3倍) (6)K_j=8/イベントの再実行期待は「残りpendingは次処理で消化」が仕様(test_2)
+  - 経過: 実装中にエージェント側API接続断(EAI_AGAIN・テザリング切替)で1度中断 → 再開指示で完走(M1 ws-4と同様・成果物への影響なし)
+  - 修正後: **マージ後main test-ci 926 passed**・lint緑・alembic 0003・jev-smoke両経路OK・残存ゼロ(Redis ws5-*・users m2ws5-%)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
