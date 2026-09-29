@@ -16,7 +16,7 @@ import asyncio
 import json
 import sys
 import uuid as uuid_mod
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -318,14 +318,17 @@ async def test_2_kj8_truncation_deterministic(
     worker = _jev_worker(db_engine, clock, _stub_gateway(stub), guard, store)
     await worker.handle(uuid_mod.UUID(a["id"]))
     async with db_engine.connect() as conn:
+        # ペア行は intent_a_id < intent_b_id へ正規化されるため、相手側はCASEで取る
         evaluated = (
             (
                 await conn.execute(
                     text(
-                        "SELECT intent_b_id FROM match_candidates"
-                        " WHERE intent_a_id = CAST(:i AS uuid)"
+                        "SELECT CASE WHEN intent_a_id = CAST(:i AS uuid)"
+                        " THEN intent_b_id ELSE intent_a_id END"
+                        " FROM match_candidates"
+                        " WHERE (intent_a_id = CAST(:i AS uuid)"
+                        " OR intent_b_id = CAST(:i AS uuid))"
                         " AND status = 'evaluated'"
-                        " ORDER BY intent_b_id ASC LIMIT 20"
                     ),
                     {"i": a["id"]},
                 )
@@ -337,8 +340,11 @@ async def test_2_kj8_truncation_deterministic(
             (
                 await conn.execute(
                     text(
-                        "SELECT intent_b_id FROM match_candidates"
-                        " WHERE intent_a_id = CAST(:i AS uuid)"
+                        "SELECT CASE WHEN intent_a_id = CAST(:i AS uuid)"
+                        " THEN intent_b_id ELSE intent_a_id END"
+                        " FROM match_candidates"
+                        " WHERE (intent_a_id = CAST(:i AS uuid)"
+                        " OR intent_b_id = CAST(:i AS uuid))"
                         " AND status = 'pending'"
                     ),
                     {"i": a["id"]},
@@ -353,12 +359,34 @@ async def test_2_kj8_truncation_deterministic(
     # (実行順序ではなく集合で検証 — 10 §4.6のJev部分)
     expected = sorted(peer_ids)[:8]
     assert sorted(str(u) for u in evaluated) == expected
-    # 同一入力2回handleで同一結果(jev_result値の決定性)
-    before = await _candidates(db_engine, a["id"])
+
+    # 2回目handle: 既評価8件はjev_result不変(FR-07)・追加評価は残り2件のみ
+    # (同一入力→同一値の決定性。K_j=8/イベントのため残りは次の処理で消化される)
+    async def _rows_by_peer(origin_id: str) -> dict:
+        async with db_engine.connect() as conn:
+            rows_ = (
+                await conn.execute(
+                    text(
+                        "SELECT CASE WHEN intent_a_id = CAST(:i AS uuid)"
+                        " THEN intent_b_id ELSE intent_a_id END AS peer,"
+                        " status, jev_result"
+                        " FROM match_candidates"
+                        " WHERE (intent_a_id = CAST(:i AS uuid)"
+                        " OR intent_b_id = CAST(:i AS uuid))"
+                        " ORDER BY peer"
+                    ),
+                    {"i": origin_id},
+                )
+            ).all()
+        return {str(r[0]): (r[1], r[2]) for r in rows_}
+
+    before = await _rows_by_peer(a["id"])
     await worker.handle(uuid_mod.UUID(a["id"]))
-    after = await _candidates(db_engine, a["id"])
-    assert before == after
-    assert stub.judge_calls == 8  # 再実行では追加API呼び出しなし
+    after = await _rows_by_peer(a["id"])
+    assert len(after) == 10  # 8+2で全候補がevaluatedへ
+    for peer in expected:
+        assert after[peer] == before[peer]  # 既評価8件のstatus・jev_result不変
+    assert stub.judge_calls == 10  # 追加API呼び出しは残り2件分のみ
 
 
 async def test_3_generation_skip_is_idempotent(
@@ -404,23 +432,29 @@ async def test_4_h_recheck_closes_evaluated_pair(
     await worker.handle(uuid_mod.UUID(a["id"]))
     rows = {str(r[0]): r for r in await _candidates(db_engine, a["id"])}
     assert all(r[0] == "evaluated" for r in rows.values()), rows
-    # 相手bを時間窓外へUPDATE(version不変)→起点handle再実行→H再検証でclose
+    # 相手bを時間窓外へUPDATE(version不変)→起点handle再実行→H再検証でclose。
+    # active保存時はtime_endがstart+3hへ補完済み(07 §2・mapping.py)のため
+    # startだけでなく窓全体(end含む)を過去へ動かす
     async with db_engine.begin() as conn:
         await conn.execute(
             text(
-                "UPDATE intents SET time_start = CAST(:ts AS timestamptz)"
+                "UPDATE intents SET time_start = CAST(:ts AS timestamptz),"
+                " time_end = CAST(:ts AS timestamptz) + interval '3 hours'"
                 " WHERE id = CAST(:i AS uuid)"
             ),
-            {"ts": past, "i": b["id"]},
+            {"ts": datetime.fromisoformat(past), "i": b["id"]},
         )
     await worker.handle(uuid_mod.UUID(a["id"]))
     async with db_engine.connect() as conn:
         out = (
             await conn.execute(
                 text(
-                    "SELECT intent_b_id, status, jev_result"
+                    "SELECT CASE WHEN intent_a_id = CAST(:i AS uuid)"
+                    " THEN intent_b_id ELSE intent_a_id END AS peer,"
+                    " status, jev_result"
                     " FROM match_candidates"
-                    " WHERE intent_a_id = CAST(:i AS uuid)"
+                    " WHERE (intent_a_id = CAST(:i AS uuid)"
+                    " OR intent_b_id = CAST(:i AS uuid))"
                 ),
                 {"i": a["id"]},
             )
@@ -533,11 +567,16 @@ async def test_7_record_execution_breakdown(
     )
     assert all(":" not in k.rsplit(":", 1)[1] for k in keys)
     # -- 双障害: 第一候補LLMTimeoutError + フォールバックfail_jev --
+    # パート2は時間窓を+12hへずらす(前半のIntentがLayer 1候補に混入し
+    # fallback計上が3倍になるのを防ぐ — 時間窓分離は関数内パート間にも必要)
     clock3 = _clock()
+    part2_start = _future(BASE_HOURS + 12)
     ha3 = await _user(api_client, field)
-    a3 = await _intent(api_client, db_engine, ha3, _structured())
+    a3 = await _intent(api_client, db_engine, ha3, _structured(start=part2_start))
     hb3 = await _user(api_client, field)
-    await _intent(api_client, db_engine, hb3, _structured())  # 相手(値で参照しない)
+    await _intent(
+        api_client, db_engine, hb3, _structured(start=part2_start)
+    )  # 相手(値で参照しない)
     await _run_retrieval(db_engine, clock3, a3["id"])
     guard3, store3 = _stores(redis_client, redis_sweep, clock3)
     day3 = clock3.jst_date().strftime("%Y%m%d")

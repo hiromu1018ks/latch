@@ -27,16 +27,16 @@ DEFAULT_BBOX = BBox.parse("130.5420,31.5825,130.5740,31.6095")
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
 
 
-# --- design §4-3: スキーマ(0002)---
+# --- design §4-3: スキーマ(head追従)---
 
 
-async def test_head_is_0002(db_engine):
-    """0002がhead(migrated_dbがheadまで進めた結果)。"""
+async def test_head_is_0003(db_engine):
+    """0003がhead(migrated_dbがheadまで進めた結果・M2 ws-5で0003追加)。"""
     async with db_engine.connect() as conn:
         version = (
             await conn.execute(text("SELECT version_num FROM alembic_version"))
         ).scalar()
-    assert version == "0002"
+    assert version == "0003"
 
 
 async def test_geofeatures_table_exists(db_engine):
