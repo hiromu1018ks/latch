@@ -190,3 +190,23 @@ Declined to judge: uuid[]のON CONFLICT/`@>`/`&&`の実DB挙動(§5-12・スー�
 検証時のintegration試験1・6・9が担う)・HNSW 2回の実行時間(§5-13・試験2のprintで
 記録)・select_jev_targetsの「1対1<4件時にグループへ8枠全部」の解釈(design §2.4
 疑似コードどおり)。
+
+## スーパーバイザー検証結果(2026-09-29・マージ前)
+
+- test-ci初回: **20件失敗**(groupengine 11・既存latchengine 8・test_geo headピン1)→
+  原因診断のうえsupervisorが直接修正(ff771ed):
+  1. **実装欠陥1件(本体)**: uuid[]バインドの文字列リテラル形式がasyncpgで不通
+     (「a sized iterable container expected」)。計画§9-14の規律がws-6実態
+     (要素毎スカラーbind)と異なる読みだった。uuid_array(list返し)へ統一
+  2. **試験設計7系統**: visibility既定・貪欲法の3人確定による4人集合前提のずれ×2・
+     D-06重複2集合の非決定性(距離分離でPool固定)・DELETE認証もれ・guard拒否の
+     回復不能性(llm_failure型へ)・(2,4)起点の1対1干渉(D-08同時3件の非決定的抑制)・
+     latches照会のsorted化・test_geo headピン0005もれ
+- 修正後: lint緑・unit 965 passed・**test-ci 1125 passed(1030+unit84+integration11・exit 0)**
+- migrate: 0005適用確認(alembic head=0005・uq_group_candidates_intent_ids_open存在)
+- design §5-12(uuid[]のON CONFLICT/@>/&&推論): integration試験1・6・9の実行で実証
+  (1125 passedに含まれる)。§5-13(HNSW検索2回の実行時間): 試験2の所要で確認
+  (groupengine 11件全体39秒・1件あたりLayer5枠≦2秒に余裕)
+- 残存: ユーザー/match_candidates/notifications/latch_status_events=0件。
+  デバッグ中の失敗実行由来のgroup_candidates 47・latches 94(orphan)を掃除し
+  group_candidates/latches/calibration_records=0件。geo実データ復旧済み
