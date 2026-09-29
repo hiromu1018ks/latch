@@ -82,13 +82,22 @@ def _pool_row(
 
 
 class _FakeEngine:
+    """engine.begin()がconn番号つきフェイクtxを返す(呼出順・同一tx検証用)。"""
+
+    def __init__(self):
+        self._n = 0
+
     def begin(self):
-        return _FakeTx()
+        self._n += 1
+        return _FakeTx(self._n)
 
 
 class _FakeTx:
+    def __init__(self, n):
+        self.n = n  # conn識別子(スタブの呼出順記録に使う)
+
     async def __aenter__(self):
-        return object()  # conn本体はmonkeypatchした関数が受けない
+        return self  # conn本体はmonkeypatchした関数が受けない
 
     async def __aexit__(self, *exc):
         return False
@@ -450,3 +459,387 @@ async def test_group_context_contents(monkeypatch):
     assert out.group_ids == frozenset({_uid(9000)})
     # 4bの2件 + 7-dの1件 = 3件(upsertスタブは5001..連番)
     assert out.new_pair_row_ids == frozenset({_uid(5001), _uid(5002), _uid(5003)})
+
+
+# =====================================================================
+# finalize(M2 ws-7・Task 8・design §2.5)
+# =====================================================================
+
+
+from latch.worker.matching.proposal import LatchIntentInputs  # noqa: E402
+
+
+def _member_inputs(n: int, **over) -> LatchIntentInputs:
+    base = dict(
+        intent_id=_uid(n),
+        user_id=_uid(n + 50),
+        visibility="summary_only",
+        notification_level="proposals_only",
+        time_start=START,
+        expires_at=NOW + timedelta(days=5),
+        budget_max=5000,
+        category_primary="drinking",
+        category_secondary="ビアバー",
+        geo_lon=130.558,
+        geo_lat=31.596,
+    )
+    base.update(over)
+    return LatchIntentInputs(**base)
+
+
+def _pair_row(
+    a: int, b: int, *, av: int = 1, bv: int = 1, wa: float = 0.9, wb: float = 0.85
+):
+    """_SELECT_GROUP_PAIRS相当の1行(jev_result=Noneは未判定)。"""
+    a_id, b_id = _uid(a), _uid(b)
+    lo, hi = sorted((a_id, b_id))
+    return (
+        _uid(6000 + a * 10 + b),
+        lo,
+        hi,
+        av if a_id == lo else bv,
+        bv if a_id == lo else av,
+        None if wa is None else {"would_a_accept_b": wa, "would_b_accept_a": wb},
+    )
+
+
+def _pending_group(
+    ids: list[uuid.UUID], *, gid: int = 9000, versions: int = 1, aggregate=None
+):
+    """_SELECT_PENDING_GROUPS相当の1行(member_scores.versionsは全員=versions)。"""
+    return (
+        _uid(gid),
+        ids,
+        {"seed_id": str(ids[0]), "versions": {str(i): versions for i in ids}},
+        aggregate,
+    )
+
+
+def _patch_finalize(
+    monkeypatch,
+    *,
+    org: Origin | None = None,
+    skip_reason: str | None = None,
+    groups=(),
+    pair_rows=(),
+    versions_map: dict | None = None,
+    pair_info: dict | None = None,
+    member_inputs: dict | None = None,
+    responses=(),
+    update_aggregate_result=_DEFAULT,
+    insert_latch_result=_DEFAULT,
+    find_open_result=None,
+    d07_allow: bool = True,
+):
+    """finalizeのDB部品を記録スタブへ(txの呼出順検証用にconn番号も記録)。"""
+    log = {
+        "pending": [],
+        "reset": [],
+        "pair_rows": [],
+        "compat": [],
+        "close_group": [],
+        "member_inputs": [],
+        "responses": [],
+        "update_aggregate": [],
+        "insert_latch": [],
+        "find_open": [],
+        "update_promotion": [],
+        "events": [],
+        "mark_proposed": [],
+        "promote": [],
+        "tx": [],
+    }
+    promote_log = log
+
+    class _LatchStub:
+        async def try_promote(self, latch_id):
+            promote_log["promote"].append(latch_id)
+
+    async def fake_load(conn, clock, intent_id):
+        if skip_reason is not None:
+            return OriginLoad(origin=None, skip_reason=skip_reason)
+        return OriginLoad(origin=org, skip_reason=None)
+
+    async def fake_pending(conn, origin_id):
+        log["pending"].append(origin_id)
+        return list(groups)
+
+    async def fake_versions(conn, ids):
+        if versions_map is not None:
+            return [(i, *versions_map[i]) for i in ids]
+        return [(i, 1, _uid(1000 + int(i.node)), 2, 4) for i in ids]
+
+    async def fake_reset(conn, gid, member_scores, now):
+        log["reset"].append((gid, member_scores))
+
+    async def fake_select_pairs(conn, ids):
+        log["pair_rows"].append(tuple(ids))
+        return list(pair_rows)
+
+    async def fake_pair_compat(conn, ids, now):
+        log["compat"].append(tuple(ids))
+        if pair_info is None:
+            return _full_pair_info(list(ids))
+        return pair_info
+
+    async def fake_close_group(conn, gid, now):
+        log["close_group"].append(gid)
+
+    async def fake_read_member_inputs(engine, intent_id):
+        log["member_inputs"].append(intent_id)
+        if member_inputs is None:
+            return _member_inputs(int(intent_id.node))
+        return member_inputs.get(intent_id)
+
+    async def fake_responses(conn, ids):
+        log["responses"].append(tuple(ids))
+        return list(responses)
+
+    async def fake_update_aggregate(conn, gid, score, now):
+        log["tx"].append((getattr(conn, "n", -1), "update_aggregate"))
+        log["update_aggregate"].append((gid, score, now))
+        if update_aggregate_result is _DEFAULT:
+            return (gid, None)
+        return update_aggregate_result
+
+    async def fake_insert_latch(conn, **kw):
+        log["tx"].append((getattr(conn, "n", -1), "insert_latch"))
+        log["insert_latch"].append(kw)
+        if insert_latch_result is _DEFAULT:
+            return _uid(9500)
+        return insert_latch_result
+
+    async def fake_find_open(conn, ids):
+        log["tx"].append((getattr(conn, "n", -1), "find_open"))
+        log["find_open"].append(tuple(ids))
+        return find_open_result
+
+    async def fake_update_promotion(conn, latch_id, *, score, proposal, deadline):
+        log["tx"].append((getattr(conn, "n", -1), "update_promotion"))
+        log["update_promotion"].append(latch_id)
+        return True
+
+    async def fake_event(conn, latch_id, from_status, to_status, user_id, now):
+        log["tx"].append((getattr(conn, "n", -1), "event"))
+        log["events"].append((latch_id, from_status, to_status))
+
+    async def fake_mark_proposed(conn, gid, now):
+        log["tx"].append((getattr(conn, "n", -1), "mark_proposed"))
+        log["mark_proposed"].append(gid)
+
+    def fake_d07(**kw):  # 本物のd07_allowsと同じく同期純関数
+        return d07_allow
+
+    monkeypatch.setattr(ge, "load_group_origin", fake_load)
+    monkeypatch.setattr(ge, "_select_pending_groups", fake_pending)
+    monkeypatch.setattr(ge, "_select_group_versions", fake_versions)
+    monkeypatch.setattr(ge, "_reset_generation", fake_reset)
+    monkeypatch.setattr(ge, "_select_group_pairs", fake_select_pairs)
+    monkeypatch.setattr(ge, "_pair_compat", fake_pair_compat)
+    monkeypatch.setattr(ge, "_close_group_by_id", fake_close_group)
+    monkeypatch.setattr(ge, "_read_member_inputs", fake_read_member_inputs)
+    monkeypatch.setattr(ge, "_select_group_latch_responses", fake_responses)
+    monkeypatch.setattr(ge, "_update_aggregate", fake_update_aggregate)
+    monkeypatch.setattr(ge, "_insert_group_latch", fake_insert_latch)
+    monkeypatch.setattr(ge, "_find_open_group_latch", fake_find_open)
+    monkeypatch.setattr(ge, "_update_group_latch_for_promotion", fake_update_promotion)
+    monkeypatch.setattr(ge, "_insert_latch_event", fake_event)
+    monkeypatch.setattr(ge, "_mark_group_proposed", fake_mark_proposed)
+    monkeypatch.setattr(ge.latch_calc, "d07_allows", fake_d07)
+    return log, _LatchStub()
+
+
+_IDS3 = [_uid(1), _uid(2), _uid(3)]
+
+
+async def test_finalize_origin_noop(monkeypatch):
+    """起点skip→何もしない(pending読取なし)。"""
+    log, _ = _patch_finalize(monkeypatch, skip_reason="origin_not_found")
+    await _engine().finalize(_uid(1))
+    assert log["pending"] == []
+
+
+async def test_finalize_generation_reset_when_versions_diverge(monkeypatch):
+    """versions不一致→_RESET_GENERATION(現行組)→現行組で続行(Review Focus 5)。"""
+    # member_scores.versions=1・現行version=2 → リセット
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3, versions=1)],
+        versions_map={i: (2, _uid(1000 + n), 2, 4) for n, i in enumerate(_IDS3)},
+        pair_rows=[
+            _pair_row(1, 2, av=2, bv=2),
+            _pair_row(1, 3, av=2, bv=2),
+            _pair_row(2, 3, av=2, bv=2),
+        ],
+    )
+    await _engine().finalize(_uid(1))
+    assert [r[0] for r in log["reset"]] == [_uid(9000)]
+    assert log["reset"][0][1] == {
+        "seed_id": str(_uid(1)),
+        "versions": {str(i): 2 for i in _IDS3},
+    }
+    assert log["update_aggregate"]  # リセット後に現行組で集約まで進む
+
+
+async def test_finalize_incomplete_pairs_do_nothing(monkeypatch):
+    """jev_result無しペアが1つでも→INSERT/UPDATEなし(status=candidate保持・引用#4)。"""
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3)],
+        pair_rows=[_pair_row(1, 2), _pair_row(1, 3), _pair_row(2, 3, wa=None)],
+    )
+    await _engine().finalize(_uid(1))
+    assert log["update_aggregate"] == []
+    assert log["insert_latch"] == []
+    assert log["close_group"] == []
+
+
+async def test_finalize_h_broken_closes_group(monkeypatch):
+    """人数包含不合格(min=5メンバー)→_CLOSE_GROUP_BY_IDのみ・ペア行closeなし。"""
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3)],
+        versions_map={i: (1, _uid(1000 + n), 5, 6) for n, i in enumerate(_IDS3)},
+        pair_rows=[_pair_row(1, 2), _pair_row(1, 3), _pair_row(2, 3)],
+    )
+    await _engine().finalize(_uid(1))
+    assert log["close_group"] == [_uid(9000)]
+    assert log["update_aggregate"] == []
+    assert log["insert_latch"] == []
+
+
+async def test_finalize_aggregate_and_latch_in_same_tx(monkeypatch):
+    """全ペア揃い・score>=0.80→集約tx内でUPDATE→INSERT→イベント→MARKの順。"""
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3)],
+        pair_rows=[_pair_row(1, 2), _pair_row(1, 3), _pair_row(2, 3)],
+    )
+    await _engine().finalize(_uid(1))
+    # 同一tx(conn番号同一)でこの順
+    tx_seq = [name for _, name in log["tx"]]
+    assert tx_seq == [
+        "update_aggregate",
+        "insert_latch",
+        "event",
+        "mark_proposed",
+    ]
+    conn_ids = {n for n, _ in log["tx"]}
+    assert len(conn_ids) == 1  # 全部同一tx
+    assert log["mark_proposed"] == [_uid(9000)]
+
+
+async def test_finalize_threshold_boundary_080(monkeypatch):
+    """mutualsのmin=0.80ちょうど→提案(score >= LATCH_THRESHOLDは等号付き)。"""
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3)],
+        pair_rows=[
+            _pair_row(1, 2, wa=0.80, wb=0.9),
+            _pair_row(1, 3, wa=0.9, wb=0.9),
+            _pair_row(2, 3, wa=0.9, wb=0.9),
+        ],
+    )
+    await _engine().finalize(_uid(1))
+    assert log["update_aggregate"][0][1] == 0.80
+    assert log["insert_latch"]  # 提案化
+
+
+async def test_finalize_below_threshold_keeps_candidate(monkeypatch):
+    """score<0.80→_UPDATE_AGGREGATEのみ・latches INSERTなし(candidateのまま)。"""
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3)],
+        pair_rows=[
+            _pair_row(1, 2, wa=0.79, wb=0.9),
+            _pair_row(1, 3, wa=0.9, wb=0.9),
+            _pair_row(2, 3, wa=0.9, wb=0.9),
+        ],
+    )
+    await _engine().finalize(_uid(1))
+    assert log["update_aggregate"]  # aggregate_scoreは入る
+    assert log["insert_latch"] == []
+    assert log["mark_proposed"] == []
+
+
+async def test_finalize_d07_denied(monkeypatch, caplog):
+    """d07_allows=False→_UPDATE_AGGREGATEのみ・「group d07 denied」ログ。"""
+    import logging
+
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3)],
+        pair_rows=[_pair_row(1, 2), _pair_row(1, 3), _pair_row(2, 3)],
+        d07_allow=False,
+    )
+    with caplog.at_level(logging.INFO, logger="latch.worker.matching.group_engine"):
+        await _engine().finalize(_uid(1))
+    assert log["update_aggregate"]
+    assert log["insert_latch"] == []
+    assert any("group d07 denied" in r.message for r in caplog.records)
+
+
+async def test_finalize_calls_try_promote(monkeypatch):
+    """INSERT成功→latch.try_promote(latch_id)呼出(latchスタブ)。"""
+    log, latch = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3)],
+        pair_rows=[_pair_row(1, 2), _pair_row(1, 3), _pair_row(2, 3)],
+    )
+    engine = GroupEngine(engine=_FakeEngine(), clock=FakeClock(NOW), latch=latch)
+    await engine.finalize(_uid(1))
+    assert log["promote"] == [_uid(9500)]
+
+
+async def test_finalize_read_failure_leaves_aggregate_null(monkeypatch):
+    """_read_member_inputsがNone(expires NULL)→_UPDATE_AGGREGATE呼ばれず。"""
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3)],
+        pair_rows=[_pair_row(1, 2), _pair_row(1, 3), _pair_row(2, 3)],
+        member_inputs={
+            _uid(1): _member_inputs(1),
+            _uid(2): None,
+            _uid(3): _member_inputs(3),
+        },
+    )
+    await _engine().finalize(_uid(1))
+    assert log["update_aggregate"] == []  # aggregate NULLのまま(I-1対策)
+
+
+async def test_finalize_aggregate_guard_skips_computed(monkeypatch):
+    """aggregate_score計算済み行→_UPDATE_AGGREGATE戻り0行→何もしない(冪等)。"""
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[_pending_group(_IDS3, aggregate=0.85)],
+        pair_rows=[_pair_row(1, 2), _pair_row(1, 3), _pair_row(2, 3)],
+        update_aggregate_result=None,
+    )
+    await _engine().finalize(_uid(1))
+    assert log["update_aggregate"]
+    assert log["insert_latch"] == []
+    assert log["mark_proposed"] == []
+    assert log["promote"] == []
+
+
+def test_insert_group_latch_sql_pins():
+    sql = str(ge._INSERT_GROUP_LATCH)
+    assert (
+        "ON CONFLICT (intent_ids) WHERE status IN"
+        " ('candidate', 'proposed', 'partial_accept')" in sql
+    )
+    assert "DO NOTHING" in sql
+    assert "group_candidate_id" in sql
+    assert "RETURNING id" in sql
+    assert "CAST(:ids AS uuid[])" in sql
+    assert "CAST(:gid AS uuid)" in sql

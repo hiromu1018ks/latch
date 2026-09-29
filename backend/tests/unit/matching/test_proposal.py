@@ -4,13 +4,16 @@ import dataclasses
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from latch.core.clock import JST
 from latch.worker.matching.proposal import (
     LatchIntentInputs,
+    build_group_proposal,
     build_proposal,
     nearby_proposal,
 )
 
 T0 = datetime(2026, 10, 2, 11, 0, 0, tzinfo=UTC)  # JST 2026-10-02 20:00
+NOW = T0
 
 
 def _inp(n: int = 1, **over) -> LatchIntentInputs:
@@ -126,3 +129,58 @@ def test_latch_intent_inputs_holds_no_forbidden_fields():
     }
     # 格納禁止の生データを保持しない構造ピン
     assert not names & {"raw_text", "soft_constraints", "structured_data"}
+
+
+# -- build_group_proposal(M2 ws-7・05 §2・引用#14) --
+
+
+def _m(n: int, **over) -> LatchIntentInputs:
+    base = dict(
+        intent_id=uuid.UUID(f"00000000-0000-4000-8000-{n:012d}"),
+        user_id=uuid.UUID(f"00000000-0000-4000-8000-{n + 50:012d}"),
+        visibility="summary_only",
+        notification_level="proposals_only",
+        time_start=NOW + timedelta(hours=30),
+        expires_at=NOW + timedelta(days=5),
+        budget_max=5000,
+        category_primary="drinking",
+        category_secondary="ビアバー",
+        geo_lon=130.558,
+        geo_lat=31.596,
+    )
+    base.update(over)
+    return LatchIntentInputs(**base)
+
+
+def test_group_proposal_full_fields_when_all_summary_only():
+    members = [
+        _m(1),
+        _m(2, budget_max=3000),
+        _m(3, time_start=NOW + timedelta(hours=40)),
+    ]
+    p = build_group_proposal(members=members, score=0.85, area_name="天文館")
+    assert p["headcount"] == 3
+    assert p["match_level"] == "medium"
+    assert p["budget"] == {"max": 3000}  # min(budget_max)・NULL無視
+    assert p["category_secondary"] == "ビアバー"  # 種(members[0])の値
+    assert p["area_name"] == "天文館"
+    # time_summaryはmax(time_start)のJST書式(ws-6 §2.5と同一)
+    max_t = NOW + timedelta(hours=40)
+    assert p["time_summary"] == max_t.astimezone(JST).strftime("%Y-%m-%d %H:%M")
+
+
+def test_group_proposal_hidden_until_match_minimal():
+    members = [_m(1), _m(2, visibility="hidden_until_match")]
+    p = build_group_proposal(members=members, score=0.92, area_name=None)
+    assert set(p) == {"headcount", "match_level"}
+    assert p["headcount"] == 2
+
+
+def test_group_proposal_null_budgets_yield_none():
+    members = [
+        _m(1, budget_max=None),
+        _m(2, budget_max=None),
+        _m(3, budget_max=None),
+    ]
+    p = build_group_proposal(members=members, score=0.81, area_name=None)
+    assert p["budget"] is None

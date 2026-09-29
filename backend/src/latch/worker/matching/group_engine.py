@@ -28,8 +28,10 @@ from latch.intents.completion import DEFAULT_RADIUS_M, default_time_end
 from latch.users.service import age_years
 from latch.worker.matching import candidates, group_calc, latch_calc, layer3
 from latch.worker.matching import origin as origin_mod
+from latch.worker.matching import proposal as proposal_mod
 from latch.worker.matching.layer1 import LAYER1_WHERE_BASE
 from latch.worker.matching.origin import Origin, OriginLoad, bind_params
+from latch.worker.matching.proposal import LatchIntentInputs
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +125,106 @@ _INSERT_GROUP = text("""
 _SELECT_GROUP_VERSIONS = text("""
     SELECT id, version, user_id, participants_min, participants_max
     FROM intents WHERE id = ANY(CAST(:ids AS uuid[]))
+""")
+
+# finalize対象(design §2.5): 起点が属する開いている集合
+_SELECT_PENDING_GROUPS = text("""
+    SELECT g.id, g.intent_ids, g.member_scores, g.aggregate_score
+    FROM group_candidates g
+    WHERE g.status = 'candidate'
+      AND CAST(:origin AS uuid) = ANY(g.intent_ids)
+""")
+
+# 集合内ペア行(全ペア揃い判定とMutualScore計算の材料)
+_SELECT_GROUP_PAIRS = text("""
+    SELECT id, intent_a_id, intent_b_id, intent_a_version, intent_b_version,
+           jev_result
+    FROM match_candidates
+    WHERE intent_a_id = ANY(CAST(:ids AS uuid[]))
+      AND intent_b_id = ANY(CAST(:ids AS uuid[]))
+""")
+
+# 世代リセット(design §2.5手順1・引用#10: 新評価世代はprevを持たない)
+_RESET_GENERATION = text("""
+    UPDATE group_candidates
+    SET aggregate_score = NULL, prev_aggregate_score = NULL,
+        member_scores = CAST(:member_scores AS jsonb), updated_at = :now
+    WHERE id = CAST(:gid AS uuid) AND status = 'candidate'
+""")
+
+# 退避つき集約更新(06 §10手順1〜2のgroup版・I-1対策の本体前半)
+_UPDATE_AGGREGATE = text("""
+    UPDATE group_candidates
+    SET prev_aggregate_score = aggregate_score,
+        aggregate_score = CAST(:score AS numeric), updated_at = :now
+    WHERE id = CAST(:gid AS uuid) AND aggregate_score IS NULL
+    RETURNING id, prev_aggregate_score
+""")
+
+# latches生成(design §2.5。0004部分UNIQUEへON CONFLICT・group_candidate_idつき)
+_INSERT_GROUP_LATCH = text("""
+    INSERT INTO latches
+        (intent_ids, group_candidate_id, proposal, score, status,
+         response_deadline, expires_at, created_at)
+    VALUES (CAST(:ids AS uuid[]), CAST(:gid AS uuid), CAST(:proposal AS jsonb),
+            :score, 'candidate', CAST(:deadline AS timestamptz),
+            CAST(:expires AS timestamptz), :now)
+    ON CONFLICT (intent_ids) WHERE status IN ('candidate', 'proposed', 'partial_accept')
+    DO NOTHING
+    RETURNING id
+""")
+
+# ON CONFLICTで飛んだ場合の既存開いている行特定(1対1の_FIND_OPEN_LATCHと同型)
+_FIND_OPEN_GROUP_LATCH = text("""
+    SELECT id, status FROM latches
+    WHERE intent_ids = CAST(:ids AS uuid[])
+      AND status IN ('candidate', 'proposed', 'partial_accept')
+""")
+
+# D-07履歴(集合版・uuid[]等値。3〜4要素でそのまま動く — design §2.5)
+_SELECT_GROUP_LATCH_RESPONSES = text("""
+    SELECT responses FROM latches
+    WHERE intent_ids = CAST(:ids AS uuid[])
+      AND responses <> CAST('[]' AS jsonb)
+""")
+
+# 集合のproposed遷移(latches生成と同一tx・design §2.5)
+_MARK_GROUP_PROPOSED = text("""
+    UPDATE group_candidates
+    SET status = 'proposed', updated_at = :now
+    WHERE id = CAST(:gid AS uuid) AND status = 'candidate'
+""")
+
+# H再検証不成立(design §2.5手順3: 集合のみ閉じる・構成ペア行は閉じない)
+_CLOSE_GROUP_BY_ID = text("""
+    UPDATE group_candidates
+    SET status = 'closed', updated_at = :now
+    WHERE id = CAST(:gid AS uuid) AND status = 'candidate'
+""")
+
+# 昇格時のcandidate行更新(latch_engine._UPDATE_FOR_PROMOTIONと同型)
+_UPDATE_GROUP_LATCH_FOR_PROMOTION = text("""
+    UPDATE latches
+    SET score = :score, proposal = CAST(:proposal AS jsonb),
+        response_deadline = CAST(:deadline AS timestamptz)
+    WHERE id = CAST(:latch_id AS uuid) AND status = 'candidate'
+    RETURNING id
+""")
+
+# latch_status_events挿入(latch_engine._INSERT_LATCH_EVENTと同一SQL)
+_INSERT_LATCH_EVENT = text("""
+    INSERT INTO latch_status_events
+        (latch_id, from_status, to_status, user_id, created_at)
+    VALUES (CAST(:latch_id AS uuid), CAST(:from_status AS text),
+            :to_status, CAST(:user_id AS uuid), :now)
+""")
+
+# 集約材料読取(latch_engine._SELECT_INTENT_INPUTSと同一SQL・§9-4注記)
+_SELECT_INTENT_INPUTS = text("""
+    SELECT id, user_id, visibility, notification_level, time_start,
+           expires_at, budget_max, category_primary, structured_data,
+           ST_X(geo_center::geometry) AS lon, ST_Y(geo_center::geometry) AS lat
+    FROM intents WHERE id = CAST(:intent_id AS uuid)
 """)
 
 
@@ -281,6 +383,210 @@ async def _insert_group(
     return _coerce_uuid(row[0]) if row is not None else None
 
 
+async def _select_pending_groups(
+    conn: AsyncConnection, origin_id: uuid.UUID
+) -> list[tuple]:
+    """起点が属する開いている集合(design §2.5)。"""
+    rows = (await conn.execute(_SELECT_PENDING_GROUPS, {"origin": origin_id})).all()
+    out: list[tuple] = []
+    for r in rows:
+        ids = [_coerce_uuid(x) for x in r[1]]
+        ms = r[2] if isinstance(r[2], dict) else json.loads(r[2])
+        out.append((_coerce_uuid(r[0]), ids, ms, r[3]))
+    return out
+
+
+async def _select_group_pairs(
+    conn: AsyncConnection, ids: list[uuid.UUID]
+) -> list[tuple]:
+    """集合内ペア行(全ペア揃い判定とMutualScore計算の材料)。"""
+    rows = (
+        await conn.execute(
+            _SELECT_GROUP_PAIRS, {"ids": group_calc.uuid_array_text(ids)}
+        )
+    ).all()
+    return [
+        (
+            _coerce_uuid(r[0]),
+            _coerce_uuid(r[1]),
+            _coerce_uuid(r[2]),
+            r[3],
+            r[4],
+            r[5],
+        )
+        for r in rows
+    ]
+
+
+async def _reset_generation(
+    conn: AsyncConnection, gid: uuid.UUID, member_scores: dict, now
+) -> None:
+    """世代リセット(aggregate/prev=NULL・versions=現行組)。"""
+    await conn.execute(
+        _RESET_GENERATION,
+        {
+            "gid": gid,
+            "member_scores": json.dumps(member_scores, ensure_ascii=False),
+            "now": now,
+        },
+    )
+
+
+async def _update_aggregate(
+    conn: AsyncConnection, gid: uuid.UUID, score: float, now
+) -> tuple[uuid.UUID, float | None] | None:
+    """退避つき集約UPDATE。None=競合負け(aggregate計算済み・冪等)。"""
+    res = await conn.execute(
+        _UPDATE_AGGREGATE, {"gid": gid, "score": score, "now": now}
+    )
+    row = res.first()
+    if row is None:
+        return None
+    return (_coerce_uuid(row[0]), float(row[1]) if row[1] is not None else None)
+
+
+async def _insert_group_latch(
+    conn: AsyncConnection,
+    *,
+    ids: list[uuid.UUID],
+    gid: uuid.UUID,
+    proposal: dict,
+    score: float,
+    deadline,
+    expires,
+    now,
+) -> uuid.UUID | None:
+    """グループlatches INSERT(ON CONFLICT DO NOTHING)。None=開いている行あり。"""
+    res = await conn.execute(
+        _INSERT_GROUP_LATCH,
+        {
+            "ids": group_calc.uuid_array_text(ids),
+            "gid": gid,
+            "proposal": json.dumps(proposal, ensure_ascii=False),
+            "score": score,
+            "deadline": deadline,
+            "expires": expires,
+            "now": now,
+        },
+    )
+    row = res.first()
+    return _coerce_uuid(row[0]) if row is not None else None
+
+
+async def _find_open_group_latch(
+    conn: AsyncConnection, ids: list[uuid.UUID]
+) -> tuple[uuid.UUID, str] | None:
+    """ON CONFLICTで飛んだ場合の既存開いている行特定。"""
+    res = await conn.execute(
+        _FIND_OPEN_GROUP_LATCH, {"ids": group_calc.uuid_array_text(ids)}
+    )
+    row = res.first()
+    if row is None:
+        return None
+    return (_coerce_uuid(row[0]), row[1])
+
+
+async def _select_group_latch_responses(
+    conn: AsyncConnection, ids: list[uuid.UUID]
+) -> list[dict]:
+    """D-07履歴(集合版・uuid[]等値・responses空は除外)。マージ済みlistを返す。"""
+    res = await conn.execute(
+        _SELECT_GROUP_LATCH_RESPONSES, {"ids": group_calc.uuid_array_text(ids)}
+    )
+    merged: list[dict] = []
+    for row in res.fetchall():
+        responses = row[0]
+        if isinstance(responses, str):
+            responses = json.loads(responses)
+        if responses:
+            merged.extend(responses)
+    return merged
+
+
+async def _update_group_latch_for_promotion(
+    conn: AsyncConnection,
+    latch_id: uuid.UUID,
+    *,
+    score: float,
+    proposal: dict,
+    deadline,
+) -> bool:
+    """昇格時のcandidate行更新(score/proposal/response_deadlineの3列のみ)。"""
+    res = await conn.execute(
+        _UPDATE_GROUP_LATCH_FOR_PROMOTION,
+        {
+            "latch_id": latch_id,
+            "score": score,
+            "proposal": json.dumps(proposal, ensure_ascii=False),
+            "deadline": deadline,
+        },
+    )
+    return res.first() is not None
+
+
+async def _insert_latch_event(
+    conn: AsyncConnection,
+    latch_id: uuid.UUID,
+    from_status: str | None,
+    to_status: str,
+    user_id: uuid.UUID | None,
+    now,
+) -> None:
+    """latch_status_events挿入(システム起因=Layer 5はuser_id=NULL)。"""
+    await conn.execute(
+        _INSERT_LATCH_EVENT,
+        {
+            "latch_id": latch_id,
+            "from_status": from_status,
+            "to_status": to_status,
+            "user_id": user_id,
+            "now": now,
+        },
+    )
+
+
+async def _mark_group_proposed(conn: AsyncConnection, gid: uuid.UUID, now) -> None:
+    """集合のproposed遷移(latches生成と同一tx)。"""
+    await conn.execute(_MARK_GROUP_PROPOSED, {"gid": gid, "now": now})
+
+
+async def _close_group_by_id(conn: AsyncConnection, gid: uuid.UUID, now) -> None:
+    """H再検証不成立: 集合のみ閉じる(構成ペア行は閉じない)。"""
+    await conn.execute(_CLOSE_GROUP_BY_ID, {"gid": gid, "now": now})
+
+
+async def _read_member_inputs(engine: AsyncEngine, intent_id: uuid.UUID):
+    """集約材料の1Intent分(latch_engine._read_intent_inputsと同一構築)。
+
+    行なし/expires_at NULLはNone(latches.expires_at NOT NULLのため対象外)。
+    """
+    async with engine.begin() as conn:
+        row = (
+            (await conn.execute(_SELECT_INTENT_INPUTS, {"intent_id": intent_id}))
+            .mappings()
+            .first()
+        )
+    if row is None or row["expires_at"] is None:
+        return None
+    sd = row["structured_data"]
+    if isinstance(sd, str):
+        sd = json.loads(sd)
+    secondary = sd.get("category_secondary") if isinstance(sd, dict) else None
+    return LatchIntentInputs(
+        intent_id=_coerce_uuid(row["id"]),
+        user_id=_coerce_uuid(row["user_id"]),
+        visibility=row["visibility"],
+        notification_level=row["notification_level"],
+        time_start=row["time_start"],
+        expires_at=row["expires_at"],
+        budget_max=row["budget_max"],
+        category_primary=row["category_primary"],
+        category_secondary=secondary,
+        geo_lon=float(row["lon"]),
+        geo_lat=float(row["lat"]),
+    )
+
+
 @dataclass(frozen=True)
 class GroupContext:
     """GroupEngine.handleの戻り値(design §2.1)。JevWorkerの配分順序判定に使う。"""
@@ -418,3 +724,182 @@ class GroupEngine:
                         new_pair_row_ids.add(row_id)
         # 手順8
         return GroupContext(frozenset(group_ids), frozenset(new_pair_row_ids))
+
+    async def finalize(self, intent_id: uuid.UUID) -> None:
+        """集約(design §2.5。I-1対策: 失敗しうる読取をすべて集約txの前に済ませる)。
+
+        各評価処理の末尾で「全ペアのjev_resultが揃った集合」を確定させる。
+        未判定ペア残り・H再検証不成立・読取欠損は当該集合のみスキップ
+        (status=candidate保持・構造化ログ)。
+        """
+        async with self._engine.begin() as conn:
+            loaded = await load_group_origin(conn, self._clock, intent_id)
+        if loaded.skip_reason is not None or loaded.origin is None:
+            logger.info(
+                "group finalize origin no-op intent_id=%s reason=%s",
+                intent_id,
+                loaded.skip_reason,
+            )
+            return
+        org = loaded.origin
+        async with self._engine.begin() as conn:
+            groups = await _select_pending_groups(conn, org.intent_id)
+        for gid, ids, ms, _aggregate_score in groups:
+            async with self._engine.begin() as conn:
+                version_rows = await _select_group_versions(conn, ids)
+            vmap = {v[0]: (v[1], v[2], v[3], v[4]) for v in version_rows}
+            if len(vmap) != len(ids):
+                continue  # メンバー欠損(削除等)は対象外
+            current = {i: vmap[i][0] for i in ids}
+            # 手順c: 世代判定(引用#10: 新評価世代はprevを持たない)
+            ms_versions = {uuid.UUID(k): v for k, v in ms.get("versions", {}).items()}
+            if ms_versions != current:
+                new_ms = {
+                    "seed_id": ms.get("seed_id", str(ids[0])),
+                    "versions": {str(i): current[i] for i in ids},
+                }
+                async with self._engine.begin() as conn:
+                    await _reset_generation(conn, gid, new_ms, org.evaluated_at)
+                ms = new_ms
+                # リセット後は aggregate_score IS NULL(_UPDATE_AGGREGATEの
+                # ガードが再計算を許す・引用#10)
+            # 手順d: 全ペア揃い判定(現行version組の|S|C2ペア・引用#4)
+            expected_pairs: list[tuple[uuid.UUID, uuid.UUID]] = []
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    a, b = sorted((ids[i], ids[j]))
+                    expected_pairs.append((a, b))
+            async with self._engine.begin() as conn:
+                pair_rows = await _select_group_pairs(conn, ids)
+            pair_map = {(_coerce_uuid(r[1]), _coerce_uuid(r[2])): r for r in pair_rows}
+            mutuals: list[float] | None = []
+            for a, b in expected_pairs:
+                r = pair_map.get((a, b))
+                if (
+                    r is None
+                    or r[5] is None
+                    or r[3] != current[a]
+                    or r[4] != current[b]
+                ):
+                    mutuals = None
+                    break
+                jev = r[5] if isinstance(r[5], dict) else json.loads(r[5])
+                mutuals.append(
+                    min(
+                        float(jev["would_a_accept_b"]),
+                        float(jev["would_b_accept_a"]),
+                    )
+                )
+            if mutuals is None:
+                continue  # 未判定ペア残り(次評価の継続枠で回収)
+            # 手順e: H集合再検証(人数包含+互換行列・読取のみ)
+            lo_all = max(vmap[i][2] for i in ids)
+            hi_all = min(vmap[i][3] for i in ids)
+            inclusion = (
+                len(ids) >= group_calc.GROUP_MIN and lo_all <= len(ids) <= hi_all
+            )
+            compat_ok = False
+            if inclusion:
+                async with self._engine.begin() as conn:
+                    pair_info = await _pair_compat(conn, ids, org.evaluated_at)
+                compat_ok = all(key in pair_info for key in expected_pairs)
+            if not compat_ok:
+                async with self._engine.begin() as conn:
+                    await _close_group_by_id(conn, gid, org.evaluated_at)
+                continue  # 構成ペア行は閉じない(引用#12)
+            # 手順f: 集約材料読取(すべてtx前・I-1対策)
+            inputs: list[LatchIntentInputs] = []
+            ok = True
+            for iid in ids:
+                inp = await _read_member_inputs(self._engine, iid)
+                if inp is None:
+                    ok = False
+                    break
+                inputs.append(inp)
+            if not ok:
+                continue  # aggregate NULLのまま(次の評価処理で再選択)
+            target = group_calc.group_target_time(m.time_start for m in inputs)
+            min_expires = min(m.expires_at for m in inputs)
+            area = await self._area_name(inputs)
+            score = group_calc.aggregate_score(mutuals)
+            async with self._engine.begin() as conn:
+                responses = await _select_group_latch_responses(conn, ids)
+            has_no, latest_defer_at = latch_calc.d07_history_inputs(responses)
+            # 手順g: 集約tx(1集合1tx・I-1対策の本体)
+            now = self._clock.now()
+            latch_id: uuid.UUID | None = None
+            async with self._engine.begin() as conn:
+                row = await _update_aggregate(conn, gid, score, now)
+                if row is None:
+                    continue  # 冪等スキップ(他の実行が計算済み)
+                prev = row[1]
+                if score < latch_calc.LATCH_THRESHOLD:
+                    continue  # candidateのまま(aggregate_scoreは入る)
+                deadline0 = latch_calc.response_deadline(now, target, min_expires)
+                if not latch_calc.d07_allows(
+                    has_no_response=has_no,
+                    latest_defer_at=latest_defer_at,
+                    now=now,
+                    target_time=target,
+                    new_score=score,
+                    prev_latch_score=prev,
+                ):
+                    logger.info("group d07 denied gid=%s", gid)
+                    continue
+                seed_uuid = uuid.UUID(ms.get("seed_id", str(ids[0])))
+                ordered = [m for m in inputs if m.intent_id == seed_uuid] + [
+                    m for m in inputs if m.intent_id != seed_uuid
+                ]
+                proposal = proposal_mod.build_group_proposal(
+                    members=ordered, score=score, area_name=area
+                )
+                latch_id = await _insert_group_latch(
+                    conn,
+                    ids=ids,
+                    gid=gid,
+                    proposal=proposal,
+                    score=score,
+                    deadline=deadline0,
+                    expires=min_expires,
+                    now=now,
+                )
+                if latch_id is None:  # ON CONFLICT(開いている行あり)
+                    found = await _find_open_group_latch(conn, ids)
+                    if found is None or found[1] != "candidate":
+                        logger.info("group open latch exists gid=%s", gid)
+                        continue
+                    if not latch_calc.d07_allows(
+                        has_no_response=has_no,
+                        latest_defer_at=latest_defer_at,
+                        now=now,
+                        target_time=target,
+                        new_score=score,
+                        prev_latch_score=prev,
+                    ):
+                        logger.info("group d07 denied on promotion gid=%s", gid)
+                        continue
+                    if not await _update_group_latch_for_promotion(
+                        conn,
+                        found[0],
+                        score=score,
+                        proposal=proposal,
+                        deadline=deadline0,
+                    ):
+                        continue
+                    latch_id = found[0]
+                else:
+                    await _insert_latch_event(
+                        conn, latch_id, None, "candidate", None, now
+                    )
+                await _mark_group_proposed(conn, gid, now)
+            # 手順h: tx後のtry_promote(D-06上位チェックはtry_promote内側)
+            if latch_id is not None and self._latch is not None:
+                await self._latch.try_promote(latch_id)
+
+    async def _area_name(self, members: list[LatchIntentInputs]):
+        """全メンバーgeo_center平均点の逆転ジオコーディング(解釈記録11)。"""
+        if self._geo is None:
+            return None
+        lon = sum(m.geo_lon for m in members) / len(members)
+        lat = sum(m.geo_lat for m in members) / len(members)
+        return await self._geo.reverse_geocode(lon, lat)
