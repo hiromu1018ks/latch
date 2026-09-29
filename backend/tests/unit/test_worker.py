@@ -222,3 +222,73 @@ async def test_run_matching_suppressed_when_reeval_denies(fake_clock, monkeypatc
     worker = Worker(clock=fake_clock, bus=_FakeBus(), reeval=guard)
     await worker._run_matching(None, IID)  # 例外なくreturn(スキップ)
     assert guard.calls == [IID]
+
+
+# -- _kick_jev 配線(M2 ws-5・design §2.1案B)。embeddingと対称の検証 --
+
+
+class _RecordingJev:
+    """JevWorkerスタブ(handleの呼び出しを記録)。"""
+
+    def __init__(self):
+        self.calls: list[uuid.UUID] = []
+
+    async def handle(self, intent_id):
+        self.calls.append(intent_id)
+
+
+async def _started_worker_with_jev(fake_clock, stage1, jev, embedding=None):
+    from latch.worker.main import Worker
+
+    worker = Worker(clock=fake_clock, bus=_FakeBus(), stage1=stage1, embedding=embedding, jev=jev)
+    task = asyncio.create_task(worker.run())
+    await asyncio.sleep(0.01)
+    return worker, task
+
+
+async def test_dispatch_processed_embedding_completed_kicks_jev(fake_clock):
+    """processed × embedding_completed → handle(intent_id)をackの前に呼ぶ(design §2.1案B)。"""
+    jev = _RecordingJev()
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker_with_jev(fake_clock, stage1, jev)
+    try:
+        iid = uuid.uuid4()
+        await worker._dispatch(_make_event("embedding_completed", iid, 1))
+        assert jev.calls == [iid]
+    finally:
+        await _stop(worker, task)
+
+
+async def test_dispatch_duplicate_embedding_completed_kicks_jev(fake_clock):
+    """duplicate × embedding_completed → handleを呼ぶ(再配信回収 — §2.9)。"""
+    jev = _RecordingJev()
+    stage1 = _RecordingStage1("duplicate")
+    worker, task = await _started_worker_with_jev(fake_clock, stage1, jev)
+    try:
+        iid = uuid.uuid4()
+        await worker._dispatch(_make_event("embedding_completed", iid, 1))
+        assert jev.calls == [iid]
+    finally:
+        await _stop(worker, task)
+
+
+async def test_dispatch_created_does_not_kick_jev(fake_clock):
+    """created/updatedでは_kick_jevしない(06 §1: Layer 4はembedding_completed起点のみ)。"""
+    jev = _RecordingJev()
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker_with_jev(fake_clock, stage1, jev)
+    try:
+        await worker._dispatch(_make_event("created", uuid.uuid4(), 1))
+        assert jev.calls == []
+    finally:
+        await _stop(worker, task)
+
+
+async def test_jev_not_injected_is_noop(fake_clock):
+    """Jev未注入(ws-1資産の試験)は何もしない。"""
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker(fake_clock, stage1)  # jev未注入
+    try:
+        await worker._dispatch(_make_event("embedding_completed", uuid.uuid4(), 1))
+    finally:
+        await _stop(worker, task)
