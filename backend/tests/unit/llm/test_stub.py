@@ -209,5 +209,10 @@ def test_switch_exceptions_are_llm_error_subclasses():
         LLMRateLimitError,
     )
 
-    for exc in (LLMRateLimitError, LLMOverloadedError, LLMConnectionError, JevOutputInvalidError):
+    for exc in (
+        LLMRateLimitError,
+        LLMOverloadedError,
+        LLMConnectionError,
+        JevOutputInvalidError,
+    ):
         assert issubclass(exc, LLMError)
