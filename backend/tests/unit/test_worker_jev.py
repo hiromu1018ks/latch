@@ -228,7 +228,7 @@ def _patch_eval(monkeypatch, *, h_recheck=True, peer_row=None):
         peer_row = _jev_row()
     h_calls: list = []
 
-    async def fake_h(conn, origin, candidate_id):
+    async def fake_h(conn, origin, candidate_id, *, relaxed=False):
         h_calls.append(candidate_id)
         return h_recheck
 
@@ -379,7 +379,7 @@ async def test_h_fails_pending_then_success_on_next_row(redis, monkeypatch):
     outcomes = {0: False, 1: True}
     h_index: list[int] = []
 
-    async def fake_h(conn, origin, candidate_id):
+    async def fake_h(conn, origin, candidate_id, *, relaxed=False):
         h_index.append(candidate_id)
         return outcomes.get(len(h_index) - 1, True)
 
@@ -569,3 +569,84 @@ def test_structured_data_str_is_parsed():
     assert isinstance(inp, JevTextInput)
     assert isinstance(inp.structured_data, dict)
     assert inp.structured_data["location_name"] == "天文館周辺"
+
+
+# -- group_ctx拡張(M2 ws-7・design §2.4) --
+
+
+async def test_handle_default_group_ctx_is_backward_compatible(redis, monkeypatch):
+    """group_ctx省略(既定None)は全グループペアを継続扱い・既存経路不変。"""
+    org = _origin()
+    rows = [_row(1), _row(2)]
+    _patch_phase1(monkeypatch, org=org, rows=rows, origin_row=_jev_row())
+    h_calls = _patch_eval(monkeypatch)
+    _patch_writes(monkeypatch)
+    recorded: list = []
+
+    def fake_targets(rows_in, new_pair_row_ids=frozenset()):
+        recorded.append((tuple(r.row_id for r in rows_in), new_pair_row_ids))
+        return list(rows_in)
+
+    monkeypatch.setattr(jev_mod.layer4, "select_jev_targets", fake_targets)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert recorded[0][1] == frozenset()  # None→frozenset
+    assert len(h_calls) == 2  # 既存経路(H再検証)も不変
+
+
+async def test_handle_passes_new_pair_row_ids_to_targets(redis, monkeypatch):
+    """group_ctx.new_pair_row_idsがselect_jev_targetsへ流れる(§2.4)。"""
+
+    class _Ctx:
+        new_pair_row_ids = frozenset({_uid(50)})
+
+    org = _origin()
+    _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row())
+    _patch_eval(monkeypatch)
+    _patch_writes(monkeypatch)
+    recorded: list = []
+
+    def fake_targets(rows_in, new_pair_row_ids=frozenset()):
+        recorded.append(new_pair_row_ids)
+        return list(rows_in)
+
+    monkeypatch.setattr(jev_mod.layer4, "select_jev_targets", fake_targets)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1), _Ctx())
+    assert recorded[0] == frozenset({_uid(50)})
+
+
+async def test_group_pair_uses_relaxed_h_recheck(redis, monkeypatch):
+    """pair_kind='group'の行はH再検証へrelaxed=True(§2.4)。"""
+    import dataclasses
+
+    org = _origin()
+    grp = dataclasses.replace(_row(1), pair_kind="group")
+    _patch_phase1(monkeypatch, org=org, rows=[grp], origin_row=_jev_row())
+    relaxed_calls: list = []
+
+    async def fake_h(conn, origin, candidate_id, *, relaxed=False):
+        relaxed_calls.append(relaxed)
+        return True
+
+    async def fake_read_peer(engine, pid):
+        return _jev_row()
+
+    monkeypatch.setattr(jev_mod.layer4, "hard_constraint_holds", fake_h)
+    monkeypatch.setattr(jev_mod, "_read_peer", fake_read_peer)
+    _patch_writes(monkeypatch)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert relaxed_calls == [True]

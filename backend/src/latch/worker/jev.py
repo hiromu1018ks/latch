@@ -168,13 +168,16 @@ class JevWorker:
         self._guard = guard
         self._cost_store = cost_store
 
-    async def handle(self, intent_id: uuid.UUID) -> None:
+    async def handle(self, intent_id: uuid.UUID, group_ctx=None) -> None:
         """embedding_completed起点(またはws-6の再評価起点)のLayer 4実行。
 
         フェーズ1(短tx)→フェーズ2+3(ペア毎・直列)。起点が読み取れない
         (削除・非active・embedding NULL等)場合はno-op(構造化ログ)。
         起点のversionガードは選択SQLの「行の起点version == 現在version」
         条件で実現される(handleにversion引数はなく・旧世代行は選ばれない)。
+        group_ctx(GroupEngine.handleの戻り値・None可)はselect_jev_targetsの
+        継続/新規判定に使う(ws-7・design §2.4)。Noneは全グループペアを
+        継続扱いにする(下位互換)。
         """
         loaded, rows, origin_row = await self._phase1(intent_id)
         if loaded.skip_reason is not None or loaded.origin is None:
@@ -189,8 +192,11 @@ class JevWorker:
             return
         org = loaded.origin
         origin_inp = _origin_input(org, origin_row)
-        # 選択はSELECT時点でK_j件に確定(tx外で配分純関数を適用)
-        for row in layer4.select_jev_targets(rows):
+        # 選択はSELECT時点で確定(tx外で配分純関数を適用)
+        new_pair_row_ids = (
+            group_ctx.new_pair_row_ids if group_ctx is not None else frozenset()
+        )
+        for row in layer4.select_jev_targets(rows, new_pair_row_ids):
             await self._evaluate(org, origin_inp, row)
 
     # -- フェーズ1(短tx・読取+close)--
@@ -239,7 +245,12 @@ class JevWorker:
             )
             return
         async with self._engine.begin() as conn:  # H再検証(読取のみ)
-            holds = await layer4.hard_constraint_holds(conn, org, peer_id)
+            holds = await layer4.hard_constraint_holds(
+                conn,
+                org,
+                peer_id,
+                relaxed=(row.pair_kind == layer4.PAIR_KIND_GROUP),
+            )
         if not holds:
             # 評価せず次の行へ(pendingのまま・Guardも呼ばない — 実行しない
             # ものには課税しない)

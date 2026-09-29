@@ -178,3 +178,40 @@ def test_layer1_where_keeps_participants_and_unchanged_pins():
     """合成後のLAYER1_WHEREは人数込み(既存ピンの回帰確認)。"""
     assert "i.participants_min <= 2" in layer1.LAYER1_WHERE
     assert "i.participants_max >= 2" in layer1.LAYER1_WHERE
+
+
+# -- candidates.upsert_pair(M2 ws-7・design §2.3) --
+
+_PAIR_KEYS = (
+    "intent_a_id",
+    "intent_b_id",
+    "intent_a_version",
+    "intent_b_version",
+    "retrieval_score",
+    "cheap_score",
+    "now",
+)
+
+
+def test_upsert_pair_pins_on_conflict_and_returning():
+    sql = str(candidates._UPSERT_PAIR)
+    assert (
+        "ON CONFLICT (intent_a_id, intent_b_id,"
+        " intent_a_version, intent_b_version)" in sql
+    )
+    assert "DO UPDATE SET" in sql
+    assert "RETURNING id" in sql
+    assert "'pending'" in sql.split("DO UPDATE", 1)[0]
+
+
+def test_upsert_pair_do_update_touches_scores_only():
+    sql = str(candidates._UPSERT_PAIR)
+    update_clause = sql.split("DO UPDATE SET", 1)[1]
+    assert "status" not in update_clause
+    assert "cheap_judge_score = EXCLUDED.cheap_judge_score" in update_clause
+
+
+def test_upsert_pair_all_bind_params_recognized():
+    compiled = str(candidates._UPSERT_PAIR.compile(dialect=postgresql.dialect()))
+    for key in _PAIR_KEYS:
+        assert f":{key}" not in compiled, key
