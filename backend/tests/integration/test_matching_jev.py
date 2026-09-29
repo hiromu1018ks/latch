@@ -537,7 +537,7 @@ async def test_7_record_execution_breakdown(
     ha3 = await _user(api_client, field)
     a3 = await _intent(api_client, db_engine, ha3, _structured())
     hb3 = await _user(api_client, field)
-    b3 = await _intent(api_client, db_engine, hb3, _structured())
+    await _intent(api_client, db_engine, hb3, _structured())  # 相手(値で参照しない)
     await _run_retrieval(db_engine, clock3, a3["id"])
     guard3, store3 = _stores(redis_client, redis_sweep, clock3)
     day3 = clock3.jst_date().strftime("%Y%m%d")
