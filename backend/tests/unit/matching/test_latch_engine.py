@@ -655,3 +655,377 @@ def test_sql_bind_params_compile():
 def test_notification_type_pins():
     assert NOTIFICATION_PROPOSAL == "proposal"
     assert NOTIFICATION_NEARBY == "nearby_candidate"
+
+
+# =====================================================================
+# 後半(Task 5): try_promote・drain(design §2.6・§2.9のtx分割(4)・(5))
+# =====================================================================
+
+LID = _uid(7000)
+
+
+def _latch_row(status="candidate", ids=None, expires=None):
+    """_select_latch_for_updateの1行(id, status, intent_ids, expires_at)。"""
+    ids = ids or [_uid(1), _uid(101)]
+    return (LID, status, ids, expires or NOW + timedelta(days=5))
+
+
+def _participant(n: int, **over):
+    """try_promote用の参加Intent情報(_SELECT_INTENT_INPUTS由来)。"""
+    base = dict(
+        intent_id=_uid(n),
+        user_id=_uid(n + 50),
+        notification_level="proposals_only",
+        time_start=NOW + timedelta(hours=30),
+        expires_at=NOW + timedelta(days=5),
+    )
+    base.update(over)
+    return le.Participant(**base)
+
+
+def _patch_promote(
+    monkeypatch,
+    *,
+    row=None,
+    parts=None,
+    daily=None,
+    open_counts=0,
+    promote_ok=True,
+):
+    """try_promote/drain系のDB部品を記録スタブへ差し替え。"""
+    log = {
+        "row": None,
+        "parts": None,
+        "daily": [],
+        "open": [],
+        "expire": [],
+        "promote": [],
+        "events": [],
+        "notifications": [],
+    }
+
+    async def fake_select_lu(conn, latch_id):
+        log["row"] = latch_id
+        return row
+
+    async def fake_read_parts(conn, a_id, b_id):
+        log["parts"] = (a_id, b_id)
+        return (
+            list(parts)
+            if parts is not None
+            else [
+                _participant(1),
+                _participant(101),
+            ]
+        )
+
+    async def fake_daily(conn, user_ids, day_start, day_next):
+        log["daily"].append((tuple(user_ids), day_start, day_next))
+        return daily if daily is not None else {}
+
+    async def fake_open(conn, intent_id):
+        log["open"].append(intent_id)
+        return open_counts
+
+    async def fake_expire(conn, latch_id, now):
+        log["expire"].append((latch_id, now))
+        return True
+
+    async def fake_promote_latch(conn, latch_id, deadline, now):
+        log["promote"].append((latch_id, deadline, now))
+        return promote_ok
+
+    async def fake_event(conn, latch_id, from_status, to_status, user_id, now):
+        log["events"].append((latch_id, from_status, to_status, user_id))
+
+    async def fake_notification(conn, user_id, ntype, latch_id, now):
+        log["notifications"].append((user_id, ntype, latch_id))
+
+    monkeypatch.setattr(le, "_select_latch_for_update", fake_select_lu)
+    monkeypatch.setattr(le, "_read_participants", fake_read_parts)
+    monkeypatch.setattr(le, "_count_daily_notifications", fake_daily)
+    monkeypatch.setattr(le, "_count_open_proposed", fake_open)
+    monkeypatch.setattr(le, "_expire_latch", fake_expire)
+    monkeypatch.setattr(le, "_promote_latch", fake_promote_latch)
+    monkeypatch.setattr(le, "_insert_latch_event", fake_event)
+    monkeypatch.setattr(le, "_insert_notification", fake_notification)
+    return log
+
+
+# --- 後半1. 75分ルール(Review Focus 4・通知ゼロ) ---
+
+
+async def test_75min_rule_expires_without_notification(monkeypatch):
+    """対象時刻まで70分 → candidate→expired+イベント・promote/通知ゼロ。"""
+    parts = [
+        _participant(1, time_start=NOW + timedelta(minutes=70)),
+        _participant(101, time_start=NOW + timedelta(minutes=70)),
+    ]
+    log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
+    await _engine()._try_promote(LID)
+    assert log["expire"] == [(LID, NOW)]
+    assert log["events"] == [(LID, "candidate", "expired", None)]
+    assert log["promote"] == [] and log["notifications"] == []
+
+
+# --- 後半2. status≠candidate ---
+
+
+async def test_promote_skips_non_candidate_status(monkeypatch):
+    """FOR UPDATEでstatus='proposed' → 何もしない(他経路で遷移済み)。"""
+    log = _patch_promote(monkeypatch, row=_latch_row(status="proposed"))
+    await _engine()._try_promote(LID)
+    assert log["parts"] is None
+    assert log["expire"] == [] and log["promote"] == []
+    assert log["notifications"] == []
+
+
+# --- 後半3. 行なし ---
+
+
+async def test_promote_skips_missing_row(monkeypatch):
+    log = _patch_promote(monkeypatch, row=None)
+    await _engine()._try_promote(LID)
+    assert log["parts"] is None and log["promote"] == []
+
+
+# --- 後半4. expires_at<=now ---
+
+
+async def test_promote_skips_expired_row(monkeypatch):
+    """latches.expires_at<=now → 対象外化のみ(expiry_sweeper=M3-3担当)。"""
+    log = _patch_promote(monkeypatch, row=_latch_row(expires=NOW))
+    await _engine()._try_promote(LID)
+    assert log["parts"] is not None  # 手順2(参加者読取)までは進む
+    assert log["expire"] == [] and log["promote"] == []
+    assert log["events"] == [] and log["notifications"] == []
+
+
+# --- 後半5. deadline<=now(防御・75分と同一扱い) ---
+
+
+async def test_promote_deadline_past_notify_time_expires(monkeypatch):
+    """min_expiresが過去 → 導出期限<=now → expired(引用#4・防御)。"""
+    parts = [
+        _participant(
+            1,
+            time_start=NOW + timedelta(minutes=80),
+            expires_at=NOW - timedelta(minutes=5),
+        ),
+        _participant(
+            101,
+            time_start=NOW + timedelta(minutes=80),
+            expires_at=NOW - timedelta(minutes=5),
+        ),
+    ]
+    log = _patch_promote(
+        monkeypatch, row=_latch_row(expires=NOW + timedelta(hours=1)), parts=parts
+    )
+    await _engine()._try_promote(LID)
+    assert log["expire"] == [(LID, NOW)]
+    assert log["events"] == [(LID, "candidate", "expired", None)]
+    assert log["promote"] == [] and log["notifications"] == []
+
+
+# --- 後半6. D-08日次上限 ---
+
+
+async def test_promote_daily_limit_keeps_candidate(monkeypatch):
+    """通知対象1名が当日6件済み → candidateのまま・promote/eventsなし。"""
+    parts = [_participant(1), _participant(101, notification_level="muted")]
+    log = _patch_promote(
+        monkeypatch, row=_latch_row(), parts=parts, daily={_participant(1).user_id: 6}
+    )
+    await _engine()._try_promote(LID)
+    assert log["promote"] == []
+    assert log["events"] == [] and log["notifications"] == []
+
+
+# --- 後半7. D-08同時3件 ---
+
+
+async def test_promote_concurrent_limit_keeps_candidate(monkeypatch):
+    """参加Intentの開いているproposedが3件 → candidateのまま(muted含む計上)。"""
+    log = _patch_promote(monkeypatch, row=_latch_row(), open_counts=3)
+    await _engine()._try_promote(LID)
+    assert log["promote"] == []
+    assert log["events"] == [] and log["notifications"] == []
+
+
+# --- 後半8. muted(Review Focus 3) ---
+
+
+async def test_promote_muted_writes_no_notifications(monkeypatch):
+    """両参加者muted → proposed遷移+イベントは通常どおり・notifications 0件・
+    日次カウントの引数user_idsは空(上限を消費しない)。"""
+    parts = [
+        _participant(1, notification_level="muted"),
+        _participant(101, notification_level="muted"),
+    ]
+    log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
+    await _engine()._try_promote(LID)
+    assert len(log["promote"]) == 1  # proposed遷移は行う(引用#10)
+    assert log["events"] == [(LID, "candidate", "proposed", None)]
+    assert log["notifications"] == []
+    assert log["daily"][0][0] == ()  # user_ids空=カウント対象なし
+
+
+# --- 後半9. 正常プロモート ---
+
+
+async def test_promote_success_writes_event_and_notifications(monkeypatch):
+    """上限内 → promote(D-05再計算deadline)・イベント・通知対象2名へnotifications。"""
+    parts = [_participant(1), _participant(101, notification_level="muted")]
+    log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
+    await _engine()._try_promote(LID)
+    expected_deadline = le.latch_calc.response_deadline(
+        NOW, NOW + timedelta(hours=30), NOW + timedelta(days=5)
+    )
+    assert log["promote"] == [(LID, expected_deadline, NOW)]
+    assert log["events"] == [(LID, "candidate", "proposed", None)]
+    assert log["notifications"] == [
+        (_participant(1).user_id, NOTIFICATION_PROPOSAL, LID),
+    ]  # mutedは書かない=上限も消費しない
+
+
+# --- 後半10. 提示時deadline再計算(FOR UPDATE後のnow) ---
+
+
+async def test_promote_deadline_uses_now_after_lock(monkeypatch):
+    """deadlineはFOR UPDATE取得後に採取したnowで再計算(FakeClock進行で検証)。"""
+    clock = FakeClock(NOW)
+    parts = [_participant(1), _participant(101)]
+
+    async def fake_select_lu(conn, latch_id):
+        clock.advance(timedelta(minutes=5))  # ロック取得後に時刻経過
+        return _latch_row()
+
+    log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
+    monkeypatch.setattr(le, "_select_latch_for_update", fake_select_lu)
+    await _engine(clock=clock)._try_promote(LID)
+    expected = le.latch_calc.response_deadline(
+        NOW + timedelta(minutes=5),
+        NOW + timedelta(hours=30),
+        NOW + timedelta(days=5),
+    )
+    assert log["promote"] == [(LID, expected, NOW + timedelta(minutes=5))]
+
+
+# --- 後半11. promote競合負け ---
+
+
+async def test_promote_conflict_writes_nothing(monkeypatch):
+    """条件付きUPDATEが行数0 → イベント・notifications不呼出。"""
+    log = _patch_promote(monkeypatch, row=_latch_row(), promote_ok=False)
+    await _engine()._try_promote(LID)
+    assert log["promote"]
+    assert log["events"] == [] and log["notifications"] == []
+
+
+# --- 後半12. drain順序 ---
+
+
+async def test_drain_promotes_in_order(monkeypatch):
+    """drainは提示順(抽出行)の順にtry_promoteへ渡す(行毎に独立tx)。"""
+    order = []
+
+    async def fake_drain_ids(engine_, now, threshold):
+        return [_uid(11), _uid(12), _uid(13)]
+
+    async def fake_try(self, latch_id):
+        order.append(latch_id)
+
+    monkeypatch.setattr(le, "_drain_candidates", fake_drain_ids)
+    monkeypatch.setattr(le.LatchEngine, "_try_promote", fake_try)
+    await _engine()._drain()
+    assert order == [_uid(11), _uid(12), _uid(13)]
+
+
+# --- 後半13. drainのnearby除外(Review Focus 2) ---
+
+
+async def test_drain_passes_threshold_and_excludes_nearby(monkeypatch):
+    """drainはLATCH_THRESHOLDを渡す・SQLにscore閾値条件(nearby行を弾く)。"""
+    captured = []
+
+    async def fake_drain_ids(engine_, now, threshold):
+        captured.append((now, threshold))
+        return []
+
+    monkeypatch.setattr(le, "_drain_candidates", fake_drain_ids)
+    clock = FakeClock(NOW)
+    await _engine(clock=clock)._drain()
+    assert captured == [(NOW, le.latch_calc.LATCH_THRESHOLD)]
+    assert "l.score >= CAST(:threshold AS numeric)" in str(le._DRAIN_CANDIDATES)
+
+
+# --- 後半14. drain SQLピン ---
+
+
+def test_drain_sql_pins_order_and_guards():
+    sql = str(le._DRAIN_CANDIDATES)
+    assert "l.status = 'candidate'" in sql
+    assert "l.expires_at > CAST(:now AS timestamptz)" in sql
+    assert "ORDER BY target_time ASC, l.score DESC, l.id ASC" in sql
+    assert "max(i.time_start)" in sql  # 対象時刻=相関サブクエリで都度導出
+
+
+# --- 後半15. D-08カウントSQLピン(Review Focus 5) ---
+
+
+def test_daily_count_sql_pins_type_and_jst_window():
+    sql = str(le._COUNT_DAILY_NOTIFICATIONS)
+    assert "type IN ('proposal', 'nearby_candidate')" in sql
+    assert "created_at >= CAST(:day_start AS timestamptz)" in sql
+    assert "created_at < CAST(:day_next AS timestamptz)" in sql
+
+
+async def test_promote_daily_window_is_jst_day(monkeypatch):
+    """day_start/day_nextはjst_day_start(clock.jst_date())由来+1日(0時リセット)。"""
+    from latch.worker.matching.layer4 import jst_day_start
+
+    log = _patch_promote(monkeypatch, row=_latch_row())
+    clock = FakeClock(NOW)
+    await _engine(clock=clock)._try_promote(LID)
+    day_start = jst_day_start(clock.jst_date())
+    assert log["daily"][0][1:] == (day_start, day_start + timedelta(days=1))
+
+
+# --- 後半16. _COUNT_OPEN_PROPOSEDピン ---
+
+
+def test_count_open_proposed_pins_status_and_contains():
+    sql = str(le._COUNT_OPEN_PROPOSED)
+    assert "status IN ('proposed', 'partial_accept')" in sql
+    assert "intent_ids @> ARRAY[CAST(:intent_id AS uuid)]" in sql
+
+
+# --- 後半17. _SELECT_LATCH_FOR_UPDATEピン ---
+
+
+def test_select_latch_for_update_pins():
+    sql = str(le._SELECT_LATCH_FOR_UPDATE)
+    assert "FOR UPDATE" in sql
+    assert "WHERE id = CAST(:latch_id AS uuid)" in sql
+
+
+# --- 後半18. _PROMOTE_LATCHピン ---
+
+
+def test_promote_latch_pins_conditional_update():
+    sql = str(le._PROMOTE_LATCH)
+    assert (
+        "SET status = 'proposed', response_deadline = CAST(:deadline AS timestamptz)"
+        in sql
+    )
+    assert "AND status = 'candidate'" in sql
+    assert "RETURNING id" in sql
+
+
+# --- 後半19. _EXPIRE_LATCHピン ---
+
+
+def test_expire_latch_pins_conditional_update():
+    sql = str(le._EXPIRE_LATCH)
+    assert "SET status = 'expired'" in sql
+    assert "AND status = 'candidate'" in sql

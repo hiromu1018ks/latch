@@ -13,7 +13,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -145,6 +145,48 @@ _COUNT_DAILY_NOTIFICATIONS = text("""
     GROUP BY user_id
 """)
 
+# D-08同時進行上限(muted参加Intentもproposed数に計上 — 引用#10)
+_COUNT_OPEN_PROPOSED = text("""
+    SELECT COUNT(*) FROM latches
+    WHERE status IN ('proposed', 'partial_accept')
+      AND intent_ids @> ARRAY[CAST(:intent_id AS uuid)]
+""")
+
+# try_promote手順1: 行ロック(design §2.6・06 §6の直列化方式)
+_SELECT_LATCH_FOR_UPDATE = text("""
+    SELECT id, status, intent_ids, expires_at
+    FROM latches WHERE id = CAST(:latch_id AS uuid)
+    FOR UPDATE
+""")
+
+# 75分/deadline<=nowの破棄(条件付きUPDATE — design §2.6手順2)
+_EXPIRE_LATCH = text("""
+    UPDATE latches SET status = 'expired'
+    WHERE id = CAST(:latch_id AS uuid) AND status = 'candidate'
+    RETURNING id
+""")
+
+# proposed遷移(提示時D-05再計算・条件付きUPDATE — design §2.6手順6)
+_PROMOTE_LATCH = text("""
+    UPDATE latches
+    SET status = 'proposed', response_deadline = CAST(:deadline AS timestamptz)
+    WHERE id = CAST(:latch_id AS uuid) AND status = 'candidate'
+    RETURNING id
+""")
+
+# drain: 提示順(対象時刻昇順・score降順・同点latch_id昇順)。nearby行
+# (score < 閾値)は対象外・期限切れ行は対象外(design §2.6)
+_DRAIN_CANDIDATES = text("""
+    SELECT l.id,
+           (SELECT max(i.time_start) FROM intents i
+            WHERE i.id = ANY(l.intent_ids)) AS target_time
+    FROM latches l
+    WHERE l.status = 'candidate'
+      AND l.expires_at > CAST(:now AS timestamptz)
+      AND l.score >= CAST(:threshold AS numeric)
+    ORDER BY target_time ASC, l.score DESC, l.id ASC
+""")
+
 
 def _coerce_uuid(value: object) -> uuid.UUID:
     """SELECT結果のUUID列復元(asyncpgのUUIDサブクラス対策・origin.pyと同一規律)。"""
@@ -161,6 +203,17 @@ class LatchTargetRow:
     intent_a_id: uuid.UUID
     intent_b_id: uuid.UUID
     jev_result: dict  # _parse_structured済み(Gateway検証済みの生JSONB読取のみ)
+
+
+@dataclass(frozen=True)
+class Participant:
+    """try_promote用の参加Intent情報(同一tx内で再読取)。"""
+
+    intent_id: uuid.UUID
+    user_id: uuid.UUID
+    notification_level: str
+    time_start: datetime
+    expires_at: datetime
 
 
 async def _select_target_rows(
@@ -360,7 +413,10 @@ async def _count_daily_notifications(
     conn, user_ids: list[uuid.UUID], day_start, day_next
 ) -> dict[uuid.UUID, int]:
     """D-08日次上限カウント(真実はnotifications・design §2.6・0時リセットは
-    日付条件の切替で成立)。user_idsは2要素固定(u0/u1へ展開)。"""
+    日付条件の切替で成立)。user_idsは2要素固定(u0/u1へ展開)。
+    muted全員で通知対象なしのときは空listで呼ばれ{}を返す(上限消費なし)。"""
+    if not user_ids:
+        return {}
     u0, u1 = user_ids
     res = await conn.execute(
         _COUNT_DAILY_NOTIFICATIONS,
@@ -370,11 +426,73 @@ async def _count_daily_notifications(
     return {_coerce_uuid(uid): int(cnt) for uid, cnt in rows}
 
 
+async def _count_open_proposed(conn, intent_id: uuid.UUID) -> int:
+    """D-08同時進行上限カウント(開いているproposed/partial_accept件数)。"""
+    res = await conn.execute(_COUNT_OPEN_PROPOSED, {"intent_id": intent_id})
+    return int(res.scalar_one())
+
+
+async def _select_latch_for_update(conn, latch_id: uuid.UUID) -> tuple | None:
+    """try_promote手順1: 行ロック(id, status, intent_ids, expires_at)。"""
+    res = await conn.execute(_SELECT_LATCH_FOR_UPDATE, {"latch_id": latch_id})
+    row = res.first()
+    if row is None:
+        return None
+    return (_coerce_uuid(row[0]), row[1], [_coerce_uuid(x) for x in row[2]], row[3])
+
+
+async def _read_participants(
+    conn, a_id: uuid.UUID, b_id: uuid.UUID
+) -> list[Participant]:
+    """両者の_SELECT_INTENT_INPUTS読取(expiry/level/time_startを返す)。
+
+    行なし・expires_at NULLのIntentは除外(呼び出し側が2要素未満で対象外化)。
+    """
+    out: list[Participant] = []
+    for intent_id in (a_id, b_id):
+        row = (
+            (await conn.execute(_SELECT_INTENT_INPUTS, {"intent_id": intent_id}))
+            .mappings()
+            .first()
+        )
+        if row is None or row["expires_at"] is None:
+            continue
+        out.append(
+            Participant(
+                intent_id=_coerce_uuid(row["id"]),
+                user_id=_coerce_uuid(row["user_id"]),
+                notification_level=row["notification_level"],
+                time_start=row["time_start"],
+                expires_at=row["expires_at"],
+            )
+        )
+    return out
+
+
+async def _expire_latch(conn, latch_id: uuid.UUID, now) -> bool:
+    """75分切れ/deadline<=nowの破棄(条件付きUPDATE)。"""
+    res = await conn.execute(_EXPIRE_LATCH, {"latch_id": latch_id})
+    return res.first() is not None
+
+
+async def _promote_latch(conn, latch_id: uuid.UUID, deadline, now) -> bool:
+    """proposed遷移(提示時D-05再計算・条件付きUPDATE)。"""
+    res = await conn.execute(
+        _PROMOTE_LATCH, {"latch_id": latch_id, "deadline": deadline}
+    )
+    return res.first() is not None
+
+
 async def _drain_candidates(
     engine: AsyncEngine, now, threshold: float
 ) -> list[uuid.UUID]:
-    """drain対象の提示順抽出(対象時刻昇順・score降順)。Task 5で実装。"""
-    return []
+    """drain対象の提示順抽出(対象時刻昇順・score降順・engine.begin()内包)。"""
+    async with engine.begin() as conn:
+        res = await conn.execute(
+            _DRAIN_CANDIDATES, {"now": now, "threshold": threshold}
+        )
+        rows = res.fetchall()
+    return [_coerce_uuid(r[0]) for r in rows]
 
 
 class LatchEngine:
@@ -600,10 +718,77 @@ class LatchEngine:
                     logger.info("latch nearby daily limit uid=%s", u.user_id)
 
     async def _try_promote(self, latch_id: uuid.UUID) -> None:
-        """提示判定(75分・D-08・proposed遷移・notifications)。Task 5で実装。"""
+        """提示判定(1tx・design §2.6手順1〜9・Review Focus 4の手順順序)。
+
+        手順: 行ロック→(now採取・参加者読取)→75分ルール→expires_at切れ
+        対象外化→D-05再計算(deadline<=nowは75分と同一扱い)→D-08日次→
+        D-08同時→条件付きproposed遷移→イベント+notifications(muted除外)。
+        上限超過はcandidateのままreturn(破棄しない — 引用#8)。
+        """
+        async with self._engine.begin() as conn:
+            row = await _select_latch_for_update(conn, latch_id)
+            if row is None or row[1] != "candidate":
+                return
+            now = self._clock.now()  # FOR UPDATE取得後に採取
+            parts = await _read_participants(conn, row[2][0], row[2][1])
+            if len(parts) < 2:
+                return  # 参加Intent欠損(削除等)は対象外
+            target = max(p.time_start for p in parts)
+            min_expires = min(p.expires_at for p in parts)
+            # 75分ルール: 通知せず破棄(candidate→expired・引用#5)
+            if target - now < latch_calc.PROMPT_LEAD_MIN:
+                await _expire_latch(conn, latch_id, now)
+                await _insert_latch_event(
+                    conn, latch_id, "candidate", "expired", None, now
+                )
+                return
+            # expires_at切れはexpiry_sweeper(M3-3)の担当・ここでは対象外化のみ
+            if row[3] <= now:
+                return
+            deadline = latch_calc.response_deadline(now, target, min_expires)
+            if deadline <= now:
+                # 導出期限が通知時刻を過ぎない場合は通知しない(引用#4・防御)
+                await _expire_latch(conn, latch_id, now)
+                await _insert_latch_event(
+                    conn, latch_id, "candidate", "expired", None, now
+                )
+                return
+            notify = [p for p in parts if p.notification_level != "muted"]
+            day_start = layer4.jst_day_start(self._clock.jst_date())
+            day_next = day_start + timedelta(days=1)
+            counts = await _count_daily_notifications(
+                conn, [p.user_id for p in notify], day_start, day_next
+            )
+            if any(
+                counts.get(p.user_id, 0) >= latch_calc.D08_DAILY_LIMIT for p in notify
+            ):
+                return  # candidateのまま(破棄しない)
+            for p in parts:  # muted含む全参加者がproposed数に計上(引用#10)
+                if (
+                    await _count_open_proposed(conn, p.intent_id)
+                    >= latch_calc.D08_CONCURRENT_LIMIT
+                ):
+                    return
+            if not await _promote_latch(conn, latch_id, deadline, now):
+                return  # 他経路で遷移済み(条件付きUPDATEの行数0)
+            await _insert_latch_event(
+                conn, latch_id, "candidate", "proposed", None, now
+            )
+            for p in notify:
+                await _insert_notification(
+                    conn, p.user_id, NOTIFICATION_PROPOSAL, latch_id, now
+                )
 
     async def _drain(self) -> None:
-        """保留キューの提示順drain。Task 5で実装。"""
+        """保留キューを提示順に走査し各行へtry_promote(評価経路のたび・引用#17)。
+
+        大量保留時は行単位の上限判定で自然に上限内のみ処理され、残りは
+        次トリガーへ(design §2.10-8: Worker 1構成を前提に行ロックのみ)。
+        """
+        now = self._clock.now()
+        ids = await _drain_candidates(self._engine, now, latch_calc.LATCH_THRESHOLD)
+        for latch_id in ids:
+            await self._try_promote(latch_id)
 
     async def _area_name(self, a: LatchIntentInputs, b: LatchIntentInputs):
         """geo中点の逆転ジオコーディング(承認済み解釈・読取のみtx外)。"""
