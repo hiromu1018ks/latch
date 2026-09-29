@@ -115,3 +115,9 @@ class Settings(BaseSettings):
     # バックフィル周期タスク(06 D-15・design §2.5)。初期値(計測後に調整 — 06 §9-10)
     embedding_backfill_interval_sec: int = 300
     embedding_backfill_batch_limit: int = 50
+
+    # --- 再評価Runner(M2 ws-6・06 §9・design §2.8)---
+    # catch-upスキャン・30分Bucket再評価の周期と1周期あたりの投入上限
+    # (60秒はexpiry_sweeperと同一周期・06 §9。初期値。計測後に調整)
+    reeval_runner_interval_sec: int = 60
+    reeval_runner_batch_limit: int = 50

@@ -18,6 +18,7 @@ import redis.asyncio as redis_async
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.events import EventBus, IncomingEvent, make_event_bus
+from latch.geo.service import GeoService
 from latch.intents.events import EVENT_CREATED, EVENT_EMBEDDING_COMPLETED, EVENT_UPDATED
 from latch.llm.gateway import build_worker_gateway
 from latch.settings import Settings
@@ -27,6 +28,8 @@ from latch.worker.debounce import DebounceEntry, DebounceGroup, TrailingDebounce
 from latch.worker.embedding import EmbeddingWorker
 from latch.worker.jev import JevWorker
 from latch.worker.matching import run_candidate_retrieval
+from latch.worker.matching.latch_engine import LatchEngine
+from latch.worker.reeval import ReevalRunner
 from latch.worker.stage1 import Stage1
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,8 @@ class Worker:
         backfill: BackfillRunner | None = None,
         reeval: ReevalGuard | None = None,
         jev: JevWorker | None = None,
+        latch: LatchEngine | None = None,
+        reeval_runner: ReevalRunner | None = None,
     ) -> None:
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.settings: Settings = settings if settings is not None else Settings()
@@ -63,6 +68,8 @@ class Worker:
         self._backfill = backfill
         self._reeval = reeval
         self._jev = jev
+        self._latch = latch
+        self._reeval_runner = reeval_runner
         self._stop = asyncio.Event()
         self._subscription = None
 
@@ -155,10 +162,34 @@ class Worker:
                     guard=JevCostGuard(store=cost_store, clock=self.clock),
                     cost_store=cost_store,
                 )
+            # LatchEngine DI(M2 ws-6・design §2.1案A): JevWorker直後のLayer 5。
+            # redis非依存のため常に構築(注入済み資産は再構築しない)
+            if self._latch is None:
+                self._latch = LatchEngine(
+                    engine=engine, clock=self.clock, geo=GeoService(engine)
+                )
+            # ReevalRunner DI(design §2.8): catch-up・Bucket再評価の周期task。
+            # pipelineはengineを閉包した直接投入(_run_direct_pipeline)
+            if self._reeval_runner is None and redis_client is not None:
+
+                async def _pipeline(intent_id: uuid.UUID) -> None:
+                    await self._run_direct_pipeline(engine, intent_id)
+
+                self._reeval_runner = ReevalRunner(
+                    engine=engine,
+                    clock=self.clock,
+                    guard=self._reeval,  # この時点でrun()内構築済み(ReevalGuard)
+                    pipeline=_pipeline,
+                    interval_sec=self.settings.reeval_runner_interval_sec,
+                    batch_limit=self.settings.reeval_runner_batch_limit,
+                )
+            reeval_runner = self._reeval_runner
             await bus.ensure()
             self._subscription = await bus.subscribe(self._dispatch)
             debouncer_task = asyncio.create_task(debouncer.run(stop=self._stop))
             backfill_task = asyncio.create_task(backfill.run(stop=self._stop))
+            if reeval_runner is not None:
+                reeval_task = asyncio.create_task(reeval_runner.run(stop=self._stop))
             logger.info("worker started (app_env=%s)", self.settings.app_env)
             await self._stop.wait()
             # graceful shutdown: 窓内entryは解放せず未ack再配信へ(design §2.3)
@@ -166,6 +197,8 @@ class Worker:
                 self._subscription.stop()
             await debouncer_task
             await backfill_task
+            if reeval_runner is not None:
+                await reeval_task
             logger.info("worker stopped")
         finally:
             if owns_engine and engine is not None:
@@ -235,18 +268,37 @@ class Worker:
     async def _kick_jev(
         self, event_type: str, intent_id: uuid.UUID, version: int
     ) -> None:
-        """Stage1処理コミット後・ack前のLayer 4キック(design §2.1案B)。
+        """Stage1処理コミット後・ack前のLayer 4→Layer 5キック(design §2.1案A)。
 
         embedding_completedのみ(06 §1「Layer 1〜5はembedding_completed起点」)。
-        JevLLM失敗はhandle内でskipped記録に変換し、DB失敗・Guard Redis失敗は
-        ここから伝播して_dispatch/_on_releaseの既存exceptが受け、ackなし
-        再配信が回収する(冪等ガード jev_result IS NULL)。Jev未注入(ws-1資産
-        の試験)は何もしない。version引数はhandleが起点読取で再検証するため
-        使わない(IFは起点非依存 — ws-6がbucket起点から呼ぶ)。
+        JevWorker完了後にLatchEngineを直列実行(Layer 5+通知の層別予算≤2秒を
+        1連の流れで守る)。DB失敗はここから伝播して_dispatch/_on_releaseの
+        既存exceptが受け、ackなし再配信が回収する(冪等ガード
+        latch_score IS NULL・ON CONFLICT・条件付きUPDATE)。Jev・Latchそれぞれ
+        未注入(ws-1/ws-5資産の試験)は何もしない。version引数はhandleが
+        起点読取で再検証するため使わない(IFは起点非依存)。
         """
-        if self._jev is None or event_type != EVENT_EMBEDDING_COMPLETED:
+        if event_type != EVENT_EMBEDDING_COMPLETED:
             return
-        await self._jev.handle(intent_id)
+        if self._jev is not None:
+            await self._jev.handle(intent_id)
+        if self._latch is not None:
+            await self._latch.handle(intent_id)
+
+    async def _run_direct_pipeline(self, engine, intent_id: uuid.UUID) -> None:
+        """Bucket/catch-up起点の直接投入(design §2.8-3・Eventを発行しない)。
+
+        L1〜3を自前トランザクションで実行し、コミット後にLayer 4・Layer 5を
+        直列キック(stage1の_run_matchingはstage1トランザクションに同乗する
+        構造のため流用しない)。例外は握らずRunnerへ伝播(Runnerが握って次周期
+        で回収)。冪等は各部のガードで担保済み。
+        """
+        async with engine.begin() as conn:
+            await run_candidate_retrieval(conn, self.clock, intent_id)
+        if self._jev is not None:
+            await self._jev.handle(intent_id)
+        if self._latch is not None:
+            await self._latch.handle(intent_id)
 
     async def _run_matching(self, conn, intent_id: uuid.UUID) -> None:
         """embedding_completed 起点の Layer 1〜3 実行(design §2.6・§2.7)。
