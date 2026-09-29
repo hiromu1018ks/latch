@@ -7,7 +7,7 @@
 ## 完了条件の検証結果
 | # | 条件 | 結果 | 証拠(コマンド出力の要点) |
 |---|---|---|---|
-| 1 | make lint / make test | PASS | `All checks passed!`(ruff format --check+check)・`878 passed, 149 deselected in 6.10s`(unit全件。既存787+本単位91: latch_calc 19・proposal 8・latch_engine 46・reeval 13・worker 5〔追加〕・settingsピン追記は既存関数内) |
+| 1 | make lint / make test | PASS | `All checks passed!`(ruff format --check+check)・`881 passed, 149 deselected in 6.15s`(unit全件。既存787+本単位94: latch_calc 19・proposal 8・latch_engine 49・reeval 13・worker 5〔追加〕・settingsピン追記は既存関数内。latch_engine 49には最終レビューC-1対応の3件を含む) |
 | 2 | integration 10試験の収集 | 収集確認済み/test-ci=スーパーバイザー検証待ち | `uv run pytest --collect-only tests/integration/test_matching_latchengine.py -q` → `10 tests collected`・exit 0 |
 | 3 | 実時間参照がclock.pyのみ | PASS | `rg -n 'datetime\.now\|utcnow\|time\.time\|time\.monotonic\|time\.sleep\|from time import' backend/src` のヒットは `backend/src/latch/core/clock.py:33` の1行のみ。`test_arch_no_direct_time.py` → `1 passed` |
 | 4 | alembic 0001〜0003・docs無変更+チェーン確認 | PASS | `git diff --stat main -- …0001…0003 docs` → 出力なし(空)。チェーン確認スクリプト → `OK heads= ['0004']`(walk=0004→0003→0002→0001)。`pytest --collect-only tests/integration/test_schema.py -q` → 25 collected |
@@ -73,6 +73,12 @@ backend/tests/unit/test_settings.py                       (変更)
 - M3-1〜M3-5: responsesは常に'[]'(試験投入分を除く)。回答APIはtry_promoteと同一の
   条件付きUPDATE規律で書く。expiry_sweeperはcandidateのexpires_at切れを担当。
   FCM/お知らせUIはnotifications行から組み立て(payload={"latch_id"})
+- **[設計確認候補・最終レビューI-1]** `_record_score` コミット後のpeer読取失敗
+  (peer削除・期限NULLで `_read_intent_inputs` がNone)は当該行をlatch_score
+  計算済みのままreturnするため、`latch_score IS NULL` ガードで以降の評価対象に
+  二度と選択されない(peer復旧・更新後も提案機会を失う)。design §2.9の表に
+  このケースの規定なし(仕様の空白)。頻度低(削除との競合)だが提案漏れが
+  監視に乗らない。例:「peer喪失時に行をclosedへ」等の裁定を次回設計確認へ
 
 ## スーパーバイザー検証手順(test-ci実行時)
 1. `docker compose build api worker` — イメージ再ビルド(STATUS運用ルール4)
@@ -94,7 +100,10 @@ ddbd8a5 feat: マイグレーション0004(latches開いている行の部分UNI
 f56e41f feat: LatchEngine後半(try_promote・drain・D-08上限・75分ルール・notifications)
 3e50d34 feat: ReevalRunner(catch-up・30分Bucket・直接投入・sleep-first周期)
 cc31e0c feat: Worker配線(_kick_jev直列LatchEngine・ReevalRunner周期task)・settings追加
-a2618e4 docs: ws-6報告書とintegration試験(test-ci=スーパーバイザー検証待ち)
+6a34463 docs: ws-6報告書とintegration試験(test-ci=スーパーバイザー検証待ち)
+(本ファイル最終コミット=最終レビュー指摘対応: 日次カウント1要素対応・
+ test_8対象時刻修正・muted混在ケース追加 — ハッシュはamendで変動するため
+ 省略。マージ時は `git log --oneline main..HEAD` を参照)
 ```
 
 ## 補足(詰まった点・判断した点)
@@ -129,3 +138,29 @@ a2618e4 docs: ws-6報告書とintegration試験(test-ci=スーパーバイザー
 6. lint指摘への機械的対応: `# noqa: F401(説明)` はruffに無効directive扱い
    されるため `# noqa: F401 — 説明` 形式へ修正(latch_calc.py)。ruff format・
    E501(B)の整形は毎コミット適用
+7. **最終レビュー(ブランチ全体・新鮮な文脈)の結果と対応**:
+   - **Critical C-1(修正済み)**: `_count_daily_notifications` が通知対象1件
+     (片方muted・nearby_also単独)のとき `u0, u1 = user_ids` でValueError。
+     通知対象0〜2要素に対応(u1=u0の同一INは意味等価・空listはSQL不実行で
+     {})。修正はTDDで実施 — 本物関数をScriptedConnで検証するunit試験3件を
+     先に書いてValueErrorを確認(RED)→修正→`make test` 881 passed(GREEN)。
+     既存unitがスタブ差し替えでこの経路を拾えていなかった(偽陽性)ことも
+     判明したため、本体直撃の試験として残置
+   - **Critical C-2(修正済み)**: integration test_8のB_iのtime_startが
+     A(120h)より前(51h/52h)だったため対象時刻=max(time_start)が全行Aの
+     120hに潰れ、期待提示順(①→③→②)が誤っていた。B_iの窓をhours+120
+     (123h/124h)へ修正しmaxがB_i側で決まるようにした
+   - **Important I-2(対応済み)**: 提案経路のmuted混在(片方muted→proposed
+     遷移+通知1件のみ)が実SQLで無試験だったため、test_2へ第3ケース
+     (+24h窓)を追加
+   - **Important I-1(修正せず引継ぎへ)**: peer読取失敗時の評価行消化不能は
+     design §2.9の規定がない仕様の空白のため、実装側で勝手に方針を決めず
+     「引継ぎ」節へ設計確認候補として記録した(スーパーバイザー裁定待ち)
+   - **Minor(対応せず記録のみ)**: `_expire_latch`/`_promote_latch` の引数
+     now未使用(§9-5シグネチャどおり)・`_PROMOTE_LATCH` のみdeadlineがCAST
+     つき(他のtimestamptz bindと非対称・動作上問題なし)・参加Intent削除済み
+     latches行がdrainのNULLS FIRSTで先頭浮上する(無害・微小な無駄)
+8. **Review Focus 5項目のレビュー検証結果**: #1(latches二重生成防止)・
+   #2(nearby行のdrain除外)・#3(muted)・#4(手順順序・通知事実が先に
+   作れない)・#5(JST 0時リセット)はいずれも実装側で守られていることを
+   レビュアーが確認(C-1は#3の実行不能性を顕在化させたもの・修正済み)

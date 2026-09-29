@@ -413,11 +413,12 @@ async def _count_daily_notifications(
     conn, user_ids: list[uuid.UUID], day_start, day_next
 ) -> dict[uuid.UUID, int]:
     """D-08日次上限カウント(真実はnotifications・design §2.6・0時リセットは
-    日付条件の切替で成立)。user_idsは2要素固定(u0/u1へ展開)。
-    muted全員で通知対象なしのときは空listで呼ばれ{}を返す(上限消費なし)。"""
+    日付条件の切替で成立)。user_idsは0〜2要素(片方muted・nearby単独は1要素。
+    1要素のときu1=u0の同一INで意味等価)。空listはSQLを実行せず{}(上限消費なし)。"""
     if not user_ids:
         return {}
-    u0, u1 = user_ids
+    u0 = user_ids[0]
+    u1 = user_ids[1] if len(user_ids) > 1 else u0
     res = await conn.execute(
         _COUNT_DAILY_NOTIFICATIONS,
         {"u0": u0, "u1": u1, "day_start": day_start, "day_next": day_next},

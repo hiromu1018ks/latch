@@ -483,6 +483,35 @@ async def test_2_visibility_branch(api_client, db_engine, field):
     p2 = (await _latch_of(db_engine, a2["id"], b2["id"]))[3]
     assert p2 == {"headcount": 2, "match_level": "high"}  # 0.92→high
 
+    # パート3(+24h窓): muted混在の提案 — proposed遷移は通常どおり・通知は
+    # 非muted側のみ1行(muted側0行=上限も消費しない・引用#10)
+    start3 = _future(BASE_HOURS + 24)
+    he, _ = await _user(api_client, field)
+    a3 = await _intent(
+        api_client, db_engine, he, _structured(start=start3, expires=expires)
+    )
+    hf, _ = await _user(api_client, field)
+    b3 = await _intent(
+        api_client,
+        db_engine,
+        hf,
+        _structured(start=start3, expires=expires, notification_level="muted"),
+    )
+    async with db_engine.begin() as conn:
+        await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a3["id"]))
+    await _seed_jev(db_engine, a3["id"], b3["id"], 0.9, 0.9)
+    await _handle(db_engine, clock, a3["id"])
+    latch3 = await _latch_of(db_engine, a3["id"], b3["id"])
+    assert latch3 is not None and latch3[1] == "proposed"  # 遷移は通常どおり
+    assert await _notifications_of(
+        db_engine, await _user_id_of(db_engine, a3["id"]), "proposal"
+    ) == [  # 非muted側のみ1行
+        ("proposal", {"latch_id": str(latch3[0])})
+    ]
+    assert (
+        await _notifications_of(db_engine, await _user_id_of(db_engine, b3["id"])) == []
+    )  # muted側0行
+
 
 async def test_3_d08_daily_limit(api_client, db_engine, field):
     """D-08日次上限: 7件目はcandidate保留・nearby存在通知は上限でスキップ。"""
@@ -740,8 +769,9 @@ async def test_8_drain_order(api_client, db_engine, field):
     a = await _intent(
         api_client, db_engine, ha, _structured(start=start, expires=expires)
     )
-    # drain対象candidate 3件(直接INSERT・対象時刻は参加Intentのtime_startで制御)
-    # 期待提示順: ①(3h, 0.85)→③(3h, 0.80)→②(4h, 0.95)※同時刻はscore降順
+    # drain対象candidate 3件(直接INSERT・対象時刻は参加Intentのtime_startで制御)。
+    # 対象時刻=max(time_start)のためB_iはA(120h)より後ろの窓へ置く(hours+120)。
+    # 期待提示順: ①(123h, 0.85)→③(123h, 0.80)→②(124h, 0.95)※同時刻はscore降順
     plan = [
         ("b1", 3.0, 0.85),  # ① 対象時刻最早
         ("b2", 4.0, 0.95),
@@ -750,13 +780,13 @@ async def test_8_drain_order(api_client, db_engine, field):
     intents: dict[str, str] = {}
     for tag, hours, _score in plan:
         h, _ = await _user(api_client, field)
-        # embedding不要(drainはintents読取のみ)・窓はBASE+24h系で他試験と分離
+        # embedding不要(drainはintents読取のみ)・窓はBASE+48h系で他試験と分離
         resp = await api_client.post(
             "/v1/intents",
             headers=h,
             json=_payload(
                 _structured(
-                    start=(now + timedelta(hours=hours + 48)).isoformat(),
+                    start=(now + timedelta(hours=hours + 120)).isoformat(),
                     expires=(now + timedelta(days=10)).isoformat(),
                 )
             ),

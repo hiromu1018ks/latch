@@ -1029,3 +1029,53 @@ def test_expire_latch_pins_conditional_update():
     sql = str(le._EXPIRE_LATCH)
     assert "SET status = 'expired'" in sql
     assert "AND status = 'candidate'" in sql
+
+
+# --- 後半追加(最終レビューC-1): _count_daily_notifications本体の要素数対応 ---
+
+
+class _ScriptedResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+class _ScriptedConn:
+    """本物SQLを流す想定の最小conn(パラメータ記録・行を返す)。"""
+
+    def __init__(self, rows):
+        self._rows = rows
+        self.calls: list[dict] = []
+
+    async def execute(self, stmt, params=None):
+        self.calls.append(params)
+        return _ScriptedResult(self._rows)
+
+
+async def test_count_daily_notifications_single_user_no_unpack_error():
+    """通知対象1名(片方muted等)でもValueErrorしない(u1=u0の同一IN・意味等価)。"""
+    uid = _uid(1)
+    conn = _ScriptedConn([(uid, 3)])
+    out = await le._count_daily_notifications(conn, [uid], NOW, NOW + timedelta(days=1))
+    assert out == {uid: 3}
+    assert conn.calls[0]["u0"] == uid and conn.calls[0]["u1"] == uid
+
+
+async def test_count_daily_notifications_empty_users_skips_sql():
+    """空リスト(全員muted)はSQLを実行せず{}(上限を消費しない)。"""
+    conn = _ScriptedConn([])
+    out = await le._count_daily_notifications(conn, [], NOW, NOW + timedelta(days=1))
+    assert out == {}
+    assert conn.calls == []
+
+
+async def test_count_daily_notifications_two_users():
+    u_a, u_b = _uid(1), _uid(101)
+    conn = _ScriptedConn([(u_a, 2), (u_b, 6)])
+    out = await le._count_daily_notifications(
+        conn, [u_a, u_b], NOW, NOW + timedelta(days=1)
+    )
+    assert out == {u_a: 2, u_b: 6}
+    assert conn.calls[0]["u0"] == u_a and conn.calls[0]["u1"] == u_b
