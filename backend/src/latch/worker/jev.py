@@ -97,9 +97,7 @@ async def _complete_row(
         return res.first() is not None
 
 
-async def _skip_row(
-    engine: AsyncEngine, row_id: uuid.UUID, reason: str, now
-) -> bool:
+async def _skip_row(engine: AsyncEngine, row_id: uuid.UUID, reason: str, now) -> bool:
     """skip記録のガード付きUPDATE(短tx)。False=競合負け。"""
     async with engine.begin() as conn:
         res = await conn.execute(
@@ -228,9 +226,7 @@ class JevWorker:
         """1ペアの実行(§9-9の手順a〜i)。例外は分岐表(design §2.9)どおり。"""
         origin_is_a = row.intent_a_id == org.intent_id
         peer_id = row.intent_b_id if origin_is_a else row.intent_a_id
-        expected_version = (
-            row.intent_b_version if origin_is_a else row.intent_a_version
-        )
+        expected_version = row.intent_b_version if origin_is_a else row.intent_a_version
         peer_row = await _read_peer(self._engine, peer_id)
         if peer_row is None:
             logger.info("jev peer missing row_id=%s peer_id=%s", row.row_id, peer_id)
@@ -264,9 +260,7 @@ class JevWorker:
             )
             return
         peer_inp = _jev_input_from_row(peer_row)
-        inp_a, inp_b = (
-            (origin_inp, peer_inp) if origin_is_a else (peer_inp, origin_inp)
-        )
+        inp_a, inp_b = (origin_inp, peer_inp) if origin_is_a else (peer_inp, origin_inp)
         intent_a = build_jev_text(inp_a, label="Intent A")
         intent_b = build_jev_text(inp_b, label="Intent B")
         try:

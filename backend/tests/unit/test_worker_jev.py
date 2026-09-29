@@ -11,7 +11,7 @@ from latch.core.clock import FakeClock
 from latch.llm.errors import JevOutputInvalidError, LLMError, LLMTimeoutError
 from latch.llm.jev import JevJudgment
 from latch.worker import jev as jev_mod
-from latch.worker.cost import JevCostDependencyError, JevCostGuard, JevCostStore
+from latch.worker.cost import JevCostDependencyError, JevCostStore
 from latch.worker.jev import JevWorker
 from latch.worker.matching.layer4 import JevCandidateRow
 from latch.worker.matching.origin import Origin, OriginLoad
@@ -47,8 +47,12 @@ def _origin(n: int = 1) -> Origin:
     )
 
 
-def _row(n: int = 1, status: str = "pending", skip_reason: str | None = None,
-         cheap: float = 0.9) -> JevCandidateRow:
+def _row(
+    n: int = 1,
+    status: str = "pending",
+    skip_reason: str | None = None,
+    cheap: float = 0.9,
+) -> JevCandidateRow:
     """起点intent_a_id=_uid(1)・相手intent_b_id=_uid(101)の候補行。"""
     return JevCandidateRow(
         row_id=_uid(n),
@@ -82,17 +86,24 @@ def _jev_row(version: int = 1, time_end=None, location: str = "天文館周辺")
     )
 
 
-def _judgment(provider: str = "typesafe_jev", model: str | None = "jev-1.13.0") -> JevJudgment:
-    return JevJudgment(provider=provider, model=model, result={
-        "would_a_accept_b": 0.83, "would_b_accept_a": 0.71,
-        "jev_5axis": {
-            "purpose_fit": {"value": 0.75, "confidence": 0.8},
-            "mood_fit": {"value": 0.5, "confidence": 0.6},
-            "timing_fit": {"value": 0.5, "confidence": 0.7},
-            "social_fit": {"value": 0.75, "confidence": 0.6},
-            "latent_yes": {"value": 0.4, "confidence": None},
+def _judgment(
+    provider: str = "typesafe_jev", model: str | None = "jev-1.13.0"
+) -> JevJudgment:
+    return JevJudgment(
+        provider=provider,
+        model=model,
+        result={
+            "would_a_accept_b": 0.83,
+            "would_b_accept_a": 0.71,
+            "jev_5axis": {
+                "purpose_fit": {"value": 0.75, "confidence": 0.8},
+                "mood_fit": {"value": 0.5, "confidence": 0.6},
+                "timing_fit": {"value": 0.5, "confidence": 0.7},
+                "social_fit": {"value": 0.75, "confidence": 0.6},
+                "latent_yes": {"value": 0.4, "confidence": None},
+            },
         },
-    })
+    )
 
 
 class _FakeGateway:
@@ -130,8 +141,13 @@ class _FakeTx:
 class _FakeGuard:
     """decision/deny_reasonを差し替え可能なGuardスタブ(呼び出しを記録)。"""
 
-    def __init__(self, *, allowed: bool = True, deny_reason: str | None = None,
-                 error: Exception | None = None):
+    def __init__(
+        self,
+        *,
+        allowed: bool = True,
+        deny_reason: str | None = None,
+        error: Exception | None = None,
+    ):
         self.allowed = allowed
         self.deny_reason = deny_reason
         self.error = error
@@ -170,8 +186,11 @@ async def redis():
 
 def _make_worker(gateway, guard, cost_store) -> JevWorker:
     return JevWorker(
-        engine=_FakeEngine(), clock=FakeClock(NOW), gateway=gateway,
-        guard=guard, cost_store=cost_store,
+        engine=_FakeEngine(),
+        clock=FakeClock(NOW),
+        gateway=gateway,
+        guard=guard,
+        cost_store=cost_store,
     )
 
 
@@ -203,8 +222,10 @@ def _patch_phase1(monkeypatch, org=None, skip_reason=None, rows=(), origin_row=N
     return closed, selected
 
 
-def _patch_eval(monkeypatch, *, h_recheck=True, peer_row=_jev_row()):
+def _patch_eval(monkeypatch, *, h_recheck=True, peer_row=None):
     """フェーズ2のDB部品(H再検証・peer読取)をmonkeypatch。"""
+    if peer_row is None:
+        peer_row = _jev_row()
     h_calls: list = []
 
     async def fake_h(conn, origin, candidate_id):
@@ -264,7 +285,7 @@ async def test_success_path_writes_jev_result_and_counts(redis, monkeypatch):
 
 
 async def test_guard_deny_records_skip_without_api_call(redis, monkeypatch):
-    """deny経路: skipped/intent_daily・jev_result NULLのまま・API呼び出しなし・計上なし。"""
+    """deny経路: skipped/intent_daily・jev_result NULLのまま・API呼び出しなし。"""
     org = _origin(1)
     _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row())
     _patch_eval(monkeypatch)
@@ -382,7 +403,9 @@ async def test_phase1_closes_broken_pairs(redis, monkeypatch):
     org = _origin(1)
     closed, _ = _patch_phase1(monkeypatch, org=org, rows=[], origin_row=_jev_row())
     _patch_writes(monkeypatch)
-    worker = _make_worker(_FakeGateway(), _FakeGuard(), _RecordingCostStore(JevCostStore(redis)))
+    worker = _make_worker(
+        _FakeGateway(), _FakeGuard(), _RecordingCostStore(JevCostStore(redis))
+    )
     await worker.handle(_uid(1))
     assert closed == [(org.intent_id, org.evaluated_at)]
 
@@ -433,7 +456,9 @@ async def test_guard_redis_failure_propagates(redis, monkeypatch):
     _patch_eval(monkeypatch)
     _patch_writes(monkeypatch)
     guard = _FakeGuard(error=JevCostDependencyError("jev cost store unavailable"))
-    worker = _make_worker(_FakeGateway(), guard, _RecordingCostStore(JevCostStore(redis)))
+    worker = _make_worker(
+        _FakeGateway(), guard, _RecordingCostStore(JevCostStore(redis))
+    )
     with pytest.raises(JevCostDependencyError):
         await worker.handle(_uid(1))
 
@@ -470,7 +495,9 @@ async def test_origin_noop_makes_no_layer_calls(redis, monkeypatch):
 async def test_build_jev_text_pin_and_normalized_intent_ids(redis, monkeypatch):
     """build_jev_text呼び出しピン: [hard]/[soft]行テキスト・intent_idsは正規化順。"""
     org = _origin(1)
-    _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row(location="天文館周辺"))
+    _patch_phase1(
+        monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row(location="天文館周辺")
+    )
     _patch_eval(monkeypatch, peer_row=_jev_row(location="高見橋"))
     _patch_writes(monkeypatch)
     gw = _FakeGateway(judgment=_judgment())
@@ -487,7 +514,7 @@ async def test_build_jev_text_pin_and_normalized_intent_ids(redis, monkeypatch):
 
 
 async def test_accounting_provider_and_day_pin(redis, monkeypatch):
-    """経路providerの計上ピン: 成功=typesafe_jev・フォールバック経路=fallback_llm・day一致。"""
+    """経路providerの計上ピン: 成功=typesafe_jev・フォールバック=fallback_llm。"""
     org = _origin(1)
     _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row())
     _patch_eval(monkeypatch)
