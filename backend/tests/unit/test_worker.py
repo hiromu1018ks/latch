@@ -294,3 +294,128 @@ async def test_jev_not_injected_is_noop(fake_clock):
         await worker._dispatch(_make_event("embedding_completed", uuid.uuid4(), 1))
     finally:
         await _stop(worker, task)
+
+
+# -- 配線(M2 ws-6)。_kick_jev直列LatchEngine・直接投入(design §2.1案A・§2.8-3) --
+
+
+class _RecordingLatch:
+    """LatchEngineスタブ(handleの呼び出しを記録)。"""
+
+    def __init__(self):
+        self.calls: list[uuid.UUID] = []
+
+    async def handle(self, intent_id):
+        self.calls.append(intent_id)
+
+
+async def _started_worker_with_latch(fake_clock, stage1, jev, latch):
+    from latch.worker.main import Worker
+
+    worker = Worker(
+        clock=fake_clock, bus=_FakeBus(), stage1=stage1, jev=jev, latch=latch
+    )
+    task = asyncio.create_task(worker.run())
+    await asyncio.sleep(0.01)
+    return worker, task
+
+
+async def test_kick_jev_runs_latch_after_jev(fake_clock):
+    """embedding_completed → JevWorker完了後にLatchEngineを直列実行(§2.1案A)。"""
+    jev = _RecordingJev()
+    latch = _RecordingLatch()
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker_with_latch(fake_clock, stage1, jev, latch)
+    try:
+        iid = uuid.uuid4()
+        await worker._dispatch(_make_event("embedding_completed", iid, 1))
+        assert jev.calls == [iid]
+        assert latch.calls == [iid]  # JevWorkerの後にLayer 5
+    finally:
+        await _stop(worker, task)
+
+
+async def test_kick_jev_latch_not_injected_is_noop(fake_clock):
+    """Latch未注入(ws-1/ws-5資産の試験)は何もしない。"""
+    jev = _RecordingJev()
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker_with_latch(fake_clock, stage1, jev, None)
+    try:
+        await worker._dispatch(_make_event("embedding_completed", uuid.uuid4(), 1))
+        assert jev.calls  # jevのみ
+    finally:
+        await _stop(worker, task)
+
+
+async def test_kick_jev_jev_not_injected_latch_runs(fake_clock):
+    """Jev未注入でもlatch注入ならlatchを実行(構成上の独立性)。"""
+    latch = _RecordingLatch()
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker_with_latch(fake_clock, stage1, None, latch)
+    try:
+        iid = uuid.uuid4()
+        await worker._dispatch(_make_event("embedding_completed", iid, 1))
+        assert latch.calls == [iid]
+    finally:
+        await _stop(worker, task)
+
+
+async def test_created_does_not_kick_latch(fake_clock):
+    """created/updatedではLayer 5も起動しない(06 §1)。"""
+    latch = _RecordingLatch()
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker_with_latch(fake_clock, stage1, None, latch)
+    try:
+        await worker._dispatch(_make_event("created", uuid.uuid4(), 1))
+        assert latch.calls == []
+    finally:
+        await _stop(worker, task)
+
+
+class _FakePipelineEngine:
+    """直接投入用の最小engine(begin()のみ・retrievalはmonkeypatch)。"""
+
+    def begin(self):
+        return _FakePipelineTx()
+
+
+class _FakePipelineTx:
+    async def __aenter__(self):
+        return object()
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+async def test_run_direct_pipeline_order(fake_clock, monkeypatch):
+    """直接投入: L1〜3tx→コミット後Jev→Latchの順・同一intent_id(design §2.8-3)。"""
+    from latch.worker import main as main_mod
+
+    order: list[str] = []
+
+    async def fake_retrieval(conn, clock, intent_id):
+        order.append("l123")
+
+    class _Ordered:
+        def __init__(self, tag: str):
+            self._tag = tag
+            self.calls: list[uuid.UUID] = []
+
+        async def handle(self, intent_id):
+            self.calls.append(intent_id)
+            order.append(self._tag)
+
+    monkeypatch.setattr(main_mod, "run_candidate_retrieval", fake_retrieval)
+    jev = _Ordered("jev")
+    latch = _Ordered("latch")
+    worker = Worker(
+        clock=fake_clock,
+        bus=_FakeBus(),
+        stage1=_RecordingStage1("processed"),
+        jev=jev,
+        latch=latch,
+    )
+    iid = uuid.uuid4()
+    await worker._run_direct_pipeline(_FakePipelineEngine(), iid)
+    assert order == ["l123", "jev", "latch"]
+    assert jev.calls == [iid] and latch.calls == [iid]

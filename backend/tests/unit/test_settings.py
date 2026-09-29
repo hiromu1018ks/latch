@@ -9,6 +9,8 @@ def test_settings_defaults(monkeypatch):
     s = Settings()
     assert s.app_env == "ci"
     assert s.log_level == "INFO"
+    assert s.reeval_runner_interval_sec == 60  # M2 ws-6(design §2.8)
+    assert s.reeval_runner_batch_limit == 50
 
 
 def test_settings_env_override_with_latch_prefix(monkeypatch):
