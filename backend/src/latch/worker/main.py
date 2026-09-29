@@ -13,6 +13,8 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 
+import redis.asyncio as redis_async
+
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.events import EventBus, IncomingEvent, make_event_bus
@@ -20,8 +22,10 @@ from latch.intents.events import EVENT_CREATED, EVENT_UPDATED
 from latch.llm.gateway import build_embedding_gateway
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
+from latch.worker.cost import ReevalGuard
 from latch.worker.debounce import DebounceEntry, DebounceGroup, TrailingDebouncer
 from latch.worker.embedding import EmbeddingWorker
+from latch.worker.matching import run_candidate_retrieval
 from latch.worker.stage1 import Stage1
 
 logger = logging.getLogger(__name__)
@@ -44,6 +48,7 @@ class Worker:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         embedding: EmbeddingWorker | None = None,
         backfill: BackfillRunner | None = None,
+        reeval: ReevalGuard | None = None,
     ) -> None:
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.settings: Settings = settings if settings is not None else Settings()
@@ -54,6 +59,7 @@ class Worker:
         self._sleep = sleep
         self._embedding = embedding
         self._backfill = backfill
+        self._reeval = reeval
         self._stop = asyncio.Event()
         self._subscription = None
 
@@ -69,6 +75,7 @@ class Worker:
     async def run(self) -> None:
         owns_bus = self._bus is None
         owns_engine = self._engine is None
+        owns_redis = self._reeval is None
         if owns_bus:
             self._bus = make_event_bus(self.settings)
         bus = self._bus
@@ -77,6 +84,13 @@ class Worker:
             if self._engine is not None
             else create_db_engine(self.settings)
         )
+        redis_client = (
+            redis_async.Redis.from_url(self.settings.redis_url, decode_responses=True)
+            if owns_redis
+            else None
+        )
+        if self._reeval is None and redis_client is not None:
+            self._reeval = ReevalGuard(redis_client)
         try:
             stage1 = (
                 self._stage1
@@ -86,6 +100,7 @@ class Worker:
                     clock=self.clock,
                     settings=self.settings,
                     sleep=self._sleep,
+                    matching_hook=self._run_matching,
                 )
             )
             debouncer = (
@@ -137,6 +152,8 @@ class Worker:
         finally:
             if owns_engine and engine is not None:
                 await engine.dispose()
+            if owns_redis and redis_client is not None:
+                await redis_client.aclose()
             if owns_bus:
                 await bus.close()
 
@@ -195,3 +212,22 @@ class Worker:
         if self._embedding is None or event_type not in (EVENT_CREATED, EVENT_UPDATED):
             return
         await self._embedding.handle(intent_id, version)
+
+    async def _run_matching(self, conn, intent_id: uuid.UUID) -> None:
+        """embedding_completed 起点の Layer 1〜3 実行(design §2.6・§2.7)。
+
+        reevalガードで30分以内の再評価をスキップする(06 §5(c)「Event自体は
+        処理済みとし、再評価は行わない」 — スキップ理由は構造化ログ)。
+        run_candidate_retrieval は stage1 のトランザクションに同乗する
+        (失敗→ロールバック→再試行5回→quarantinedの既存経路)。reevalの
+        Redis呼び出しがDBトランザクション内に入るが、1回のSET NX(低レイテン
+        シ・compose内ネットワーク)で接続の長期保持を生まないため許容
+        (design §2.7)。Redis例外はfail-closed(ReevalGuardが専用例外へ包む)。
+        """
+        if self._reeval is not None and not await self._reeval.allow(intent_id):
+            logger.info(
+                "matching reeval suppressed intent_id=%s (within 30min window)",
+                intent_id,
+            )
+            return
+        await run_candidate_retrieval(conn, self.clock, intent_id)
