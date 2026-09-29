@@ -205,6 +205,7 @@
   - スーパーバイザー独立検証(test-ci初回)で新規integration 4件失敗を検出 → **試験設計の潜伏欠陥5系統**を特定しagent3へ修正委任: (1)テスト専用カテゴリws4cheapはサーバLiteral[meal,drinking,activity]で422 (2)Layer 1時間交差は狭義比較でΔ180分+end無しは境界落ち (3)ペア予算LEAST≥500でbudget=0候補は落ち (4)期待値計算誤り2件(0.7→0.85・0.8→0.85) (5)同点順序検証の前提が誤り。**修正方針もsupervisor裁定: 残存データ隔離は専用カテゴリ→時間窓分離(全Fixtureをnow+5日へ統一)**。agent3はintegration実行禁止のため検出不能だった系統(ws-3の19歳fixtureと同型・実行されたことのない試験コードの宿命)
   - 修正後: worktreeで5件PASS → マージ後main **test-ci 818 passed**(769+unit44+integration5)・残存確認(Redis ws4-*・users m2ws4-%・intents ws4cheapとも0件=teardown対抗策の実効性を実証)
   - 運用メモ: mainのtest_matching_hardfilter.pyがws-3マージ由来のruff format落ち(意味変化なし。agent3が独立choreコミット0479b77で解消。**test-ciにlintが含まれないためws-3検証時は未検出** — マージ後のlint再実行を検証手順に足す価値あり)
+- 学習資産追従: ws-4分 c488846(第12章「費用ゼロの審査と、お金を守る番人: Layer 3 Cheap Judgeとコスト保護」新設+既存5ファイル更新。guard系の动手Labはws-5でdenyが観察できるようになってから、として見送り)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
