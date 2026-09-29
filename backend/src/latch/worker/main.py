@@ -28,6 +28,7 @@ from latch.worker.debounce import DebounceEntry, DebounceGroup, TrailingDebounce
 from latch.worker.embedding import EmbeddingWorker
 from latch.worker.jev import JevWorker
 from latch.worker.matching import run_candidate_retrieval
+from latch.worker.matching.group_engine import GroupEngine
 from latch.worker.matching.latch_engine import LatchEngine
 from latch.worker.reeval import ReevalRunner
 from latch.worker.stage1 import Stage1
@@ -56,6 +57,7 @@ class Worker:
         jev: JevWorker | None = None,
         latch: LatchEngine | None = None,
         reeval_runner: ReevalRunner | None = None,
+        group: GroupEngine | None = None,
     ) -> None:
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.settings: Settings = settings if settings is not None else Settings()
@@ -70,6 +72,7 @@ class Worker:
         self._jev = jev
         self._latch = latch
         self._reeval_runner = reeval_runner
+        self._group = group
         self._stop = asyncio.Event()
         self._subscription = None
 
@@ -168,6 +171,15 @@ class Worker:
                 self._latch = LatchEngine(
                     engine=engine, clock=self.clock, geo=GeoService(engine)
                 )
+            # GroupEngine DI(M2 ws-7・design §2.1案A): LatchEngine直後の
+            # グループ生成・集約。latchはtry_promote委譲用(Noneなら提案化なし)
+            if self._group is None:
+                self._group = GroupEngine(
+                    engine=engine,
+                    clock=self.clock,
+                    geo=GeoService(engine),
+                    latch=self._latch,
+                )
             # ReevalRunner DI(design §2.8): catch-up・Bucket再評価の周期task。
             # pipelineはengineを閉包した直接投入(_run_direct_pipeline)
             if self._reeval_runner is None and redis_client is not None:
@@ -265,40 +277,54 @@ class Worker:
             return
         await self._embedding.handle(intent_id, version)
 
+    async def _run_post_retrieval(self, intent_id: uuid.UUID) -> None:
+        """L1〜3後の共通チェーン(design §2.1案A)。
+
+        GroupEngine.handle(生成)→ JevWorker(group_ctx付き)→ LatchEngine(1対1)
+        → GroupEngine.finalize(集約)。各部品は未注入なら何もしない
+        (ws-1/ws-5/ws-6資産の試験互換)。DB失敗は伝播し_dispatch/_on_release
+        の既存except・Runnerの握りへ載る(各部のガードで冪等)。
+        """
+        group_ctx = None
+        if self._group is not None:
+            group_ctx = await self._group.handle(intent_id)
+        if self._jev is not None:
+            await self._jev.handle(intent_id, group_ctx)
+        if self._latch is not None:
+            await self._latch.handle(intent_id)
+        if self._group is not None:
+            await self._group.finalize(intent_id)
+
     async def _kick_jev(
         self, event_type: str, intent_id: uuid.UUID, version: int
     ) -> None:
-        """Stage1処理コミット後・ack前のLayer 4→Layer 5キック(design §2.1案A)。
+        """Stage1処理コミット後・ack前のLayer 4→5→集約キック(design §2.1案A)。
 
         embedding_completedのみ(06 §1「Layer 1〜5はembedding_completed起点」)。
-        JevWorker完了後にLatchEngineを直列実行(Layer 5+通知の層別予算≤2秒を
-        1連の流れで守る)。DB失敗はここから伝播して_dispatch/_on_releaseの
+        GroupEngine.handle→Jev→Latch→GroupEngine.finalizeの共通チェーン
+        (_run_post_retrieval)を直列実行(Layer 5+通知の層別予算≤2秒を1連の
+        流れで守る)。DB失敗はここから伝播して_dispatch/_on_releaseの
         既存exceptが受け、ackなし再配信が回収する(冪等ガード
-        latch_score IS NULL・ON CONFLICT・条件付きUPDATE)。Jev・Latchそれぞれ
-        未注入(ws-1/ws-5資産の試験)は何もしない。version引数はhandleが
-        起点読取で再検証するため使わない(IFは起点非依存)。
+        0005部分UNIQUE・latch_score IS NULL・ON CONFLICT・条件付きUPDATE)。
+        各部品それぞれ未注入(ws-1/ws-5/ws-6/ws-7資産の試験)は何もしない。
+        version引数はhandleが起点読取で再検証するため使わない(IFは起点非依存)。
         """
         if event_type != EVENT_EMBEDDING_COMPLETED:
             return
-        if self._jev is not None:
-            await self._jev.handle(intent_id)
-        if self._latch is not None:
-            await self._latch.handle(intent_id)
+        await self._run_post_retrieval(intent_id)
 
     async def _run_direct_pipeline(self, engine, intent_id: uuid.UUID) -> None:
         """Bucket/catch-up起点の直接投入(design §2.8-3・Eventを発行しない)。
 
-        L1〜3を自前トランザクションで実行し、コミット後にLayer 4・Layer 5を
-        直列キック(stage1の_run_matchingはstage1トランザクションに同乗する
-        構造のため流用しない)。例外は握らずRunnerへ伝播(Runnerが握って次周期
-        で回収)。冪等は各部のガードで担保済み。
+        L1〜3を自前トランザクションで実行し、コミット後に共通チェーン
+        (_run_post_retrieval: group→jev→latch→finalize)を直列キック
+        (stage1の_run_matchingはstage1トランザクションに同乗する構造のため
+        流用しない)。例外は握らずRunnerへ伝播(Runnerが握って次周期で回収)。
+        冪等は各部のガードで担保済み。
         """
         async with engine.begin() as conn:
             await run_candidate_retrieval(conn, self.clock, intent_id)
-        if self._jev is not None:
-            await self._jev.handle(intent_id)
-        if self._latch is not None:
-            await self._latch.handle(intent_id)
+        await self._run_post_retrieval(intent_id)
 
     async def _run_matching(self, conn, intent_id: uuid.UUID) -> None:
         """embedding_completed 起点の Layer 1〜3 実行(design §2.6・§2.7)。

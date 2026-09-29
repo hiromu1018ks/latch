@@ -336,6 +336,7 @@ async def test_process_deleted_closes_candidates():
             FakeResult(("pending",)),
             FakeResult((1,)),
             FakeResult(None, 0),  # 候補UPDATE(0件でも正常 — design §2.5)
+            FakeResult(None, 0),  # group_candidatesUPDATE(ws-7・0件でも正常)
             FakeResult(None, 1),  # processed
         ]
     )
@@ -345,6 +346,42 @@ async def test_process_deleted_closes_candidates():
     close_sql = _sql(engine.conn, 2)
     assert "match_candidates" in close_sql and "closed" in close_sql
     assert engine.conn.calls[2][1]["intent_id"] == IID
+    # group_candidatesの無効化はmatch_candidatesの直後(§9-10)
+    gc_sql = _sql(engine.conn, 3)
+    assert "group_candidates" in gc_sql and "closed" in gc_sql
+    assert "ANY(intent_ids)" in gc_sql
+    assert engine.conn.calls[3][1]["intent_id"] == IID
+
+
+async def test_process_deleted_closes_group_candidates():
+    """deleted → group_candidatesの無効化SQL(status='closed'・06 §1・design §2.7-5)。
+
+    実行順序: match_candidates→group_candidates(集合がlatchesのFK元のため
+    group_candidatesは閉じるのみ・latches・ペア行は触らない)。
+    """
+    engine = ScriptedEngine(
+        [
+            FakeResult(("pending",)),
+            FakeResult((1,)),
+            FakeResult(None, 0),  # match_candidates UPDATE
+            FakeResult(None, 0),  # group_candidates UPDATE(本試験の主対象)
+            FakeResult(None, 1),  # processed
+        ]
+    )
+    await _stage1(engine).process(
+        _event("deleted", IID, 1), ("deleted", IID, 1), ROW_ID
+    )
+    assert engine.begins == 1  # 同一トランザクション
+    gc_sql = _sql(engine.conn, 3)
+    assert "UPDATE group_candidates" in gc_sql
+    assert "SET status = 'closed'" in gc_sql
+    assert "CAST(:intent_id AS uuid) = ANY(intent_ids)" in gc_sql
+    assert "status <> 'closed'" in gc_sql
+    assert engine.conn.calls[3][1]["intent_id"] == IID
+    assert engine.conn.calls[3][1]["now"] is not None
+    # 実行順序: calls[2]=match_candidates→calls[3]=group_candidates
+    assert "match_candidates" in _sql(engine.conn, 2)
+    assert "group_candidates" in _sql(engine.conn, 3)
 
 
 async def test_embedding_hook_called_for_created_and_updated_only():
