@@ -95,36 +95,44 @@ def test_name_is_google_for_send_record():
     assert provider.name == "google"
 
 
-# -- build_embedding_gateway(design §2.8-B・§4.1 Gateway構成)--
+# -- build_worker_gateway(design §2.8・ws-5・§4.1 Gateway構成) --
 
 
 def _clock() -> FakeClock:
     return FakeClock(datetime(2026, 9, 29, 12, 0, 0, tzinfo=UTC))
 
 
-def test_build_embedding_gateway_stub_mode_all_stub():
-    from latch.llm import StubLLM, build_embedding_gateway
+def test_build_worker_gateway_stub_mode_all_stub():
+    from latch.llm import StubLLM, build_worker_gateway
 
-    gw = build_embedding_gateway(_clock(), Settings())
+    gw = build_worker_gateway(_clock(), Settings())
     assert isinstance(gw._embedding, StubLLM)
     assert isinstance(gw._parser, StubLLM)
     assert isinstance(gw._jev, StubLLM)
 
 
-def test_build_embedding_gateway_real_embeds_only():
-    from latch.llm import StubLLM, build_embedding_gateway
+def test_build_worker_gateway_real_builds_embedding_and_jev():
+    from latch.llm import StubLLM, build_worker_gateway
+    from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
     from latch.llm.gemini import GeminiEmbeddingProvider
+    from latch.llm.typesafe import TypeSafeJevProvider
 
-    settings = Settings(llm_mode="real", llm_gemini_api_key="gk-test")
-    gw = build_embedding_gateway(_clock(), settings)
+    settings = Settings(
+        llm_mode="real",
+        llm_gemini_api_key="gk-test",
+        llm_typesafe_api_key="tk-test",
+        llm_anthropic_api_key="ak-test",
+    )
+    gw = build_worker_gateway(_clock(), settings)
     assert isinstance(gw._embedding, GeminiEmbeddingProvider)
-    assert isinstance(gw._parser, StubLLM)  # parser/jevはstub継続(design §2.8-B)
-    assert isinstance(gw._jev, StubLLM)
+    assert isinstance(gw._jev, TypeSafeJevProvider)
+    assert isinstance(gw._jev_fallback, AnthropicJevFallbackProvider)
+    assert isinstance(gw._parser, StubLLM)  # parser系統はstub継続(design §2.8)
 
 
-def test_build_embedding_gateway_real_without_key_fails_fast():
-    from latch.llm import build_embedding_gateway
+def test_build_worker_gateway_real_without_key_fails_fast():
+    from latch.llm import build_worker_gateway
 
     settings = Settings(llm_mode="real", llm_gemini_api_key="")
     with pytest.raises(ValueError):
-        build_embedding_gateway(_clock(), settings)
+        build_worker_gateway(_clock(), settings)

@@ -18,11 +18,11 @@ from latch.llm.gateway import (
     TIMEOUT_PARSER_S,
     LLMGateway,
     Timeouts,
-    build_embedding_gateway,
     build_llm_gateway,
+    build_worker_gateway,
 )
 from latch.llm.gemini import GeminiEmbeddingProvider
-from latch.llm.jev import JevJudgment
+from latch.llm.jev import JEV_MODEL, JevJudgment
 from latch.llm.providers import (
     EMBEDDING_DIMENSIONS,
     EmbeddingProvider,
@@ -31,11 +31,15 @@ from latch.llm.providers import (
 )
 from latch.llm.records import SendRecord, send_log
 from latch.llm.stub import StubLLM
+from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
+from latch.llm.typesafe import TypeSafeJevProvider
 
 __all__ = [
     "EMBEDDING_DIMENSIONS",
+    "AnthropicJevFallbackProvider",
     "EmbeddingProvider",
     "GeminiEmbeddingProvider",
+    "JEV_MODEL",
     "JevJudgment",
     "JevOutputInvalidError",
     "JevProvider",
@@ -53,7 +57,8 @@ __all__ = [
     "TIMEOUT_JEV_S",
     "TIMEOUT_PARSER_S",
     "Timeouts",
-    "build_embedding_gateway",
+    "TypeSafeJevProvider",
     "build_llm_gateway",
+    "build_worker_gateway",
     "send_log",
 ]

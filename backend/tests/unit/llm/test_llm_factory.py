@@ -9,9 +9,12 @@ import pytest
 
 from latch.core.clock import FakeClock
 from latch.llm.anthropic import AnthropicParserProvider
-from latch.llm.gateway import build_llm_gateway
+from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
+from latch.llm.gemini import GeminiEmbeddingProvider
+from latch.llm.gateway import build_llm_gateway, build_worker_gateway
 from latch.llm.records import LOGGER_NAME
 from latch.llm.stub import StubLLM
+from latch.llm.typesafe import TypeSafeJevProvider
 from latch.settings import Settings
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
@@ -23,6 +26,8 @@ LLM_ENV_VARS = (
     "LATCH_LLM_STUB_DELAY_JEV_MS",
     "LATCH_ANTHROPIC_API_KEY",
     "LATCH_ANTHROPIC_BASE_URL",
+    "LATCH_TYPESAFE_API_KEY",
+    "LATCH_TYPESAFE_BASE_URL",
 )
 
 
@@ -42,6 +47,8 @@ def test_llm_settings_defaults(monkeypatch):
     assert s.llm_mode == "stub"
     assert s.llm_anthropic_api_key == ""
     assert s.llm_anthropic_base_url == "https://api.anthropic.com"
+    assert s.llm_typesafe_api_key == ""
+    assert s.llm_typesafe_base_url == "https://api.typesafe.ai"
     assert s.llm_stub_delay_parser_ms == 0
     assert s.llm_stub_delay_embedding_ms == 0
     assert s.llm_stub_delay_jev_ms == 0
@@ -76,11 +83,12 @@ def test_llm_settings_env_reads_anthropic_base_url(monkeypatch):
     assert s.llm_anthropic_base_url == "https://proxy.example/api"
 
 
-def test_llm_settings_are_exactly_seven_fields(monkeypatch):
+def test_llm_settings_are_exactly_nine_fields(monkeypatch):
     # Review Focus #5: timeout・failフラグのenv経路を作らない(design §2.4・§2.6)。
-    # LLM系設定はこの7項目のみであることを機械検査する(base_urlはdesign §3.2の
+    # LLM系設定はこの9項目のみであることを機械検査する(base_urlはdesign §3.2の
     # supervisor承認済み拡張・ws-6のANTHROPIC_BASE_URL汚染対策。
-    # gemini_api_keyはM2 ws-2のsupervisor許可による追従 — 期待値1項目追加のみ)。
+    # gemini_api_keyはM2 ws-2のsupervisor許可による追従 — 期待値1項目追加のみ。
+    # typesafe_api_key/base_urlはM2 ws-5の機械的追随(supervisor承認事項))。
     _clean_settings(monkeypatch)
     llm_fields = {f for f in Settings.model_fields if f.startswith("llm_")}
     assert llm_fields == {
@@ -88,10 +96,30 @@ def test_llm_settings_are_exactly_seven_fields(monkeypatch):
         "llm_anthropic_api_key",
         "llm_anthropic_base_url",
         "llm_gemini_api_key",
+        "llm_typesafe_api_key",
+        "llm_typesafe_base_url",
         "llm_stub_delay_parser_ms",
         "llm_stub_delay_embedding_ms",
         "llm_stub_delay_jev_ms",
     }
+
+
+def test_llm_settings_env_reads_typesafe_key(monkeypatch):
+    # anthropic_api_keyと同一パターンの写像(M2 ws-5・AliasChoices形式)
+    for var in LLM_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("LATCH_TYPESAFE_API_KEY", "env-key")
+    s = Settings()
+    assert s.llm_typesafe_api_key == "env-key"
+
+
+def test_llm_settings_env_reads_typesafe_base_url(monkeypatch):
+    # API鍵と同一パターンの写像(M2 ws-5)
+    for var in LLM_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("LATCH_TYPESAFE_BASE_URL", "https://proxy.example/api")
+    s = Settings()
+    assert s.llm_typesafe_base_url == "https://proxy.example/api"
 
 
 async def test_factory_builds_working_stub_gateway(clock, caplog, monkeypatch):
@@ -167,6 +195,49 @@ def test_factory_real_requires_prompt_and_schema(clock, monkeypatch):
         build_llm_gateway(clock, s, parser_system_prompt="p")
     with pytest.raises(ValueError, match="parser_system_prompt"):
         build_llm_gateway(clock, s, parser_output_schema={"type": "object"})
+
+
+# -- build_worker_gateway(M2 ws-5・design §2.8) --
+
+
+def test_worker_gateway_real_builds_typesafe_and_fallback(clock, monkeypatch):
+    """real=embedding+jev+フォールバックの3系統real化(design §2.8)。"""
+    gw = build_worker_gateway(
+        clock,
+        _clean_settings(
+            monkeypatch,
+            llm_mode="real",
+            llm_gemini_api_key="gk",
+            llm_typesafe_api_key="tk",
+            llm_anthropic_api_key="ak",
+        ),
+    )
+    assert isinstance(gw._embedding, GeminiEmbeddingProvider)
+    assert isinstance(gw._jev, TypeSafeJevProvider)
+    assert gw._jev.name == "typesafe"
+    assert isinstance(gw._jev_fallback, AnthropicJevFallbackProvider)
+    assert gw._jev_fallback.name == "anthropic"
+    assert isinstance(gw._parser, StubLLM)  # parser系統はstub継続
+
+
+@pytest.mark.parametrize(
+    "missing", ["llm_gemini_api_key", "llm_typesafe_api_key", "llm_anthropic_api_key"]
+)
+def test_worker_gateway_real_fails_fast_without_key(clock, monkeypatch, missing):
+    kwargs = {
+        "llm_mode": "real",
+        "llm_gemini_api_key": "gk",
+        "llm_typesafe_api_key": "tk",
+        "llm_anthropic_api_key": "ak",
+    }
+    kwargs.pop(missing)
+    with pytest.raises(ValueError, match="api_key"):
+        build_worker_gateway(clock, _clean_settings(monkeypatch, **kwargs))
+
+
+def test_worker_gateway_stub_shares_stub_for_fallback(clock, monkeypatch):
+    gw = build_worker_gateway(clock, _clean_settings(monkeypatch))
+    assert gw._jev is gw._jev_fallback  # stub時は同一インスタンス(design §2.8)
 
 
 async def test_make_intent_parse_service_passes_prompt_and_schema(monkeypatch):

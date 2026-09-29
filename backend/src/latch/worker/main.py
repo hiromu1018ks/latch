@@ -19,7 +19,7 @@ from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.events import EventBus, IncomingEvent, make_event_bus
 from latch.intents.events import EVENT_CREATED, EVENT_UPDATED
-from latch.llm.gateway import build_embedding_gateway
+from latch.llm.gateway import build_worker_gateway
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
 from latch.worker.cost import ReevalGuard
@@ -121,7 +121,7 @@ class Worker:
                 else EmbeddingWorker(
                     engine=engine,
                     clock=self.clock,
-                    gateway=build_embedding_gateway(self.clock, self.settings),
+                    gateway=build_worker_gateway(self.clock, self.settings),
                     bus=bus,
                 )
             )

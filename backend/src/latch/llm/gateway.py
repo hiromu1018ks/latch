@@ -16,6 +16,7 @@ from typing import Any
 
 from latch.core.clock import Clock
 from latch.llm.anthropic import AnthropicParserProvider
+from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
 from latch.llm.errors import (
     JevOutputInvalidError,
     LLMConnectionError,
@@ -30,6 +31,7 @@ from latch.llm.jev import JevJudgment, validate_and_normalize
 from latch.llm.providers import EmbeddingProvider, JevProvider, ParserProvider
 from latch.llm.records import SendRecord, SendStatus, SystemName, send_log
 from latch.llm.stub import StubLLM
+from latch.llm.typesafe import TypeSafeJevProvider
 from latch.settings import Settings
 
 TIMEOUT_PARSER_S = 10.0  # 07 第1節(D-17)同期・再試行なし
@@ -272,14 +274,15 @@ def build_llm_gateway(
     raise ValueError(f"unknown llm_mode: {settings.llm_mode!r} ('stub' or 'real')")
 
 
-def build_embedding_gateway(clock: Clock, settings: Settings) -> LLMGateway:
-    """Worker・スモーク用のGateway構築(M2 ws-2・design §2.8-B)。
+def build_worker_gateway(clock: Clock, settings: Settings) -> LLMGateway:
+    """Worker・スモーク用のGateway構築(M2 ws-5・design §2.8)。
 
-    llm_mode="stub": 3系統すべてStubLLM(ci環境・unit/integration試験)。
-    llm_mode="real": Embedding系統のみGeminiEmbeddingProvider実API
-    (parser・jevはstub継続 — APIプロセスのbuild_llm_gateway契約は無変更)。
-    gemini鍵の欠落はfail-fast(静かにスタブへ落ちない)。Jev系統のreal化は
-    ws-5が同じ形で追加する。
+    llm_mode="stub": 3系統+jev_fallbackすべてStubLLM(同一インスタンス)。
+    llm_mode="real": Embedding系統=GeminiEmbeddingProvider・Jev系統=
+    TypeSafeJevProvider・フォールバック=AnthropicJevFallbackProvider
+    (llm_anthropic_api_keyはparserと共用)。parser系統はstub継続
+    (APIプロセスのbuild_llm_gateway契約は無変更)。鍵の欠落はfail-fast
+    (静かにスタブへ落ちない)。
     """
     stub = StubLLM(
         delay_parser_ms=settings.llm_stub_delay_parser_ms,
@@ -287,12 +290,28 @@ def build_embedding_gateway(clock: Clock, settings: Settings) -> LLMGateway:
         delay_jev_ms=settings.llm_stub_delay_jev_ms,
     )
     if settings.llm_mode == "stub":
-        return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub)
+        return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub, jev_fallback=stub)
     if settings.llm_mode == "real":
         if not settings.llm_gemini_api_key:
-            raise ValueError(
-                "llm_mode='real' requires llm_gemini_api_key (embedding gateway)"
-            )
+            raise ValueError("llm_mode='real' requires llm_gemini_api_key (embedding gateway)")
+        if not settings.llm_typesafe_api_key:
+            raise ValueError("llm_mode='real' requires llm_typesafe_api_key (jev gateway)")
+        if not settings.llm_anthropic_api_key:
+            raise ValueError("llm_mode='real' requires llm_anthropic_api_key (jev fallback)")
         embedding = GeminiEmbeddingProvider(api_key=settings.llm_gemini_api_key)
-        return LLMGateway(clock=clock, parser=stub, embedding=embedding, jev=stub)
+        jev = TypeSafeJevProvider(
+            api_key=settings.llm_typesafe_api_key,
+            base_url=settings.llm_typesafe_base_url,
+        )
+        jev_fallback = AnthropicJevFallbackProvider(
+            api_key=settings.llm_anthropic_api_key,
+            base_url=settings.llm_anthropic_base_url,
+        )
+        return LLMGateway(
+            clock=clock,
+            parser=stub,
+            embedding=embedding,
+            jev=jev,
+            jev_fallback=jev_fallback,
+        )
     raise ValueError(f"unknown llm_mode: {settings.llm_mode!r} ('stub' or 'real')")
