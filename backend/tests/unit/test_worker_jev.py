@@ -650,3 +650,86 @@ async def test_group_pair_uses_relaxed_h_recheck(redis, monkeypatch):
     )
     await worker.handle(_uid(1))
     assert relaxed_calls == [True]
+
+
+# -- 起点読取のグループfallback(M2 ws-7設計補完・supervisor裁定) --
+
+
+async def test_skip_participants_origin_falls_back_to_group_load(redis, monkeypatch):
+    """SKIP_PARTICIPANTSの起点(min>=3)はload_group_originへfallbackし評価が走る。"""
+    import dataclasses
+
+    org = dataclasses.replace(_origin(), participants_min=3, participants_max=4)
+    group_loads: list = []
+    _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row())
+
+    async def fake_load_origin(conn, clock, intent_id):
+        return OriginLoad(origin=None, skip_reason="origin_participants_range")
+
+    async def fake_group_load(conn, clock, intent_id):
+        group_loads.append(intent_id)
+        return OriginLoad(origin=org, skip_reason=None)
+
+    monkeypatch.setattr(jev_mod.origin_mod, "load_origin", fake_load_origin)
+    monkeypatch.setattr(jev_mod.group_engine_mod, "load_group_origin", fake_group_load)
+    _patch_eval(monkeypatch)
+    complete_calls, _ = _patch_writes(monkeypatch)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert group_loads == [_uid(1)]  # fallbackした
+    assert len(complete_calls) == 1  # no-opせずペア評価が完走
+
+
+async def test_normal_origin_skips_fallback(redis, monkeypatch):
+    """1対1人数の起点(min2max4)はload_origin1回で通る(fallback不呼出)。"""
+    org = _origin()
+    group_loads: list = []
+    _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row())
+
+    async def fake_group_load(conn, clock, intent_id):
+        group_loads.append(intent_id)
+        return OriginLoad(origin=org, skip_reason=None)
+
+    monkeypatch.setattr(jev_mod.group_engine_mod, "load_group_origin", fake_group_load)
+    _patch_eval(monkeypatch)
+    complete_calls, _ = _patch_writes(monkeypatch)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert group_loads == []  # fallbackしていない
+    assert len(complete_calls) == 1
+
+
+async def test_both_guards_skip_makes_noop(redis, monkeypatch):
+    """両ガードでskip(不在等でない人数系skip×2)→no-op(選択なし)。"""
+    selected: list = []
+    _patch_phase1(monkeypatch, rows=[])
+
+    async def fake_load_origin(conn, clock, intent_id):
+        return OriginLoad(origin=None, skip_reason="origin_participants_range")
+
+    async def fake_group_load(conn, clock, intent_id):
+        return OriginLoad(origin=None, skip_reason="origin_not_group")
+
+    monkeypatch.setattr(jev_mod.origin_mod, "load_origin", fake_load_origin)
+    monkeypatch.setattr(jev_mod.group_engine_mod, "load_group_origin", fake_group_load)
+
+    async def fake_select_rows(conn, origin_id, origin_version, day_start, month_start):
+        selected.append(origin_id)
+        return []
+
+    monkeypatch.setattr(jev_mod.layer4, "select_jev_rows", fake_select_rows)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert selected == []

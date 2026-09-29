@@ -64,6 +64,18 @@ _SELECT_JEV_ROWS = text(f"""
         OR (mc.status = 'skipped' AND mc.skip_reason = 'global_monthly'
             AND mc.updated_at < CAST(:jst_month_start AS timestamptz))
       )
+      AND (
+        {GROUP_PAIR_EXISTS}
+        OR EXISTS (
+            SELECT 1 FROM intents o, intents p
+            WHERE o.id = CAST(:origin AS uuid)
+              AND p.id = (CASE WHEN mc.intent_a_id = CAST(:origin AS uuid)
+                               THEN mc.intent_b_id
+                               ELSE mc.intent_a_id END)
+              AND o.participants_min <= 2 AND o.participants_max >= 2
+              AND p.participants_min <= 2 AND p.participants_max >= 2
+        )
+      )
     ORDER BY mc.cheap_judge_score DESC,
              CASE WHEN mc.intent_a_id = CAST(:origin AS uuid)
                   THEN mc.intent_b_id

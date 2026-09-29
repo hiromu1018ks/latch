@@ -843,3 +843,63 @@ def test_insert_group_latch_sql_pins():
     assert "RETURNING id" in sql
     assert "CAST(:ids AS uuid[])" in sql
     assert "CAST(:gid AS uuid)" in sql
+
+
+async def test_finalize_d06_order_processes_highest_first(monkeypatch):
+    """D-06順の処理(設計補完): 読取順と無関係にaggregate高位→低位の順で
+    集約tx+try_promoteを実行(try_promoteの上位チェックは作成済みlatchesを
+    見るため、高位→低位で下位が正しく抑制される)。"""
+    hi_ids = [_uid(1), _uid(2), _uid(3)]
+    lo_ids = [_uid(4), _uid(5), _uid(6)]
+    hi_rows = [
+        _pair_row(1, 2, wa=0.9, wb=0.9),
+        _pair_row(1, 3, wa=0.9, wb=0.9),
+        _pair_row(2, 3, wa=0.9, wb=0.9),
+    ]
+    lo_rows = [
+        _pair_row(4, 5, wa=0.82, wb=0.82),
+        _pair_row(4, 6, wa=0.82, wb=0.82),
+        _pair_row(5, 6, wa=0.82, wb=0.82),
+    ]
+    # DB返却順: 低(9001)→高(9000)
+    log, latch = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[
+            _pending_group(lo_ids, gid=9001),
+            _pending_group(hi_ids, gid=9000),
+        ],
+        pair_rows=[*lo_rows, *hi_rows],
+    )
+    engine = GroupEngine(engine=_FakeEngine(), clock=FakeClock(NOW), latch=latch)
+    await engine.finalize(_uid(1))
+    # 集約tx・try_promoteとも高位(gid=9000)が先
+    assert [g for g in log["mark_proposed"]] == [_uid(9000), _uid(9001)]
+    assert log["promote"] == [_uid(9500), _uid(9500)]  # insertスタブは固定id
+
+
+async def test_finalize_d06_order_robust_to_reversed_input(monkeypatch):
+    """入力順を逆(高→低)に与えても処理順は同一(高位先)。"""
+    hi_ids = [_uid(1), _uid(2), _uid(3)]
+    lo_ids = [_uid(4), _uid(5), _uid(6)]
+    hi_rows = [
+        _pair_row(1, 2, wa=0.9, wb=0.9),
+        _pair_row(1, 3, wa=0.9, wb=0.9),
+        _pair_row(2, 3, wa=0.9, wb=0.9),
+    ]
+    lo_rows = [
+        _pair_row(4, 5, wa=0.82, wb=0.82),
+        _pair_row(4, 6, wa=0.82, wb=0.82),
+        _pair_row(5, 6, wa=0.82, wb=0.82),
+    ]
+    log, _ = _patch_finalize(
+        monkeypatch,
+        org=_origin(1),
+        groups=[
+            _pending_group(hi_ids, gid=9000),
+            _pending_group(lo_ids, gid=9001),
+        ],
+        pair_rows=[*hi_rows, *lo_rows],
+    )
+    await _engine().finalize(_uid(1))
+    assert [g for g in log["mark_proposed"]] == [_uid(9000), _uid(9001)]

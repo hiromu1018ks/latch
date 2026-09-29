@@ -33,6 +33,7 @@ from latch.intents.completion import default_time_end
 from latch.llm.errors import JevOutputInvalidError, LLMError
 from latch.llm.jev import JevTextInput, build_jev_text
 from latch.worker.cost import JevCostGuard, JevCostStore
+from latch.worker.matching import group_engine as group_engine_mod
 from latch.worker.matching import layer4
 from latch.worker.matching import origin as origin_mod
 from latch.worker.matching.layer4 import JevCandidateRow, jst_day_start, jst_month_start
@@ -206,6 +207,13 @@ class JevWorker:
     ) -> tuple[OriginLoad, list[JevCandidateRow], tuple | None]:
         async with self._engine.begin() as conn:
             loaded = await origin_mod.load_origin(conn, self._clock, intent_id)
+            if loaded.skip_reason == origin_mod.SKIP_PARTICIPANTS:
+                # 人数系skipのみグループ評価目的で緩和ガード(max>=3)へ
+                # fallback(設計補完・supervisor裁定: min>=3起点でもグループ
+                # ペアの評価を開始できるようにする。それもskipならno-op)
+                loaded = await group_engine_mod.load_group_origin(
+                    conn, self._clock, intent_id
+                )
             if loaded.skip_reason is not None or loaded.origin is None:
                 return loaded, [], None
             org = loaded.origin

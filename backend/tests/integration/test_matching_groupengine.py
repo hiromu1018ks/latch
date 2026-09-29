@@ -393,6 +393,18 @@ async def _seed_jev_pair(db_engine, a: str, b: str, wa: float, wb: float) -> Non
         assert res.rowcount == 1, "jev直接投入対象行なし"
 
 
+async def _jev_eval_all(jev, first: str, others: list[str], ctx) -> None:
+    """全メンバー起点でJev評価(実運用では各メンバーのembedding_completedで走る)。
+
+    JevWorkerは起点が端点のペア行しか選ばないため、種以外のメンバー間ペア
+    (b×c等・design §2.5「評価は複数イベントにまたがって進む」)は
+    各メンバー起点の評価で揃える。再評価はjev_result IS NULLガードで冪等。
+    """
+    await jev.handle(uuid_mod.UUID(first), ctx)
+    for i in others:
+        await jev.handle(uuid_mod.UUID(i))
+
+
 # -- design §4.2 試験1〜10 --
 
 
@@ -442,9 +454,10 @@ async def test_1_three_member_group_e2e(
         row = await _pair_row(db_engine, x["id"], y["id"])
         assert row is not None and row[1] == "pending" and row[2] is None
 
-    # JevWorker(group_ctx付き) → 3ペアすべてjev_result(stub 0.9/0.85)
+    # JevWorker(group_ctx付き) → 3ペアすべてjev_result(stub 0.9/0.85)。
+    # 全メンバー起点で評価(b×cはb起点の評価で揃う)
     jev = _jev_worker(db_engine, clock, redis_client, redis_sweep, 0.9, 0.85)
-    await jev.handle(uuid_mod.UUID(a["id"]), ctx)
+    await _jev_eval_all(jev, a["id"], [b["id"], c["id"]], ctx)
     for x, y in ((a, b), (a, c), (b, c)):
         row = await _pair_row(db_engine, x["id"], y["id"])
         assert row[2] is not None, "jev_result未投入"
@@ -574,13 +587,14 @@ async def test_3_incomplete_group_continues_next_eval(
     gc = await _group_of(db_engine, ids)
     assert gc is not None and gc[1] == "candidate"
 
-    # 1イベントで6ペア揃えない(guardが4件目以降deny・K_j実効4)
+    # 1イベント(種起点のみ)で6ペア揃えない: 種起点が選べる種×メンバー3ペアの
+    # うち2件のみ評価(guardが3件目以降deny)→ 未判定4件残る
     store = JevCostStore(redis_client, key_prefix=redis_sweep)
     jev_limited = JevWorker(
         engine=db_engine,
         clock=clock,
         gateway=_stub_gateway(0.9, 0.85),
-        guard=_LimitedGuard(JevCostGuard(store=store, clock=clock), 4),
+        guard=_LimitedGuard(JevCostGuard(store=store, clock=clock), 2),
         cost_store=store,
     )
     await jev_limited.handle(uuid_mod.UUID(a), ctx)
@@ -598,16 +612,17 @@ async def test_3_incomplete_group_continues_next_eval(
                 {"a": a, "b": g1, "c": g2, "d": g3},
             )
         ).scalar_one()
-    assert n_eval == 4, "guard制限で4ペアのみ評価される想定"
+    assert n_eval == 2, "guard制限で2ペアのみ評価される想定"
     # 未判定ペアが残る集合は提案化しない(引用#4)
     await group.finalize(uuid_mod.UUID(a))
     gc2 = await _group_of(db_engine, ids)
     assert gc2 is not None and gc2[1] == "candidate"
     assert await _group_latch_of(db_engine, ids) is None
 
-    # 次評価: group_ctx=None(継続扱い)で残り2ペアが最優先 → 提案化
+    # 次評価サイクル(全メンバー起点・group_ctx=None=継続扱い): 未判定ペアが
+    # 最優先で消化され全ペア揃う → 提案化
     jev_full = _jev_worker(db_engine, clock, redis_client, redis_sweep, 0.9, 0.85)
-    await jev_full.handle(uuid_mod.UUID(a))
+    await _jev_eval_all(jev_full, a, [g1, g2, g3], None)
     await group.finalize(uuid_mod.UUID(a))
     gc3 = await _group_of(db_engine, ids)
     assert gc3 is not None and gc3[1] == "proposed"
@@ -665,7 +680,10 @@ async def test_4_kj_mixed_allocation(
     assert ctx is not None
     jev = _jev_worker(db_engine, clock, redis_client, redis_sweep, 0.9, 0.85)
     await jev.handle(uuid_mod.UUID(a["id"]), ctx)
-    # jev_resultの入った行を集合所属で分類 → 1対1 4件 + グループ 4件
+    # jev_resultの入った行を集合所属で分類。種起点1イベントの選択対象は
+    # 1対1(a×P1..6)とグループ(a×G1..3・種×メンバー。メンバー相互のg1×g2等は
+    # 各メンバー起点の評価で揃る)。配分: 1対1上位4→残り枠へグループ3件→
+    # 繰上げで1対1+1 = 1対1 5件+グループ 3件の計8(K_j)
     async with db_engine.connect() as conn:
         rows = (
             await conn.execute(
@@ -683,8 +701,8 @@ async def test_4_kj_mixed_allocation(
         ).all()
     kinds = [bool(r[0]) for r in rows]
     assert len(rows) == 8  # K_j=8
-    assert sum(1 for k in kinds if not k) == 4  # 1対1上位4件
-    assert sum(1 for k in kinds if k) == 4  # 残り枠4件がグループ
+    assert sum(1 for k in kinds if not k) == 5  # 1対1上位4+繰上げ1
+    assert sum(1 for k in kinds if k) == 3  # 残り枠へグループ(a×G1..3)
 
 
 async def test_5_participants_bounds(api_client, db_engine, field):
@@ -835,7 +853,7 @@ async def test_7_visibility_branch(
     ctx = await group.handle(uuid_mod.UUID(a))
     assert ctx is not None
     jev = _jev_worker(db_engine, clock, redis_client, redis_sweep, 0.9, 0.9)
-    await jev.handle(uuid_mod.UUID(a), ctx)
+    await _jev_eval_all(jev, a, [b, c], ctx)
     await group.finalize(uuid_mod.UUID(a))
     latch = await _group_latch_of(db_engine, ids)
     assert latch is not None and latch[1] == "proposed"
@@ -915,10 +933,11 @@ async def test_9_idempotent_double_handle(
     ctx1 = await group.handle(uuid_mod.UUID(a))
     assert ctx1 is not None
     jev = _jev_worker(db_engine, clock, redis_client, redis_sweep, 0.9, 0.85)
-    await jev.handle(uuid_mod.UUID(a), ctx1)
+    await _jev_eval_all(jev, a, [b, c], ctx1)
     await group.finalize(uuid_mod.UUID(a))
-    # 2回目: handle×2・finalize×2(at-least-once再実行)
+    # 2回目: handle×2・finalize×2・全起点再評価(at-least-once再実行)
     await group.handle(uuid_mod.UUID(a))
+    await _jev_eval_all(jev, a, [b, c], None)
     await group.finalize(uuid_mod.UUID(a))
 
     arr = ", ".join(f"CAST('{i}' AS uuid)" for i in sorted(ids, key=str))
@@ -1012,7 +1031,8 @@ async def test_10_one_on_one_and_group_parallel(
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(s))
     ctx_s = await group.handle(uuid_mod.UUID(s))
     assert ctx_s is not None
-    await jev.handle(uuid_mod.UUID(s), ctx_s)
+    # グループ側は s(種)と c の2起点評価で全3ペア(s×c・s×d・c×d)が揃う
+    await _jev_eval_all(jev, s, [c], ctx_s)
     await group.finalize(uuid_mod.UUID(s))
 
     # 1対1提案(2要素)とグループ提案(3要素)が両方存在
@@ -1034,3 +1054,48 @@ async def test_10_one_on_one_and_group_parallel(
     for x, y in ((s, c), (s, d), (c, d)):
         row = await _pair_row(db_engine, x, y)
         assert row is not None and row[3] is None, "グループペアのlatch_score NULL"
+
+
+async def test_11_pure_min3_group_e2e(
+    api_client, db_engine, field, redis_client, redis_sweep
+):
+    """純min=3集合のE2E下地(設計補完・supervisor裁定): 3名ともmin=3/max=4で
+    集合生成→JevWorkerのfallback起点読取→全ペア評価→集約→latches生成まで。
+    min>=3起点はload_originのSKIP_PARTICIPANTSからload_group_originへfallback
+    して評価を開始する(Important-1の実DB証明・07 §2「3人以上なら」)。"""
+    clock = _clock()
+    start = _future(BASE_HOURS)
+    expires = _future(FAR_EXPIRES_H)
+    ids: list[str] = []
+    for _ in range(3):
+        h, _ = await _user(api_client, field)
+        ids.append(
+            (
+                await _intent(
+                    api_client,
+                    db_engine,
+                    h,
+                    _structured(start=start, expires=expires, participants=(3, 4)),
+                )
+            )["id"]
+        )
+    a, b, c = ids
+    group = _group_engine(db_engine, clock)
+    ctx = await group.handle(uuid_mod.UUID(a))
+    assert ctx is not None  # 種a(max=4>=3)で集合{a,b,c}が生成される
+    gc = await _group_of(db_engine, ids)
+    assert gc is not None and gc[1] == "candidate"
+    # JevWorker: a/b/c起点ともload_originはSKIP_PARTICIPANTS(min=3)→
+    # load_group_originへfallbackして評価が走る
+    jev = _jev_worker(db_engine, clock, redis_client, redis_sweep, 0.9, 0.85)
+    await _jev_eval_all(jev, a, [b, c], ctx)
+    for x, y in ((a, b), (a, c), (b, c)):
+        row = await _pair_row(db_engine, x, y)
+        assert row is not None and row[2] is not None, "fallback起点で全ペア評価"
+    # 集約 → latches生成(candidate→proposed)
+    await group.finalize(uuid_mod.UUID(a))
+    gc2 = await _group_of(db_engine, ids)
+    assert gc2 is not None and gc2[1] == "proposed"
+    latch = await _group_latch_of(db_engine, ids)
+    assert latch is not None and latch[1] == "proposed"
+    assert float(latch[2]) == 0.85  # min(0.9,0.85)×C

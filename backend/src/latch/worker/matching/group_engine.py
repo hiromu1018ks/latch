@@ -18,7 +18,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -595,6 +595,22 @@ class GroupContext:
     new_pair_row_ids: frozenset[uuid.UUID]  # 今回UPSERTしたメンバー間ペアの行id
 
 
+@dataclass(frozen=True)
+class _ReadyGroup:
+    """finalize読取フェーズの確定1集合(集約txの入力・D-06順ソート用)。"""
+
+    gid: uuid.UUID
+    ids: list[uuid.UUID]
+    ms: dict
+    inputs: list[LatchIntentInputs]
+    score: float
+    target: datetime
+    min_expires: datetime
+    area: str | None
+    has_no: bool
+    latest_defer_at: datetime | None
+
+
 class GroupEngine:
     """グループマッチ本体(06 §7〜§8・design §2.2〜2.8)。冪等(0005部分UNIQUE・
     UPSERT・aggregate_score IS NULLガード)。モジュール属性経由で
@@ -730,7 +746,11 @@ class GroupEngine:
 
         各評価処理の末尾で「全ペアのjev_resultが揃った集合」を確定させる。
         未判定ペア残り・H再検証不成立・読取欠損は当該集合のみスキップ
-        (status=candidate保持・構造化ログ)。
+        (status=candidate保持・構造化ログ)。確定対象はD-06順
+        (aggregate降順→サイズ昇順→intent_ids辞書順)にソートしてから
+        集約tx+try_promoteを実行する(設計補完・supervisor裁定: try_promoteの
+        上位チェックは作成済みlatchesを見るため、高位→低位の処理順で
+        下位が正しく抑制される)。
         """
         async with self._engine.begin() as conn:
             loaded = await load_group_origin(conn, self._clock, intent_id)
@@ -744,6 +764,9 @@ class GroupEngine:
         org = loaded.origin
         async with self._engine.begin() as conn:
             groups = await _select_pending_groups(conn, org.intent_id)
+        # 読取フェーズ: 検査(世代リセット・全ペア揃い・H再検証)と材料読取・
+        # score計算をすべて済ませ、確定対象を集める(書込はリセット/closeのみ)
+        ready: list[_ReadyGroup] = []
         for gid, ids, ms, _aggregate_score in groups:
             async with self._engine.begin() as conn:
                 version_rows = await _select_group_versions(conn, ids)
@@ -825,63 +848,80 @@ class GroupEngine:
             async with self._engine.begin() as conn:
                 responses = await _select_group_latch_responses(conn, ids)
             has_no, latest_defer_at = latch_calc.d07_history_inputs(responses)
+            ready.append(
+                _ReadyGroup(
+                    gid=gid,
+                    ids=ids,
+                    ms=ms,
+                    inputs=inputs,
+                    score=score,
+                    target=target,
+                    min_expires=min_expires,
+                    area=area,
+                    has_no=has_no,
+                    latest_defer_at=latest_defer_at,
+                )
+            )
+        # D-06順(aggregate降順→集合サイズ昇順→intent_ids辞書順)で集約txを実行
+        ready.sort(key=lambda r: (-r.score, len(r.ids), r.ids))
+        for r in ready:
             # 手順g: 集約tx(1集合1tx・I-1対策の本体)
             now = self._clock.now()
             latch_id: uuid.UUID | None = None
             async with self._engine.begin() as conn:
-                row = await _update_aggregate(conn, gid, score, now)
+                row = await _update_aggregate(conn, r.gid, r.score, now)
                 if row is None:
                     continue  # 冪等スキップ(他の実行が計算済み)
                 prev = row[1]
-                if score < latch_calc.LATCH_THRESHOLD:
+                if r.score < latch_calc.LATCH_THRESHOLD:
                     continue  # candidateのまま(aggregate_scoreは入る)
-                deadline0 = latch_calc.response_deadline(now, target, min_expires)
+                deadline0 = latch_calc.response_deadline(now, r.target, r.min_expires)
                 if not latch_calc.d07_allows(
-                    has_no_response=has_no,
-                    latest_defer_at=latest_defer_at,
+                    has_no_response=r.has_no,
+                    latest_defer_at=r.latest_defer_at,
                     now=now,
-                    target_time=target,
-                    new_score=score,
+                    target_time=r.target,
+                    new_score=r.score,
                     prev_latch_score=prev,
                 ):
-                    logger.info("group d07 denied gid=%s", gid)
+                    logger.info("group d07 denied gid=%s", r.gid)
                     continue
-                seed_uuid = uuid.UUID(ms.get("seed_id", str(ids[0])))
-                ordered = [m for m in inputs if m.intent_id == seed_uuid] + [
-                    m for m in inputs if m.intent_id != seed_uuid
+                seed_uuid = uuid.UUID(r.ms.get("seed_id", str(r.ids[0])))
+                ordered = [m for m in r.inputs if m.intent_id == seed_uuid] + [
+                    m for m in r.inputs if m.intent_id != seed_uuid
                 ]
                 proposal = proposal_mod.build_group_proposal(
-                    members=ordered, score=score, area_name=area
+                    members=ordered, score=r.score, area_name=r.area
                 )
                 latch_id = await _insert_group_latch(
                     conn,
-                    ids=ids,
-                    gid=gid,
+                    ids=r.ids,
+                    gid=r.gid,
                     proposal=proposal,
-                    score=score,
+                    score=r.score,
                     deadline=deadline0,
-                    expires=min_expires,
+                    expires=r.min_expires,
                     now=now,
                 )
                 if latch_id is None:  # ON CONFLICT(開いている行あり)
-                    found = await _find_open_group_latch(conn, ids)
+                    found = await _find_open_group_latch(conn, r.ids)
                     if found is None or found[1] != "candidate":
-                        logger.info("group open latch exists gid=%s", gid)
+                        logger.info("group open latch exists gid=%s", r.gid)
                         continue
                     if not latch_calc.d07_allows(
-                        has_no_response=has_no,
-                        latest_defer_at=latest_defer_at,
+                        has_no_response=r.has_no,
+                        latest_defer_at=r.latest_defer_at,
                         now=now,
-                        target_time=target,
-                        new_score=score,
+                        target_time=r.target,
+                        new_score=r.score,
                         prev_latch_score=prev,
                     ):
-                        logger.info("group d07 denied on promotion gid=%s", gid)
+                        logger.info("group d07 denied on promotion gid=%s", r.gid)
                         continue
                     if not await _update_group_latch_for_promotion(
                         conn,
                         found[0],
-                        score=score,
+                        score=r.score,
                         proposal=proposal,
                         deadline=deadline0,
                     ):
@@ -891,7 +931,7 @@ class GroupEngine:
                     await _insert_latch_event(
                         conn, latch_id, None, "candidate", None, now
                     )
-                await _mark_group_proposed(conn, gid, now)
+                await _mark_group_proposed(conn, r.gid, now)
             # 手順h: tx後のtry_promote(D-06上位チェックはtry_promote内側)
             if latch_id is not None and self._latch is not None:
                 await self._latch.try_promote(latch_id)

@@ -218,3 +218,19 @@ def test_select_jev_rows_builds_pair_kind():
     # unitではSQL文字列ピンのみ。ペア種別変換はgroup_engine試験と
     # integrationで実証する。ここでは定数の存在のみ:
     assert layer4.PAIR_KIND_GROUP == "group"
+
+
+def test_select_sql_keeps_one_on_one_or_group_only():
+    """未所属ペアは両端とも1対1人数(2∈[min,max])のときのみ選択(設計補完)。
+
+    min>=3のPool候補で集合に入らなかった行(strict H再検証が必ず失敗し
+    pending永続する)が1対1上位4枠を消費しないよう、選択段階で除外する。
+    """
+    sql = str(layer4._SELECT_JEV_ROWS)
+    # is_group OR (起点側・相手側とも1対1人数)
+    assert "o.participants_min <= 2 AND o.participants_max >= 2" in sql
+    assert "p.participants_min <= 2 AND p.participants_max >= 2" in sql
+    # 相手側idの取得はORDER BYと同一のCASE式
+    assert (
+        sql.count("CASE WHEN mc.intent_a_id = CAST(:origin AS uuid)") >= 3
+    )  # 選択version・ORDER BY・相手id
