@@ -68,8 +68,11 @@ async def test_judge_timeout_records_then_raises(clock, caplog):
             )
     # jev_fallback未注入=第一候補と同一スタブ → timeoutは双障害(送信記録2件)
     p1, p2 = _send_payloads(caplog)
-    assert p1["status"] == "timeout" and p2["status"] == "timeout"
-    assert p1["error_code"] == "LLMTimeoutError" and p2["error_code"] == "LLMTimeoutError"
+    assert [p["status"] for p in (p1, p2)] == ["timeout", "timeout"]
+    assert [p["error_code"] for p in (p1, p2)] == [
+        "LLMTimeoutError",
+        "LLMTimeoutError",
+    ]
 
 
 async def test_judge_provider_error_records_then_raises(clock, caplog):

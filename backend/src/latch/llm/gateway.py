@@ -124,7 +124,12 @@ class LLMGateway:
                 model=_envelope_model(envelope),
                 result=result,
             )
-        except (LLMTimeoutError, LLMRateLimitError, LLMOverloadedError, LLMConnectionError):
+        except (
+            LLMTimeoutError,
+            LLMRateLimitError,
+            LLMOverloadedError,
+            LLMConnectionError,
+        ):
             pass  # 07 §4の切替条件4種。LLMProviderError・JevOutputInvalidErrorは伝播
         envelope = await self._jev_call(intent_a, intent_b, intent_ids, fallback=True)
         try:
