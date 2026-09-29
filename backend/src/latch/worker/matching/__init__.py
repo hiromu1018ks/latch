@@ -1,7 +1,7 @@
-"""第2段マッチング前半: Layer 1 Hard Filter + Layer 2 Candidate Retrieval(M2 ws-3)。
+"""第2段マッチング前半: Layer 1〜3(M2 ws-3 + ws-4)。
 
 公開APIは AsyncConnection を第一引数に取る純関数群(design §2.4)。
-stage1(embedding_completed種別)への実配線は後続単位。K_v・500円は
+Layer 3 まで実配線済み(stage1 matching_hook・M2 ws-4)。K_v・K_c・500円は
 module定数(design §2.8-3 — settings化しない)。
 """
 
@@ -21,6 +21,15 @@ from latch.worker.matching.layer2 import (
     RetrievedCandidate,
     retrieve_topk,
 )
+from latch.worker.matching.layer3 import (
+    K_CHEAP,
+    ScoredCandidate,
+    cheap_score,
+    rule_score,
+    select_top_kc,
+    soft_texts,
+    vocab_overlap,
+)
 from latch.worker.matching.origin import (
     Origin,
     OriginLoad,
@@ -31,6 +40,7 @@ from latch.worker.matching.runner import RetrievalOutcome, run_candidate_retriev
 
 __all__ = [
     "PAIR_BUDGET_MIN_YEN",
+    "K_CHEAP",
     "K_VECTORS",
     "LAYER1_WHERE",
     "CandidatePair",
@@ -39,11 +49,17 @@ __all__ = [
     "OriginLoad",
     "RetrievedCandidate",
     "RetrievalOutcome",
+    "ScoredCandidate",
     "bind_params",
+    "cheap_score",
     "hard_filter_candidates",
     "load_origin",
     "normalize_pair",
     "retrieve_topk",
+    "rule_score",
     "run_candidate_retrieval",
+    "select_top_kc",
+    "soft_texts",
     "upsert_candidate",
+    "vocab_overlap",
 ]
