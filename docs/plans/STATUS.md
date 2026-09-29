@@ -220,6 +220,7 @@
   - 修正後: **マージ後main test-ci 1030 passed**(926+unit94+integration10)・lint緑・alembic 0004・残存ゼロ(users・latches・notifications・Redis)
 - 学習資産追従: ws-6分 ccd2029(第14章「評価を提案に変える関所: Layer 5 LATCH Engineと提案を守る枠」新設+既存6ファイル更新。usage limitで1度中断→再開指示で完了)
 - ws-7 / 設計 69b6ed7(supervisor承認: design §5の4件=①Pool人数緩和解釈〔06 §2の人数行が「人数(1対1)」と明記され06 §7 Poolの「Layer 3通過」との整合読み。1対1検索は文字列不変〕②種=起点・起点max>=3トリガー ③マイグレーション0005(group_candidates部分UNIQUE・05 §2追記は次回docs改版) ④ws-6引継ぎI-1の1対1側改修を本単位で実施〔tx統合・観測不変〕。解釈記録9件はG2時確認事項③へ追記)/ 2026-09-29
+- ws-7 / 計画 bfc3580(2,690行・Task 1〜10・SQL/コード全文記載。計画書レビュー機械チェック合格: basename一意〔新規3ファイル既存96と衝突なし〕・ピン試験追随访問済み〔LAYER1_WHEREバイト同一・test_layer_sql/layer4/worker_jev/latch_engineの追従を§4に明記〕・完了条件7項目コマンド付き。agent2が計画中に発見のorigin.load_origin人数ガード問題はGroupEngine専用起点読取load_group_origin〔max>=3ガード・origin.py無変更〕として§9-4で確定 — 承認事項①②から必然の実装詳細とsupervisor突合で確認)/ 2026-09-29実装着手
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
