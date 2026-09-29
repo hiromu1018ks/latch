@@ -67,7 +67,7 @@ def _provider(
 async def test_create_args_pin():
     """messages.createの引数ピン(model・system・messages・output_config・thinking・max_tokens)。"""
     provider, client = _provider()
-    out = await provider.judge(
+    await provider.judge(
         "Intent A:\n[hard] category: drinking", "Intent B:\n[hard] category: meal"
     )
     (call,) = client.messages.calls
@@ -77,7 +77,8 @@ async def test_create_args_pin():
         {
             "role": "user",
             "content": (
-                "Intent A:\n[hard] category: drinking\n\nIntent B:\n[hard] category: meal"
+                "Intent A:\n[hard] category: drinking"
+                "\n\nIntent B:\n[hard] category: meal"
             ),
         }
     ]
@@ -177,12 +178,13 @@ def test_prompt_full_pin():
         "- mood_fit: 雰囲気・軽さの適合度(0〜4の数値)\n"
         "- timing_fit: 時間帯・所要時間の適合度(0〜4の数値)\n"
         "- social_fit: 人数・社会的文脈の適合度(0〜4の数値)\n"
-        "- latent_yes: どちらかが明示していないが、そのIntentの記述の範囲内でYESになり得る"
-        "可能性(0〜1の数値)\n"
+        "- latent_yes: どちらかが明示していないが、そのIntentの記述の範囲内で"
+        "YESになり得る可能性(0〜1の数値)\n"
         "\n"
         "判定規則:\n"
-        "- would_*は相手側の条件も考慮し、相手の[hard]条件を満たさない場合、または相手の"
-        "[soft]条件・(システムで判定不能)と付いた条件に触れる場合はyesから遠ざけます\n"
+        "- would_*は相手側の条件も考慮し、相手の[hard]条件を満たさない場合、"
+        "または相手の[soft]条件・(システムで判定不能)と付いた条件に触れる場合は"
+        "yesから遠ざけます\n"
         "- [hard]条件との意味的矛盾(予算感の著しい乖離が食事内容を成立させない等)は"
         "yesから遠ざけます\n"
         "- 根拠の説明は出力しません(値のみ)\n"
