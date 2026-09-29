@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: ws-4(Layer 3 Cheap Judge+コスト保護)
+- 次の着手: ws-5(Layer 4 Jev)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -32,7 +32,7 @@
 | ws-1 | イベント駆動基盤: Match Event 5種の発行網羅(intents CRUD組み込み・resumeはversion+1のupdate種発行)・Pub/Sub連携(ci環境の具象は設計で確定)・Matching Worker第1段(draft対象外・作成即時/更新のみdebounce 10秒トレーリング窓・idempotency key(event_type, source_intent_id, version)・version検査・5回再試行→quarantined・削除Eventの候補無効化・参照先不在=processed破棄とpayload不正=隔離の区別) | M2-1 / 06 §9・01 §16・10 §4.7 | M1 ws-3(intents)・M0(worker・Redis) | 完了 |
 | ws-2 | Embedding Worker: 正規化テキスト生成(raw_text不使用)・LLM Gateway Embedding系統real化(gemini-embedding-001・timeout 2秒・再試行なし)・intents.embedding/embedding_model書き込み・embedding_completed発行・バックフィル・embedding既存はスキップして第2段相当へ直接投入 | M2-2 / 07 §3・06 §9・D-15 | ws-1 | 完了 |
 | ws-3 | Layer 1 Hard Filter+Layer 2 Candidate Retrieval: SQL+PostGIS判定(自己除外・時間交差+flexibility・ST_DWithin(r_a+r_b)・ペア予算min 500円未満fail・人数2∈双方・ブロック・category_primary完全一致・飲酒ペアは双方20歳以上)・正規化テキストHNSW cosine上位K_v=50(同点intent_id昇順)・embedding IS NULL/draft対象外。02#9 Hard Filter単体試験 | M2-3, M2-4 / 06 §2〜§3・05 §3 | ws-2(fixture直入れで並行可) | 完了 |
-| ws-4 | Layer 3 Cheap Judge+コスト保護: cheap_score=0.5×類似度+0.3×ルール+0.2×語彙重なり(D-04降格NGは計算対象外)上位K_c=20・Jev予算(1Intent 40回/日・1ユーザー120回/日・Redis JST日付キー)・再評価頻度30分(reeval:{intent_id} TTL)・D-16カウンタ(日次30,000・月次600,000・80% alertに第一候補/フォールバック内訳) | M2-5, M2-9 / 06 §4〜§5・04 §5 | ws-3 | 未着手 |
+| ws-4 | Layer 3 Cheap Judge+コスト保護: cheap_score=0.5×類似度+0.3×ルール+0.2×語彙重なり(D-04降格NGは計算対象外)上位K_c=20・Jev予算(1Intent 40回/日・1ユーザー120回/日・Redis JST日付キー)・再評価頻度30分(reeval:{intent_id} TTL)・D-16カウンタ(日次30,000・月次600,000・80% alertに第一候補/フォールバック内訳) | M2-5, M2-9 / 06 §4〜§5・04 §5 | ws-3 | 完了 |
 | ws-5 | Layer 4 Jev: LLM GatewayへSystem One IF追加(state+型つき質問→answers)・TypeSafe Jev(jev-1.13.0)・429/529/timeoutでフォールバックLLM(Sonnet 5)へ切替(SDK backoff無効化・再試行なし)・jev_resultへprovider/model記録・K_j=8配分(1対1最低4回保証・未判定ペア継続優先)・同一評価世代スキップ(同バージョン組はH再検証のみ) | M2-6 / 06 §5・07 v0.5 §1・§4・04 §4 D-16 | ws-4・T1(確定済み) | 未着手 |
 | ws-6 | Layer 5 LATCH Engine: L=H×MutualScore×C(mutual=min)・閾値0.80・D-08上限(日6件/ユーザー・同時3件/Intent)超過はlatches candidate保留・提示順(対象時刻昇順・Score降順)・提示時D-05式再計算・proposal生成(visibility分岐: summary_only全フィールド/hidden_until_matchはheadcount+match_level)・nearby_also存在通知・muted通知抑制・D-07再提案制御(defer抑制min(24時間,残時間/2)・\|Δscore\|≧0.05・世代変化は無条件)・latch_status_events記録・再評価経路(30分Bucket・catch-upスキャン2時間/30分) | M2-7 / 06 §6・§9〜§10・03 D-05/D-07/D-08 | ws-5 | 未着手 |
 | ws-7 | グループマッチ: 候補Pool(同一Bucket・地域・カテゴリ・Layer 3通過・上限15・cheap_score降順)・貪欲法(種max>=3+Hard互換追加・3〜4人・作成user_id相異)・group_candidates記録+全ペアmatch_candidates生成・集約=H×min(ペアMutualScore)×C・通知はaggregate降順1集合のみ・未判定ペアはstatus=candidate保持し次評価のJev予算最優先 | M2-8 / 06 §5・§7〜§8・D-06・D-24 | ws-6 | 未着手 |
@@ -200,6 +200,11 @@
     (2) 19歳fixtureがサーバ側alcohol確定(M1・07 §2)で422になる試験設計ミス2件 → supervisor直接修正 d3b0e07(meal作成→DB強制の手法へ)
   - 修正後: **マージ後main test-ci 769 passed**・worker復帰確認
 - 学習資産追従: ws-2・ws-3分 5fc092b(第10章「Intentを意味の数値へ変える: Embedding」・第11章「マッチング前半: SQLで確実に落とし、意味で上位を取る」新設+既存11ファイル更新。実APIスモークの出力を実測掲載。pgvector直接観察Labは次回候補)
+- ws-4 / マージ 90a83d4+296e9fe(設計 5c26e64・計画 45e2c85・実装は813f479まで・12コミット)/ docs/plans/M2/ws-4-report.md / 2026-09-29
+  - supervisor承認(design §5の3件): alert媒体=構造化ログで開始(M0 ws-2同型)・リセットジョブ本体はM3-4(カウンタのJSTリセット正確性は日付キー切替で常時担保・roadmap C12と一致)・既存試験期待値の機械的追随
+  - スーパーバイザー独立検証(test-ci初回)で新規integration 4件失敗を検出 → **試験設計の潜伏欠陥5系統**を特定しagent3へ修正委任: (1)テスト専用カテゴリws4cheapはサーバLiteral[meal,drinking,activity]で422 (2)Layer 1時間交差は狭義比較でΔ180分+end無しは境界落ち (3)ペア予算LEAST≥500でbudget=0候補は落ち (4)期待値計算誤り2件(0.7→0.85・0.8→0.85) (5)同点順序検証の前提が誤り。**修正方針もsupervisor裁定: 残存データ隔離は専用カテゴリ→時間窓分離(全Fixtureをnow+5日へ統一)**。agent3はintegration実行禁止のため検出不能だった系統(ws-3の19歳fixtureと同型・実行されたことのない試験コードの宿命)
+  - 修正後: worktreeで5件PASS → マージ後main **test-ci 818 passed**(769+unit44+integration5)・残存確認(Redis ws4-*・users m2ws4-%・intents ws4cheapとも0件=teardown対抗策の実効性を実証)
+  - 運用メモ: mainのtest_matching_hardfilter.pyがws-3マージ由来のruff format落ち(意味変化なし。agent3が独立choreコミット0479b77で解消。**test-ciにlintが含まれないためws-3検証時は未検出** — マージ後のlint再実行を検証手順に足す価値あり)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
