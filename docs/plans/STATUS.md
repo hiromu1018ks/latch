@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: ws-7(グループマッチ)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5)**
+- 次の着手: ws-8(縮退運転+G2ハーネス)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5)**
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -35,7 +35,7 @@
 | ws-4 | Layer 3 Cheap Judge+コスト保護: cheap_score=0.5×類似度+0.3×ルール+0.2×語彙重なり(D-04降格NGは計算対象外)上位K_c=20・Jev予算(1Intent 40回/日・1ユーザー120回/日・Redis JST日付キー)・再評価頻度30分(reeval:{intent_id} TTL)・D-16カウンタ(日次30,000・月次600,000・80% alertに第一候補/フォールバック内訳) | M2-5, M2-9 / 06 §4〜§5・04 §5 | ws-3 | 完了 |
 | ws-5 | Layer 4 Jev: LLM GatewayへSystem One IF追加(state+型つき質問→answers)・TypeSafe Jev(jev-1.13.0)・429/529/timeoutでフォールバックLLM(Sonnet 5)へ切替(SDK backoff無効化・再試行なし)・jev_resultへprovider/model記録・K_j=8配分(1対1最低4回保証・未判定ペア継続優先)・同一評価世代スキップ(同バージョン組はH再検証のみ) | M2-6 / 06 §5・07 v0.5 §1・§4・04 §4 D-16 | ws-4・T1(確定済み) | 完了 |
 | ws-6 | Layer 5 LATCH Engine: L=H×MutualScore×C(mutual=min)・閾値0.80・D-08上限(日6件/ユーザー・同時3件/Intent)超過はlatches candidate保留・提示順(対象時刻昇順・Score降順)・提示時D-05式再計算・proposal生成(visibility分岐: summary_only全フィールド/hidden_until_matchはheadcount+match_level)・nearby_also存在通知・muted通知抑制・D-07再提案制御(defer抑制min(24時間,残時間/2)・\|Δscore\|≧0.05・世代変化は無条件)・latch_status_events記録・再評価経路(30分Bucket・catch-upスキャン2時間/30分) | M2-7 / 06 §6・§9〜§10・03 D-05/D-07/D-08 | ws-5 | 完了 |
-| ws-7 | グループマッチ: 候補Pool(同一Bucket・地域・カテゴリ・Layer 3通過・上限15・cheap_score降順)・貪欲法(種max>=3+Hard互換追加・3〜4人・作成user_id相異)・group_candidates記録+全ペアmatch_candidates生成・集約=H×min(ペアMutualScore)×C・通知はaggregate降順1集合のみ・未判定ペアはstatus=candidate保持し次評価のJev予算最優先 | M2-8 / 06 §5・§7〜§8・D-06・D-24 | ws-6 | 未着手 |
+| ws-7 | グループマッチ: 候補Pool(同一Bucket・地域・カテゴリ・Layer 3通過・上限15・cheap_score降順)・貪欲法(種max>=3+Hard互換追加・3〜4人・作成user_id相異)・group_candidates記録+全ペアmatch_candidates生成・集約=H×min(ペアMutualScore)×C・通知はaggregate降順1集合のみ・未判定ペアはstatus=candidate保持し次評価のJev予算最優先 | M2-8 / 06 §5・§7〜§8・D-06・D-24 | ws-6 | 完了 |
 | ws-8 | 縮退運転+G2ハーネス: circuit breaker(窓1分・第一候補エラー率50%超 or p95>6秒で開放・開放中フォールバックLLM継続・60秒後半開・1リクエスト試験)・フォールバックも失敗でskipped保留・02#5〜#12 E2E・K上限裏付け試験・冪等性(同一Event2回投入)・障害注入 | M2-10 / 06 D-15・10 §4.5〜§4.7 | ws-1〜ws-7 | 未着手 |
 
 実行wave: ws-1 → (ws-2 ∥ ws-3) → ws-4 → ws-5 → ws-6 → ws-7 → ws-8
@@ -221,6 +221,12 @@
 - 学習資産追従: ws-6分 ccd2029(第14章「評価を提案に変える関所: Layer 5 LATCH Engineと提案を守る枠」新設+既存6ファイル更新。usage limitで1度中断→再開指示で完了)
 - ws-7 / 設計 69b6ed7(supervisor承認: design §5の4件=①Pool人数緩和解釈〔06 §2の人数行が「人数(1対1)」と明記され06 §7 Poolの「Layer 3通過」との整合読み。1対1検索は文字列不変〕②種=起点・起点max>=3トリガー ③マイグレーション0005(group_candidates部分UNIQUE・05 §2追記は次回docs改版) ④ws-6引継ぎI-1の1対1側改修を本単位で実施〔tx統合・観測不変〕。解釈記録9件はG2時確認事項③へ追記)/ 2026-09-29
 - ws-7 / 計画 bfc3580(2,690行・Task 1〜10・SQL/コード全文記載。計画書レビュー機械チェック合格: basename一意〔新規3ファイル既存96と衝突なし〕・ピン試験追随访問済み〔LAYER1_WHEREバイト同一・test_layer_sql/layer4/worker_jev/latch_engineの追従を§4に明記〕・完了条件7項目コマンド付き。agent2が計画中に発見のorigin.load_origin人数ガード問題はGroupEngine専用起点読取load_group_origin〔max>=3ガード・origin.py無変更〕として§9-4で確定 — 承認事項①②から必然の実装詳細とsupervisor突合で確認)/ 2026-09-29実装着手
+- ws-7 / マージ 1563752(設計 69b6ed7・計画 bfc3580・実装は8bfd329まで・14コミット)/ docs/plans/M2/ws-7-report.md / 2026-09-29
+  - agent3実装(1h09m・11コミット)の最終外部レビューでImportant3件を申告受け**supervisor裁定で全件修正実施**(d87dec7): ①JevWorker起点読取の人数ガードfallback(純min>=3集合が永久に評価されない欠陥) ②finalizeのD-06順ソート(同一実行内順序依存で重複proposed化) ③select_jev_rowsの両端人数条件(1対1最低4枠の浪費)。integration試験11(純min=3集合E2E)を追加
+  - スーパーバイザー独立検証(test-ci初回)で20件失敗を検出 → **直接修正 ff771ed**: 実装欠陥1件=uuid[]バインドの文字列リテラルがasyncpgで不通(計画§9-14の規律がws-6実態=要素毎スカラーbindと異なる読み。unitのスタブ/compile検査では検出不能)+試験設計7系統(visibility既定・4人集合強制×2・D-06の2集合決定化・DELETE認証・llm_failure型限定評価・(3,4)で1対1干渉阻止・latches照会sorted化・headピン0005)
+  - 修正後: **マージ後main test-ci 1125 passed**(1030+unit84+integration11・api再ビルド後)・lint緑・alembic 0005・残存ゼロ・geo復旧済み(609行)
+  - 運用メモ(観察): ci常設workerがテストのAPI発行Intentを非同期処理し、teardown後にgroup_candidates/latchesの孤立行を作ることがある(uuidは毎回新規なので試験結果には無影響・掃除で対処。ws-8のE2E整備で対抗策を検討)
+  - 引継ぎ(Minor・ws-8/M3): _SELECT_GROUP_PAIRSのORDER BYなし・世代リセット後のメンバー間ペア再生成は相手起点経路のみ・aggregate計算済み集合の早期continue・ON CONFLICT昇格でlatches.group_candidate_idが旧gidのまま残りうる(M3-1設計確認候補)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
