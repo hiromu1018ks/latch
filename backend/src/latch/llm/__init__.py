@@ -22,6 +22,7 @@ from latch.llm.gateway import (
     build_llm_gateway,
 )
 from latch.llm.gemini import GeminiEmbeddingProvider
+from latch.llm.jev import JevJudgment
 from latch.llm.providers import (
     EMBEDDING_DIMENSIONS,
     EmbeddingProvider,
@@ -35,6 +36,7 @@ __all__ = [
     "EMBEDDING_DIMENSIONS",
     "EmbeddingProvider",
     "GeminiEmbeddingProvider",
+    "JevJudgment",
     "JevOutputInvalidError",
     "JevProvider",
     "LLMConnectionError",
