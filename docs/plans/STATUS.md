@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: ws-7(グループマッチ)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8)**
+- 次の着手: ws-7(グループマッチ)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5)**
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -219,6 +219,7 @@
   - スーパーバイザー独立検証(test-ci初回)で11失敗+10エラーを検出 → supervisor直接修正19150b4: **実装欠陥1件(latch_engineのcategory_secondary読取が保存形式の平キーと不一致 — unitのスタブ経由では検出不能だった本番コード欠陥)**+試験設計6系統(ユーザー登録もれ・teardown括弧・headピン0004・visibility既定hidden・PATCH必須項目・+7日上限/行選択tie)
   - 修正後: **マージ後main test-ci 1030 passed**(926+unit94+integration10)・lint緑・alembic 0004・残存ゼロ(users・latches・notifications・Redis)
 - 学習資産追従: ws-6分 ccd2029(第14章「評価を提案に変える関所: Layer 5 LATCH Engineと提案を守る枠」新設+既存6ファイル更新。usage limitで1度中断→再開指示で完了)
+- ws-7 / 設計 69b6ed7(supervisor承認: design §5の4件=①Pool人数緩和解釈〔06 §2の人数行が「人数(1対1)」と明記され06 §7 Poolの「Layer 3通過」との整合読み。1対1検索は文字列不変〕②種=起点・起点max>=3トリガー ③マイグレーション0005(group_candidates部分UNIQUE・05 §2追記は次回docs改版) ④ws-6引継ぎI-1の1対1側改修を本単位で実施〔tx統合・観測不変〕。解釈記録9件はG2時確認事項③へ追記)/ 2026-09-29
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
