@@ -106,7 +106,7 @@ async def field(db_engine):
             text(
                 "DELETE FROM latches WHERE intent_ids && ARRAY("
                 "  SELECT id FROM intents WHERE user_id IN"
-                "  (SELECT id FROM users WHERE auth_subject LIKE :p)))"
+                "  (SELECT id FROM users WHERE auth_subject LIKE :p))"
             ),
             p,
         )
@@ -164,7 +164,18 @@ async def _user(api_client, prefix: str, birth_date: str = "1990-04-01"):
         "/v1/auth/token", json={"provider": "google", "idp_token": idp}
     )
     assert tok.status_code == 200, tok.text
-    return {"Authorization": f"Bearer {tok.json()['access_token']}"}, subject
+    headers = {"Authorization": f"Bearer {tok.json()['access_token']}"}
+    created = await api_client.post(
+        "/v1/users",
+        headers=headers,
+        json={
+            "display_name": "m2ws6",
+            "birth_date": birth_date,
+            "profile": {},
+        },
+    )
+    assert created.status_code == 201, created.text
+    return headers, subject
 
 
 def _future(hours: float) -> str:
@@ -290,7 +301,9 @@ async def _latch_of(db_engine, a_id: str, b_id: str):
                     " FROM latches"
                     " WHERE intent_ids = ARRAY[CAST(:a AS uuid),"
                     " CAST(:b AS uuid)]::uuid[]"
-                    " ORDER BY created_at DESC LIMIT 1"
+                    " ORDER BY created_at DESC,"
+                    " (status IN ('candidate','proposed','partial_accept')) DESC"
+                    " LIMIT 1"
                 ),
                 {"a": lo, "b": hi},
             )
@@ -391,11 +404,19 @@ async def test_1_e2e_proposal_generation(api_client, db_engine, field):
         api_client,
         db_engine,
         ha,
-        _structured(start=same_start, expires=expires, secondary="ランチ"),
+        _structured(
+            start=same_start,
+            expires=expires,
+            secondary="ランチ",
+            visibility="summary_only",
+        ),
     )
     hb, _ = await _user(api_client, field)
     b = await _intent(
-        api_client, db_engine, hb, _structured(start=same_start, expires=expires)
+        api_client,
+        db_engine,
+        hb,
+        _structured(start=same_start, expires=expires, visibility="summary_only"),
     )
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
@@ -442,11 +463,17 @@ async def test_2_visibility_branch(api_client, db_engine, field):
     expires = _future(FAR_EXPIRES_H)
     ha, _ = await _user(api_client, field)
     a1 = await _intent(
-        api_client, db_engine, ha, _structured(start=start1, expires=expires)
+        api_client,
+        db_engine,
+        ha,
+        _structured(start=start1, expires=expires, visibility="summary_only"),
     )
     hb, _ = await _user(api_client, field)
     b1 = await _intent(
-        api_client, db_engine, hb, _structured(start=start1, expires=expires)
+        api_client,
+        db_engine,
+        hb,
+        _structured(start=start1, expires=expires, visibility="summary_only"),
     )
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a1["id"]))
@@ -707,10 +734,18 @@ async def test_7_d07_defer_suppression(api_client, db_engine, field):
             {"r": json.dumps(defer), "l": str(latch[0])},
         )
     # aをPATCH(version↑・embedding再注入)→新評価世代で閾値超過→昇格する
+    # (PATCHはstructured_intent必須 — 元の条件を保持して送る)
     patched = await api_client.patch(
         f"/v1/intents/{a['id']}",
         headers=ha,
-        json={"raw_text": "更新テキスト(ws6 d07)"},
+        json={
+            "raw_text": "更新テキスト(ws6 d07)",
+            "structured_intent": _structured(
+                start=start1,
+                expires=expires,
+                notification_level="nearby_also",
+            ),
+        },
     )
     assert patched.status_code == 200, patched.text
     await _embed(db_engine, a["id"])
@@ -787,7 +822,7 @@ async def test_8_drain_order(api_client, db_engine, field):
             json=_payload(
                 _structured(
                     start=(now + timedelta(hours=hours + 120)).isoformat(),
-                    expires=(now + timedelta(days=10)).isoformat(),
+                    expires=(now + timedelta(days=6)).isoformat(),
                 )
             ),
         )

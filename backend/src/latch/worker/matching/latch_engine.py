@@ -257,11 +257,9 @@ async def _read_intent_inputs(engine: AsyncEngine, intent_id: uuid.UUID):
     sd = row["structured_data"]
     if isinstance(sd, str):
         sd = json.loads(sd)
-    secondary = None
-    if isinstance(sd, dict):
-        cat = sd.get("category")
-        if isinstance(cat, dict):
-            secondary = cat.get("secondary")
+    # structured_dataの保存形式は平らなcategory_secondaryキー(05 §2の5キー。
+    # mapping.py _structured_dataと対応 — API入力のcategory.secondary入れ子ではない)
+    secondary = sd.get("category_secondary") if isinstance(sd, dict) else None
     return LatchIntentInputs(
         intent_id=_coerce_uuid(row["id"]),
         user_id=_coerce_uuid(row["user_id"]),

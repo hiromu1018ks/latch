@@ -30,13 +30,13 @@ NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
 # --- design §4-3: スキーマ(head追従)---
 
 
-async def test_head_is_0003(db_engine):
-    """0003がhead(migrated_dbがheadまで進めた結果・M2 ws-5で0003追加)。"""
+async def test_head_is_0004(db_engine):
+    """0004がhead(migrated_dbがheadまで進めた結果・M2 ws-6で0004追加)。"""
     async with db_engine.connect() as conn:
         version = (
             await conn.execute(text("SELECT version_num FROM alembic_version"))
         ).scalar()
-    assert version == "0003"
+    assert version == "0004"
 
 
 async def test_geofeatures_table_exists(db_engine):
