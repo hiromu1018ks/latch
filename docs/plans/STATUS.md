@@ -218,6 +218,7 @@
   - agent3が最終レビュー(新鮮な文脈)でCritical 2件を自力発見・TDD修正(日次カウント1要素ValueError・test_8対象時刻)。**引継ぎ(I-1・ws-7設計確認候補)**: peer読取失敗行がlatch_score計算済みのまま再選択されない仕様の空白(design §2.9に規定なし。頻度低・通常経路はM1の削除Event closeとM3-8全削除が回収)
   - スーパーバイザー独立検証(test-ci初回)で11失敗+10エラーを検出 → supervisor直接修正19150b4: **実装欠陥1件(latch_engineのcategory_secondary読取が保存形式の平キーと不一致 — unitのスタブ経由では検出不能だった本番コード欠陥)**+試験設計6系統(ユーザー登録もれ・teardown括弧・headピン0004・visibility既定hidden・PATCH必須項目・+7日上限/行選択tie)
   - 修正後: **マージ後main test-ci 1030 passed**(926+unit94+integration10)・lint緑・alembic 0004・残存ゼロ(users・latches・notifications・Redis)
+- 学習資産追従: ws-6分 ccd2029(第14章「評価を提案に変える関所: Layer 5 LATCH Engineと提案を守る枠」新設+既存6ファイル更新。usage limitで1度中断→再開指示で完了)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
