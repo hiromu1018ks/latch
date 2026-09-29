@@ -83,3 +83,44 @@ f885cca feat: JevCostGuard(4カウンタINCR先行・80%跨ぎalert・fail-close
 7. **Task 5/6のコミット分割**: 計画書Task 5 Step 5のとおり、Origin必須フィールド追加で
    test_matching_runner.pyがredになる期間があるためTask 6実装後に2コミット(9e5b846・e8bcd45)
    として分割コミットした。
+
+## スーパーバイザー検証による修正(2026-09-29追記)
+
+スーパーバイザー検証の `make test-ci` で test_matching_cheapjudge.py の4件
+(test_1・2・3・5)が失敗。実行されたことがない計画書由来の試験設計潜伏欠陥
+5系統と判明し、supervisor裁定(方針A〜F)に基づき当該ファイルのみ修正した
+(unit試験・他ファイルは不変)。
+
+**根拠(スーパーバイザー確認済み・5系統)**:
+1. `intent_input.py:25` CategoryInput.primary は `Literal["meal","drinking","activity"]`。
+   `ws4cheap` はpydantic検証で422 VALIDATION_ERROR(全 `_intent` 呼び出しが失敗)していた
+2. `layer1.py:40-41` の時間交差は狭義不等号
+   (`i.time_start < origin_end AND origin_start < COALESCE(i.time_end, i.time_start+3h)`)。
+   end無し同士でΔ180分ちょうどは境界接触となりLayer 1落ちしていた
+3. `layer1.py` ペア予算は `LEAST(origin, cand) >= 500`(NULL無視)。
+   budget=0 の候補はLayer 1落ちしていた
+4. layer3.py の合成式 `0.5*sim + 0.3*((時間近さ+予算近さ)/2) + 0.2*語彙` によると
+   test_3の期待値に計算誤り: c_t(Δ180・予算同額・語彙同一)は 0.85(記載0.7は誤り)・
+   c_b(Δ0・差3000・語彙同一)も 0.85(記載0.8は誤り)。c_v=0.8・c_mid≈0.7167・
+   c_max=1.0・c_min=0.5は正しかった
+5. 元の c_b/c_v 同点0.8の前提が誤り。修正後は c_t=c_b=0.85 が同点になる
+
+**修正内容(方針A〜F)**:
+- A: CATEGORY を `"meal"` へ。カテゴリ分離の代わりに時間窓分離 — 全テストIntentの
+  基準時刻を `BASE_HOURS=120`(now+5日)へ統一。他試験・残存データは+1〜+7時間帯か
+  過去のためLayer 1の狭義時間交差で構造的に交差しない。モジュールdocstringと
+  CATEGORY/BASE_HOURS コメントを時間窓分離の記述へ更新
+- B: `_structured` に `end` パラメータを追加。test_3の起点は明示 `end=start+6h`
+  (120h+6h<168h で+7日上限内)を与え、Δ180分候補(far_start)が狭義交差を通るようにした
+- C: test_3の予算対照を双方500以上へ(差3000飽和は origin=3500 vs 候補=500)。
+  c_min(最低値ピン)も Δ180・差3000・語彙0 で budget=500
+- D: 期待値を修正(c_t=0.85・c_b=0.85)。同点順序検証は c_t と c_b の同点0.85ペアで
+  UUID昇順をassertする形へ書き換え
+- E: test_1・test_2・test_5 は基準時刻の BASE_HOURS 化のみ(test_1の期待値
+  `0.5*1.0+0.3*0.75+0.2*(1/3)` は正しい・budget3000はLayer 1問題なし)
+- F: unit試験・他ファイルは不変
+
+**修正後の検証(実装側)**: `make lint` exit 0 / `make test` 687 passed・131
+deselected / `uv run pytest --collect-only tests/integration/test_matching_cheapjudge.py -q`
+→ 5 tests collected・exit 0。
+**test-ci=スーパーバイザー検証待ち**(再実行で4件のグリーン化を確認)。

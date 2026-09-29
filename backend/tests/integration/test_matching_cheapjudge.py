@@ -2,11 +2,13 @@
 
 実DB(compose常設・pgvector)・実Redis(compose常設)。Workerプロセスは起動
 しない(直接関数呼び出し・FakeClock注入・Stage1直構築 — ws-3流儀)。
-対抗策(design §4.2): category_primary=ws4cheap で他試験由来の残存Intentと
-構造的に交差しない(Layer 1完全一致条件)。teardownはsubjectプレフィックス
-単位のFK順削除(match_candidates→match_events→intents→users)+Redis prefix掃除。
-soft_constraints/ng_unverifiable はAPI入力から投入し、mapping.pyの
-{text, downgraded_from_ng} 形式で保存されたものをLayer 3が読む通しを検証。
+対抗策(design §4.2): テストIntentの時間窓を now+5日(BASE_HOURS=120)へ統一し
+他試験由来の残存Intent(+1〜+7時間帯・過去)とLayer 1の狭義時間交差で構造的
+に交差しない(カテゴリはLiteral値"meal"を使い分離には使わない)。teardownは
+subjectプレフィックス単位のFK順削除(match_candidates→match_events→intents
+→users)+Redis prefix掃除。soft_constraints/ng_unverifiable はAPI入力から
+投入し、mapping.pyの {text, downgraded_from_ng} 形式で保存されたものを
+Layer 3が読む通しを検証。
 """
 
 import asyncio
@@ -28,8 +30,12 @@ from latch.worker.stage1 import Stage1
 
 pytestmark = pytest.mark.integration
 
-# テスト専用カテゴリ(design §4.2対抗策1・試験ファイル内定数)
-CATEGORY = "ws4cheap"
+# CategoryInput.primary は Literal["meal","drinking","activity"](intent_input.py)。
+# 分離は時間窓(BASE_HOURS)が担うためカテゴリは実在値を使う
+CATEGORY = "meal"
+# 時間窓分離の基準時刻(now+5日)。他試験・残存データは+1〜+7時間帯か過去のため
+# Layer 1の狭義時間交差で構造的に交差しない。+7日上限: 120h+6h < 168h
+BASE_HOURS = 120
 
 
 def _vec(*components: float) -> str:
@@ -144,6 +150,7 @@ def _future(hours: float) -> str:
 def _structured(
     *,
     start: str | None = None,
+    end: str | None = None,
     budget: int | None = None,
     soft: list[str] | None = None,
     ng: list[str] | None = None,
@@ -151,7 +158,7 @@ def _structured(
     d: dict = {
         "category": {"primary": CATEGORY, "secondary": None},
         "alcohol_involved": False,
-        "time": {"start": start or _future(3), "end": None},
+        "time": {"start": start or _future(BASE_HOURS), "end": end},
         "location": {"name": "天文館"},
     }
     if budget is not None:
@@ -220,7 +227,7 @@ async def test_1_cheap_judge_score_recorded(api_client, db_engine, field):
     ng_unverifiable(降格)は語彙に入らない(Review Focus 1)。
     """
     clock = _clock()
-    same_start = _future(3)  # 起点と対象で同一文字列=Δ0ピン
+    same_start = _future(BASE_HOURS)  # 起点と対象で同一文字列=Δ0ピン
     ha = await _user(api_client, field)
     a = await _intent(
         api_client,
@@ -269,7 +276,7 @@ async def test_2_kc_truncation_deterministic(api_client, db_engine, field):
     同一入力2回実行で同一結果。
     """
     clock = _clock()
-    same_start = _future(3)
+    same_start = _future(BASE_HOURS)
     ho = await _user(api_client, field)
     origin = await _intent(
         api_client,
@@ -318,25 +325,33 @@ async def test_2_kc_truncation_deterministic(api_client, db_engine, field):
 async def test_3_score_components_contrast(api_client, db_engine, field):
     """スコア構成の実挙動対照(design §4.2-3・§2.2の表の値を実測と照合)。
 
-    sim=1.0固定(E1)で時間・予算・語彙だけを動かす。各対照の期待値:
+    sim=1.0固定(E1)で時間・予算・語彙だけを動かす。起点は明示end=start+6hを
+    与え(狭義交差でΔ180分候補が通る・120h+6h<168hで+7日上限内)、ペア予算は
+    LEAST(origin,cand)>=500のため双方500以上(差3000飽和はorigin=3500 vs 500)。
+    各対照の期待値:
       max:  時間Δ0(1.0)・予算同額(1.0)・語彙同一(1.0) → 1.0
-      t_only(時間のみ遠い):  Δ180(0.0)・1.0・1.0 → 0.7
-      b_only(予算のみ遠い):  1.0・差3000(0.0)・1.0 → 0.8
+      t_only(時間のみ遠い):  Δ180(0.0)・1.0・1.0 → 0.85
+      b_only(予算のみ遠い):  1.0・差3000(0.0)・1.0 → 0.85
       v_only(語彙のみ不一致): 1.0・1.0・0.0 → 0.8
       mid:  Δ90(≈0.5)・NULL(0.5)・1/3 → ≈0.7167
       min:  Δ180(0.0)・差3000(0.0)・0.0 → 0.5
-    時刻はAPI呼び出し時刻基準のため数秒のずれが入り、Δ90系は approx で検証。
+    時刻はAPI呼び出し時刻基準のため数秒のずれが入り、Δ90/Δ180系は approx で検証。
     """
     clock = _clock()
-    same_start = _future(3)
-    far_start = _future(6)  # Δ180分
-    mid_start = _future(4.5)  # Δ90分
+    same_start = _future(BASE_HOURS)
+    far_start = _future(BASE_HOURS + 3)  # Δ180分
+    mid_start = _future(BASE_HOURS + 1.5)  # Δ90分
     ho = await _user(api_client, field)
     origin = await _intent(
         api_client,
         db_engine,
         ho,
-        _structured(start=same_start, budget=3000, soft=["焼肉"]),
+        _structured(
+            start=same_start,
+            end=_future(BASE_HOURS + 6),
+            budget=3500,
+            soft=["焼肉"],
+        ),
     )
 
     async def _cand(start: str, budget: int | None, soft: list[str]) -> str:
@@ -349,31 +364,31 @@ async def test_3_score_components_contrast(api_client, db_engine, field):
         )
         return it["id"]
 
-    c_max = await _cand(same_start, 3000, ["焼肉"])
-    c_t = await _cand(far_start, 3000, ["焼肉"])
-    c_b = await _cand(same_start, 0, ["焼肉"])  # 差3000
-    c_v = await _cand(same_start, 3000, ["寿司"])
+    c_max = await _cand(same_start, 3500, ["焼肉"])
+    c_t = await _cand(far_start, 3500, ["焼肉"])
+    c_b = await _cand(same_start, 500, ["焼肉"])  # 差3000(3500-500)
+    c_v = await _cand(same_start, 3500, ["寿司"])
     c_mid = await _cand(mid_start, None, ["焼肉好き"])
-    c_min = await _cand(far_start, 0, ["寿司"])
+    c_min = await _cand(far_start, 500, ["寿司"])
 
     outcome = await _run(db_engine, clock, origin["id"])
     scores = _peer_scores(outcome)
     assert len(outcome.topkc) == 6
     assert scores[c_max] == pytest.approx(1.0, abs=1e-9)
-    assert scores[c_t] == pytest.approx(0.7, abs=0.01)
-    assert scores[c_b] == pytest.approx(0.8, abs=1e-9)
+    assert scores[c_t] == pytest.approx(0.85, abs=0.01)
+    assert scores[c_b] == pytest.approx(0.85, abs=1e-9)
     assert scores[c_v] == pytest.approx(0.8, abs=1e-9)
     assert scores[c_mid] == pytest.approx(0.5 + 0.15 + 0.2 / 3, abs=0.01)
     assert scores[c_min] == pytest.approx(0.5, abs=0.01)
     # 大小関係(定義どおり)
     assert scores[c_max] > scores[c_mid] > scores[c_min]
-    # 降順(同点はintent_id昇順 — c_bとc_vは同点0.8)
+    # 降順(同点はintent_id昇順 — c_tとc_bは同点0.85)
     top_ids = [str(s.intent_id) for s in outcome.topkc]
-    i_b, i_v = top_ids.index(c_b), top_ids.index(c_v)
-    if c_b > c_v:
-        assert i_b > i_v  # UUID昇順で c_v が先
+    i_t, i_b = top_ids.index(c_t), top_ids.index(c_b)
+    if c_t > c_b:
+        assert i_t > i_b  # UUID昇順で c_b が先
     else:
-        assert i_b < i_v
+        assert i_t < i_b
 
 
 async def test_4_reeval_guard_real_redis(redis_client, redis_sweep):
@@ -396,7 +411,7 @@ async def test_5_stage1_matching_hook_wiring(api_client, db_engine, field):
     のままprocessedで閉じる(06 §5(c))。
     """
     clock = _clock()
-    same_start = _future(3)
+    same_start = _future(BASE_HOURS)
     ha = await _user(api_client, field)
     a = await _intent(
         api_client, db_engine, ha, _structured(start=same_start, soft=["焼肉"])
