@@ -2,10 +2,10 @@
 
 visibility生成分岐(引用#12)と各フィールドの生成規則。格納禁止
 (raw_text・soft/NG条件の文言・座標)は構造上入らない。area_nameは
-geo中点の逆転ジオコーディング結果を呼び出し側(tx外)が渡す
-(承認済み解釈 — 純関数はDBを持たない)。
-ws-7拡張点: headcount=2固定とorigin/peer 2者構成を集合側へ拡張する
-(category_secondaryは「種Intentの値」規則を集合の種へ適用)。
+geo中点(集合は全メンバーgeo_center平均点)の逆転ジオコーディング結果を
+呼び出し側(tx外)が渡す(承認済み解釈 — 純関数はDBを持たない)。
+ws-7: build_group_proposal(集合版・3〜4人)を追加。headcount=|S|・
+category_secondaryは「種Intentの値」規則を集合の種(members[0])へ適用。
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from latch.core.clock import JST
+from latch.worker.matching.group_calc import group_target_time
 from latch.worker.matching.latch_calc import match_level, pair_target_time
 
 NEARBY_HEADCOUNT = 2
@@ -70,6 +71,36 @@ def build_proposal(
         "headcount": 2,
         "category_primary": origin.category_primary,  # Layer 1完全一致で同一
         "category_secondary": origin.category_secondary,  # 起点側(引用#8)
+        "budget": {"max": min(budgets)} if budgets else None,
+        "match_level": match_level(score),
+    }
+
+
+def build_group_proposal(
+    *,
+    members: list[LatchIntentInputs],  # 種を先頭(design §2.7-3)
+    score: float,
+    area_name: str | None,
+) -> dict:
+    """集合版proposal生成(05 §2・引用#14・design §2.7-3)。
+
+    visibility分岐は1対1と同一: 全員summary_onlyでなければheadcountと
+    match_levelのみ。全フィールド側は time_summary=max(time_start)のJST
+    書式(ws-6 §2.5と同一)・category_secondaryは種(members[0])の値・
+    budget=参加budget_maxの最小値(NULLは無視)・headcount=|S|。
+    """
+    if any(m.visibility != "summary_only" for m in members):
+        return {"headcount": len(members), "match_level": match_level(score)}
+    budgets = [m.budget_max for m in members if m.budget_max is not None]
+    seed = members[0]
+    return {
+        "time_summary": group_target_time(m.time_start for m in members)
+        .astimezone(JST)
+        .strftime("%Y-%m-%d %H:%M"),
+        "area_name": area_name,
+        "headcount": len(members),
+        "category_primary": seed.category_primary,  # Layer 1完全一致で同一
+        "category_secondary": seed.category_secondary,  # 種の値(引用#14)
         "budget": {"max": min(budgets)} if budgets else None,
         "match_level": match_level(score),
     }

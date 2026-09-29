@@ -228,12 +228,12 @@ async def test_run_matching_suppressed_when_reeval_denies(fake_clock, monkeypatc
 
 
 class _RecordingJev:
-    """JevWorkerスタブ(handleの呼び出しを記録)。"""
+    """JevWorkerスタブ(handleの呼び出しを記録)。group_ctxはws-7で追加。"""
 
     def __init__(self):
         self.calls: list[uuid.UUID] = []
 
-    async def handle(self, intent_id):
+    async def handle(self, intent_id, group_ctx=None):
         self.calls.append(intent_id)
 
 
@@ -401,7 +401,7 @@ async def test_run_direct_pipeline_order(fake_clock, monkeypatch):
             self._tag = tag
             self.calls: list[uuid.UUID] = []
 
-        async def handle(self, intent_id):
+        async def handle(self, intent_id, group_ctx=None):
             self.calls.append(intent_id)
             order.append(self._tag)
 
@@ -419,3 +419,144 @@ async def test_run_direct_pipeline_order(fake_clock, monkeypatch):
     await worker._run_direct_pipeline(_FakePipelineEngine(), iid)
     assert order == ["l123", "jev", "latch"]
     assert jev.calls == [iid] and latch.calls == [iid]
+
+
+# -- 配線(M2 ws-7)。_run_post_retrieval共通チェーン(design §2.1案A) --
+
+
+class _RecordingGroup:
+    """GroupEngineスタブ(handle/finalizeの呼び出しを記録・handleは空ctx)。"""
+
+    def __init__(self):
+        self.handles: list[uuid.UUID] = []
+        self.finalizes: list[uuid.UUID] = []
+
+    async def handle(self, intent_id):
+        self.handles.append(intent_id)
+        return None
+
+    async def finalize(self, intent_id):
+        self.finalizes.append(intent_id)
+
+
+async def test_kick_jev_chain_group_jev_latch_finalize(fake_clock):
+    """embedding_completed → group.handle→jev→latch→group.finalizeの順(§2.1案A)。"""
+    order: list[str] = []
+
+    class _Chain:
+        def __init__(self, tag: str):
+            self._tag = tag
+            self.calls: list[uuid.UUID] = []
+
+        async def handle(self, intent_id, group_ctx=None):
+            self.calls.append(intent_id)
+            order.append(self._tag)
+            return None
+
+        async def finalize(self, intent_id):
+            self.calls.append(intent_id)
+            order.append(f"{self._tag}!")
+            return None
+
+    group = _Chain("group")
+    jev = _Chain("jev")
+    latch = _Chain("latch")
+    stage1 = _RecordingStage1("processed")
+    worker = Worker(
+        clock=fake_clock,
+        bus=_FakeBus(),
+        stage1=stage1,
+        jev=jev,
+        latch=latch,
+        group=group,
+    )
+    task = asyncio.create_task(worker.run())
+    try:
+        iid = uuid.uuid4()
+        await worker._dispatch(_make_event("embedding_completed", iid, 1))
+        assert order == ["group", "jev", "latch", "group!"]
+        assert group.calls == [iid, iid]  # handleとfinalize
+    finally:
+        await _stop(worker, task)
+
+
+async def test_kick_jev_group_not_injected_noop(fake_clock):
+    """group未注入(ws-6資産の試験)はjev→latchのみ・例外なし。"""
+    jev = _RecordingJev()
+    latch = _RecordingLatch()
+    stage1 = _RecordingStage1("processed")
+    worker, task = await _started_worker_with_latch(fake_clock, stage1, jev, latch)
+    try:
+        iid = uuid.uuid4()
+        await worker._dispatch(_make_event("embedding_completed", iid, 1))
+        assert jev.calls == [iid] and latch.calls == [iid]
+    finally:
+        await _stop(worker, task)
+
+
+async def test_kick_jev_passes_group_ctx_to_jev(fake_clock):
+    """group.handleの戻り値がjev.handleの第2引数へ渡る。"""
+    marker = object()
+
+    class _CtxGroup:
+        async def handle(self, intent_id):
+            return marker
+
+        async def finalize(self, intent_id):
+            return None
+
+    seen: list = []
+
+    class _Jev:
+        async def handle(self, intent_id, group_ctx=None):
+            seen.append(group_ctx)
+
+    stage1 = _RecordingStage1("processed")
+    worker = Worker(
+        clock=fake_clock,
+        bus=_FakeBus(),
+        stage1=stage1,
+        jev=_Jev(),
+        latch=None,
+        group=_CtxGroup(),
+    )
+    task = asyncio.create_task(worker.run())
+    try:
+        await worker._dispatch(_make_event("embedding_completed", uuid.uuid4(), 1))
+        assert seen == [marker]
+    finally:
+        await _stop(worker, task)
+
+
+async def test_run_direct_pipeline_uses_post_retrieval(fake_clock, monkeypatch):
+    """直接投入: L1〜3tx→共通チェーン(group→jev→latch→finalize)。"""
+    from latch.worker import main as main_mod
+
+    order: list[str] = []
+
+    async def fake_retrieval(conn, clock, intent_id):
+        order.append("l123")
+
+    monkeypatch.setattr(main_mod, "run_candidate_retrieval", fake_retrieval)
+
+    class _C:
+        def __init__(self, tag):
+            self._tag = tag
+
+        async def handle(self, intent_id, group_ctx=None):
+            order.append(self._tag)
+            return None
+
+        async def finalize(self, intent_id):
+            order.append(f"{self._tag}!")
+
+    worker = Worker(
+        clock=fake_clock,
+        bus=_FakeBus(),
+        stage1=_RecordingStage1("processed"),
+        jev=_C("jev"),
+        latch=_C("latch"),
+        group=_C("group"),
+    )
+    await worker._run_direct_pipeline(_FakePipelineEngine(), uuid.uuid4())
+    assert order == ["l123", "group", "jev", "latch", "group!"]

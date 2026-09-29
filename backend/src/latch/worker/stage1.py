@@ -98,6 +98,12 @@ _CLOSE_CANDIDATES = text("""
     WHERE (intent_a_id = :intent_id OR intent_b_id = :intent_id)
       AND status <> 'closed'
 """)
+_CLOSE_GROUPS = text("""
+    UPDATE group_candidates
+    SET status = 'closed', updated_at = :now
+    WHERE CAST(:intent_id AS uuid) = ANY(intent_ids)
+      AND status <> 'closed'
+""")
 
 
 class Stage1Error(Exception):
@@ -281,6 +287,7 @@ class Stage1:
                 await conn.execute(
                     _CLOSE_CANDIDATES, {"intent_id": intent_id, "now": now}
                 )
+                await conn.execute(_CLOSE_GROUPS, {"intent_id": intent_id, "now": now})
             elif event_type in (EVENT_CREATED, EVENT_UPDATED):
                 if self._embedding_hook is not None:
                     await self._embedding_hook(event_type, intent_id, version)

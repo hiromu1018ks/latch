@@ -228,7 +228,7 @@ def _patch_eval(monkeypatch, *, h_recheck=True, peer_row=None):
         peer_row = _jev_row()
     h_calls: list = []
 
-    async def fake_h(conn, origin, candidate_id):
+    async def fake_h(conn, origin, candidate_id, *, relaxed=False):
         h_calls.append(candidate_id)
         return h_recheck
 
@@ -379,7 +379,7 @@ async def test_h_fails_pending_then_success_on_next_row(redis, monkeypatch):
     outcomes = {0: False, 1: True}
     h_index: list[int] = []
 
-    async def fake_h(conn, origin, candidate_id):
+    async def fake_h(conn, origin, candidate_id, *, relaxed=False):
         h_index.append(candidate_id)
         return outcomes.get(len(h_index) - 1, True)
 
@@ -569,3 +569,167 @@ def test_structured_data_str_is_parsed():
     assert isinstance(inp, JevTextInput)
     assert isinstance(inp.structured_data, dict)
     assert inp.structured_data["location_name"] == "天文館周辺"
+
+
+# -- group_ctx拡張(M2 ws-7・design §2.4) --
+
+
+async def test_handle_default_group_ctx_is_backward_compatible(redis, monkeypatch):
+    """group_ctx省略(既定None)は全グループペアを継続扱い・既存経路不変。"""
+    org = _origin()
+    rows = [_row(1), _row(2)]
+    _patch_phase1(monkeypatch, org=org, rows=rows, origin_row=_jev_row())
+    h_calls = _patch_eval(monkeypatch)
+    _patch_writes(monkeypatch)
+    recorded: list = []
+
+    def fake_targets(rows_in, new_pair_row_ids=frozenset()):
+        recorded.append((tuple(r.row_id for r in rows_in), new_pair_row_ids))
+        return list(rows_in)
+
+    monkeypatch.setattr(jev_mod.layer4, "select_jev_targets", fake_targets)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert recorded[0][1] == frozenset()  # None→frozenset
+    assert len(h_calls) == 2  # 既存経路(H再検証)も不変
+
+
+async def test_handle_passes_new_pair_row_ids_to_targets(redis, monkeypatch):
+    """group_ctx.new_pair_row_idsがselect_jev_targetsへ流れる(§2.4)。"""
+
+    class _Ctx:
+        new_pair_row_ids = frozenset({_uid(50)})
+
+    org = _origin()
+    _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row())
+    _patch_eval(monkeypatch)
+    _patch_writes(monkeypatch)
+    recorded: list = []
+
+    def fake_targets(rows_in, new_pair_row_ids=frozenset()):
+        recorded.append(new_pair_row_ids)
+        return list(rows_in)
+
+    monkeypatch.setattr(jev_mod.layer4, "select_jev_targets", fake_targets)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1), _Ctx())
+    assert recorded[0] == frozenset({_uid(50)})
+
+
+async def test_group_pair_uses_relaxed_h_recheck(redis, monkeypatch):
+    """pair_kind='group'の行はH再検証へrelaxed=True(§2.4)。"""
+    import dataclasses
+
+    org = _origin()
+    grp = dataclasses.replace(_row(1), pair_kind="group")
+    _patch_phase1(monkeypatch, org=org, rows=[grp], origin_row=_jev_row())
+    relaxed_calls: list = []
+
+    async def fake_h(conn, origin, candidate_id, *, relaxed=False):
+        relaxed_calls.append(relaxed)
+        return True
+
+    async def fake_read_peer(engine, pid):
+        return _jev_row()
+
+    monkeypatch.setattr(jev_mod.layer4, "hard_constraint_holds", fake_h)
+    monkeypatch.setattr(jev_mod, "_read_peer", fake_read_peer)
+    _patch_writes(monkeypatch)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert relaxed_calls == [True]
+
+
+# -- 起点読取のグループfallback(M2 ws-7設計補完・supervisor裁定) --
+
+
+async def test_skip_participants_origin_falls_back_to_group_load(redis, monkeypatch):
+    """SKIP_PARTICIPANTSの起点(min>=3)はload_group_originへfallbackし評価が走る。"""
+    import dataclasses
+
+    org = dataclasses.replace(_origin(), participants_min=3, participants_max=4)
+    group_loads: list = []
+    _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row())
+
+    async def fake_load_origin(conn, clock, intent_id):
+        return OriginLoad(origin=None, skip_reason="origin_participants_range")
+
+    async def fake_group_load(conn, clock, intent_id):
+        group_loads.append(intent_id)
+        return OriginLoad(origin=org, skip_reason=None)
+
+    monkeypatch.setattr(jev_mod.origin_mod, "load_origin", fake_load_origin)
+    monkeypatch.setattr(jev_mod.group_engine_mod, "load_group_origin", fake_group_load)
+    _patch_eval(monkeypatch)
+    complete_calls, _ = _patch_writes(monkeypatch)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert group_loads == [_uid(1)]  # fallbackした
+    assert len(complete_calls) == 1  # no-opせずペア評価が完走
+
+
+async def test_normal_origin_skips_fallback(redis, monkeypatch):
+    """1対1人数の起点(min2max4)はload_origin1回で通る(fallback不呼出)。"""
+    org = _origin()
+    group_loads: list = []
+    _patch_phase1(monkeypatch, org=org, rows=[_row(1)], origin_row=_jev_row())
+
+    async def fake_group_load(conn, clock, intent_id):
+        group_loads.append(intent_id)
+        return OriginLoad(origin=org, skip_reason=None)
+
+    monkeypatch.setattr(jev_mod.group_engine_mod, "load_group_origin", fake_group_load)
+    _patch_eval(monkeypatch)
+    complete_calls, _ = _patch_writes(monkeypatch)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert group_loads == []  # fallbackしていない
+    assert len(complete_calls) == 1
+
+
+async def test_both_guards_skip_makes_noop(redis, monkeypatch):
+    """両ガードでskip(不在等でない人数系skip×2)→no-op(選択なし)。"""
+    selected: list = []
+    _patch_phase1(monkeypatch, rows=[])
+
+    async def fake_load_origin(conn, clock, intent_id):
+        return OriginLoad(origin=None, skip_reason="origin_participants_range")
+
+    async def fake_group_load(conn, clock, intent_id):
+        return OriginLoad(origin=None, skip_reason="origin_not_group")
+
+    monkeypatch.setattr(jev_mod.origin_mod, "load_origin", fake_load_origin)
+    monkeypatch.setattr(jev_mod.group_engine_mod, "load_group_origin", fake_group_load)
+
+    async def fake_select_rows(conn, origin_id, origin_version, day_start, month_start):
+        selected.append(origin_id)
+        return []
+
+    monkeypatch.setattr(jev_mod.layer4, "select_jev_rows", fake_select_rows)
+    worker = _make_worker(
+        _FakeGateway(_judgment()),
+        _FakeGuard(),
+        _RecordingCostStore(JevCostStore(redis)),
+    )
+    await worker.handle(_uid(1))
+    assert selected == []

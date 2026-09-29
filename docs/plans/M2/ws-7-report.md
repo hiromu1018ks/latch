@@ -1,0 +1,212 @@
+# M2 ws-7(グループマッチ Group Search)実行報告
+
+- ブランチ: m2-ws-7 / ベース: d5ef2ad
+- 日付: 2026-09-29
+- 実行者: agent3
+
+## 完了条件の検証結果
+| # | 条件 | 結果 | 証拠(コマンド出力の要点) |
+|---|---|---|---|
+| 1 | make lint / make test | PASS | `All checks passed!` / `959 passed, 159 deselected in 6.84s`(unit全件グリーン。159 deselected=integration〔既存149+本単位10〕) |
+| 2 | integration 10試験の収集 | 収集確認済み/test-ci=スーパーバイザー検証待ち | `uv run pytest --collect-only tests/integration/test_matching_groupengine.py -q` → 修正パス後は `11 tests collected`(計画10件+supervisor裁定の試験11・exit 0) |
+| 3 | 実時間参照がclock.pyのみ | PASS | `rg -n 'datetime\.now\|utcnow\|time\.time\|time\.monotonic\|time\.sleep\|from time import' backend/src` → `backend/src/latch/core/clock.py:33` の1件のみ。`pytest tests/unit/test_arch_no_direct_time.py` → `1 passed` |
+| 4 | alembic 0001〜0004・docs無変更+チェーン確認 | PASS | `git diff --stat main -- 'backend/alembic/versions/0001*' …0004* docs` → 出力なし(空)。チェーン静的確認 `heads= ['0005']`・walk=[0005,0004,0003,0002,0001] |
+| 5 | 変更ファイル=§4の22ファイル | PASS | `git diff --name-only main \| sort` → §4の一覧(作成7+変更15)と完全一致(下記コミット一覧後の `git status --short` も空) |
+| 6 | テストbasename一意 | PASS | `find backend/tests -name "test_*.py" \| awk -F/ '{print $NF}' \| sort \| uniq -d` → 出力なし(空) |
+| 7 | 既存unit試験グリーン維持 | PASS | make test 全件数 959 passed。既存試験の変更は§4列挙の機械的追随のみ(内訳は下記「補足」・期待値の意味は不変) |
+
+**test-ci=スーパーバイザー検証待ち**(STATUS運用ルール1〜3・マイグレーション0005追加のため
+migrate/test-ci/docker系は実装側で未実行。wave単独のため並走とのDB取り合いは計画上なし)
+
+## design §5 実装時確認事項の結果
+12. uuid[]の @> / && / 部分UNIQUE索引へのON CONFLICT推論: unitのSQLピン・compile検査は
+    済み。実DBでの推論確認はスーパーバイザー検証時のintegration試験1・6・9が担う
+    (掠んだ場合は推移を記録しINSERT前SELECT FOR UPDATE切替をsupervisorへ相談)
+13. HNSW検索2回の実行時間: スーパーバイザー検証時のdense配置試験(試験2)の実行時間を
+    記録(テストコードに `group.handle elapsed=` のprintを仕込み済み。
+     Layer 5+通知 ≤2秒・06 §1 との照合)
+
+## 固定値の変更有無(design.md §2・本計画§9)
+- 実行位置=案A(_run_post_retrieval共通チェーン・design §2.1): 変更なし
+- Pool人数緩和検索+Layer 3同一計算(承認事項1・design §2.2): 変更なし
+- 種=起点・起点max>=3トリガー(承認事項2・design §2.3): 変更なし
+- 0005部分UNIQUE+ON CONFLICT DO NOTHING(承認事項3・design §2.8): 変更なし
+- 1対1I-1改修=tx統合(承認事項4・design §2.7-4): 変更なし
+- member_scores=seed_id+versions(design §2.3): 変更なし
+- uuid[]bind=文字列リテラル+CAST(本計画§9-14): 変更なし
+- 本計画§9のIF確定事項(SQL全文・純関数・try_promote手順): 変更なし(下記2点のみ等価な実装追随)
+  - §9-8-5: `_nearby_in_tx` の戻り値をlatch_id変数へ代入しない(nearbyはtry_promoteしない
+    という§9-8-5自身のdocstring仕様との矛盾解消・観測結果は不変)
+  - §9-4手順g: 「return」を集合単位のスキップ(continue)として実装(design §2.5
+    「各集合について判定・揃わなければ何もしない」の文言どおり)
+
+## (ws-8・M3への引継ぎ)
+- ws-8: Pool≦15の記録は試験2(dense配置)が供給。構造化ログ `group pool built pool_size=`
+  が実行時の観察点。K上限裏付け試験(G2)で再利用
+- M3-1〜M3-5: グループlatchesの回答は responses への追記(全員YES成立・部分成立なし・
+  期限時未揃い=expired)。latches.group_candidate_id から集合を引ける。
+  expiry_sweeper は group_candidates.status=candidate の放置掃除も担当
+- G2: design §5の解釈記録5〜11はSTATUS「G2時確認事項」③に記載済み
+
+## スーパーバイザー検証手順(test-ci実行時・design §4.3)
+1. `make lint && make test` — unit全件グリーン(報告書と同じ結果になること)
+2. `docker compose build api worker` — イメージ再ビルド(STATUS運用ルール4)
+3. `make migrate` — 0005適用確認(alembic_version=0005・索引 `\di uq_group_candidates_intent_ids_open` の存在)
+4. `uv run pytest --collect-only tests/integration/test_matching_groupengine.py -q`
+   (backend/内・収集10件の確認。実行前の静的確認)
+5. `make test-ci` — 既存全数+本単位integration 11件(計画10+修正パスの試験11)が
+   グリーン。design §5-12のON CONFLICT/包含推論は試験1・6・9が実証。
+   design §5-13のHNSW 2回の実行時間は試験2の所要から確認(≤2秒予算・06 §1)。
+   Important-1(純min=3集合のfallback起点読取)は試験11が実証
+6. 時刻参照がclock.pyのみ: `rg -n 'datetime\.now|utcnow|time\.time|time\.monotonic|
+   time\.sleep|from time import' backend/src` が core/clock.py のみ
+7. alembic無変更確認: `git diff main -- 'backend/alembic/versions/000[1-4]*'` が空
+8. 変更ファイル一覧が本計画§4と一致・`git status` 空・
+   `find backend/tests -name "test_*.py" | awk -F/ '{print $NF}' | sort | uniq -d` が空(運用ルール5)
+9. test-ci後、残存確認を1回手動実施: users(subject LIKE 'm2ws7-%'=0件)・Redis(prefix掃き)・
+   group_candidates・latches・latch_status_events・notifications(prefix由来=0件)
+
+## コミット一覧
+```
+214a606 feat: マイグレーション0005(group_candidates開いている行の部分UNIQUE索引)
+0d63bd5 feat: group_calc純関数群(貪欲法・集約・D-06上位判定・uuid[]組立)
+172d7f2 feat: layer1の人数行分離(LAYER1_WHERE_BASE・グループPool検索用・文字列不変)
+5f191bc feat: layer4のK_j配分拡張(is_group列・1対1最低4+継続優先・緩和H再検証・close除外)
+b35b528 feat: upsert_pair(ID直指定UPSERT)とJevWorkerのgroup_ctx受け渡し
+517a546 feat: latch_engine共存改修(グループ除外・|S|人try_promote・D-06上位1)とI-1 tx統合
+3174b55 feat: GroupEngine.handle(人数緩和Pool検索・互換行列・貪欲法による集合生成)
+3b6b224 feat: GroupEngine.finalize(集約tx・I-1対策)とbuild_group_proposal
+d4d9900 feat: 削除Eventのgroup_candidates無効化と_run_post_retrieval共通チェーン配線
+76f19e8 test: GroupEngine integration 10試験(収集のみ)とws-7実行報告
+fccb282 docs: ws-7報告書へ最終レビュー結果(Important3件の引継ぎ・Minor4件)を追記
+d87dec7 fix: 最終レビューImportant3件(起点fallback・finalize D-06順・選択除外)+integration全起点評価
+(report) docs: 報告書へ修正パス(supervisor裁定3件)の記録を追記
+```
+
+## 補足(詰まった点・判断した点)
+1. **§9-2全文からの機械的修正2件(group_calc.py)**: docstring冒頭が行長88超(E501)のため
+   「(06 §7〜§8・design §2.2〜2.3・§2.5〜2.6)」→「(06 §7〜§8・design §2.2〜2.6)」へ短縮、
+   コメント内の簡体字「保证」→「保証」。いずれも意味不変。
+2. **Task 5**: §9-6実装(常に `relaxed=` キーワード渡し)に対し既存 `_patch_eval` /
+   `test_h_fails_pending_then_success_on_next_row` の fake_h スタブが relaxed を受けずFAIL →
+   スタブへ `*, relaxed=False` を追加(機械的追随・期待値不変)。また計画書掲載のテストコードの
+   fake_targets が async def だったが本物 select_jev_targets は同期純関数のため同期 def へ修正。
+3. **Task 6(機械的追随の内訳・期待値の意味は不変)**: `_patch`/`fake_promote` の改名追随
+   (_try_promote→try_promote)・`_latch_row` の6要素化(group_candidate_id・score追加)・
+   `_patch_promote` の fake_read_parts idsリスト化・`_count_daily_notifications` 試験の
+   u0/u1→users(uuid_array_text形式)・`test_record_score_conflict_returns_early` の
+   読取順序変更(tx前読取化)追随・task_done/test_try_promote系のタプル形式修正。
+4. **Task 6**: 計画§9-8-5本文は `_nearby_in_tx` の戻り値を latch_id へ代入するが、これは
+   「nearbyはtry_promoteしない」(同docstring)と矛盾(nearby行までproposed化する)ため
+   代入を外した。既存試験 `test_nearby_path_creates_candidate_and_notifies` の観測結果不変。
+5. **Task 8**: `d07_allows` のテストスタブを async def にすると coroutine が truthy になり
+   `not` 判定をすり抜けるため同期 def とした(本物は同期純関数)。
+   `_finalize` 内の未使用変数 `aggregate_score` はDB側 `aggregate_score IS NULL` ガードが
+   判定を担うため削除(ruff F841/B007)。
+6. **Task 9**: test_process_deleted_closes_group_candidates の順序検証はSQL文字列内の
+   index比較ではなくcalls順(2=match_candidates→3=group_candidates)で証明。
+7. **integration試験6の構成**: 計画書コメントの「{A,B,C}と{D,E}」は2人集合が成立しない
+   (GROUP_MIN=3)ため「{A,B,C}(高)と{A,B,D}(低)」のメンバー重複2集合へ読み替え
+   (D-06上位1集合の検証意図は不変・a×bは共有ペアとして高値)。
+8. **Task 4 のExpectedとの差異(記録)**: 計画Expected「新規9件FAIL」に対し実際は
+   7件FAIL+2件PASS(1対1単独入力の配分試験2件は現行実装でも通る性質)。Task 3 も同様に
+   2件FAIL+1件PASS(回帰ピン)。いずれも実装後に全件PASSで固定値どおり。
+
+## 修正パス(supervisor裁定 2026-09-29・設計補完として3件を実装)
+
+最終レビューの引継ぎ3件をスーパーバイザーが「本単位で修正してよい」と裁定
+(design.md/plan.md本体は変更せず本節に記録)。TDD(実装前にテスト)で対応:
+
+1. **[Important-1] JevWorker起点読取のグループfallback**(`jev.py _phase1`):
+   `load_origin` が SKIP_PARTICIPANTS のときのみ `group_engine.load_group_origin`
+   (max>=3ガード)へフォールバックして再読取し、それもskipならno-op。
+   origin.pyは変更なし(§5禁止どおり)。module属性経由の差し替え規律も既存どおり
+   (`jev_mod.group_engine_mod.load_group_origin`)。unit試験3件追加
+   (SKIP_PARTICIPANTS起点のfallback評価開始・min2max4起点はfallback不呼出・
+   両ガードskipでno-op)。純min>=3集合(受入#18の下地)が評価停滞しなくなる。
+2. **[Important-2] finalizeのD-06順処理**(`group_engine.py finalize`):
+   読取フェーズ(検査・世代リセット・全ペア揃い・H再検証・材料読取・score計算)で
+   確定対象(`_ReadyGroup`)を集め、D-06順(aggregate降順→集合サイズ昇順→
+   intent_ids辞書順)にソートしてから集約tx+latches INSERT+try_promoteを実行。
+   try_promoteの上位チェックは作成済みlatchesを見るため、高位→低位の処理順で
+   下位が正しく抑制される(同一実行内の順序依存を解消)。unit試験2件追加
+   (低→高・高→低の両並びで高位先の処理順)。
+3. **[Important-3] select_jev_rowsの選択除外**(`layer4._SELECT_JEV_ROWS`):
+   WHEREへ「is_group OR 両端Intentともparticipantsが2∈[min,max]」を追加
+   (起点側 o・相手側 p。相手idはORDER BYと同一のCASE式)。未所属のmin>=3ペア
+   (strict H再検証が必ず失敗しpending永続する行)が1対1上位4枠を消費しなくなる。
+   unit試験1件追加(SQLピン)。
+4. **integration試験11を追加**(収集のみ・計11件): 純min=3集合のE2E下地
+   (3名ともmin=3/max=4→生成→fallback起点読取→全ペア評価→集約→latches)。
+   Important-1の実DB証明はスーパーバイザー検証時のこの試験が担う。
+5. **既存integration試験の評価呼び出し修正**(test_1/3/7/9/10・収集のみで
+   実行してこなかったため未発覚だった潜在FAIL): JevWorkerは起点が端点のペア行
+   しか選ばないため、種以外のメンバー間ペア(b×c等)の評価には各メンバー起点の
+   JevWorker実行が必要(design §2.5「評価は複数イベントにまたがって進む」)。
+   `_jev_eval_all` ヘルパー(全メンバー起点でhandle)へ統一。あわせて test_3 の
+   guard制限を種起点の選択対象3件に合わせ2へ・test_4 の配分期待値を実挙動
+   (種起点1イベントの選択対象は1対1a×P6件+グループa×G3件 → 1対1 5+グループ 3)
+   へ修正。
+
+コミット: fix 3件+integration(fccb282以降・コミット一覧参照)。
+
+## 最終レビュー結果(ブランチ全体・外部レビュアー1名・上記修正パスの元)
+
+Critical なし。規律違反(Clock・text()/CAST・uuid[]形式・変更禁止ファイル・alembic/docs)なし・
+layer1分割のバイト一致を機械検証済み。Review Focus 5点はすべて「防御あり」
+(unit試験+SQLピンの全数確認)。ただし**設計(design)・計画書の確定値どおりの実装から
+生じる重要な指摘3件**があり、いずれも修正が計画スコープ外の判断
+(design §2.4への追加・§9-3 SQL全文変更等)を要するため「計画書にない判断は勝手に
+決めず報告欄に記録」の規律どおり記録し(上記「修正パス」でsupervisor裁定後に対応):
+
+1. **[Important] JevWorkerの起点読取が1対1ガードのまま**(jev.py:208・origin.py:119-120)。
+   design §2.2 は「min>=3がPoolに永久に入らない」問題を案Bで解決したが、JevWorker._phase1 の
+   `origin.load_origin`(人数ガード 2∈[min,max])は§2.4の議論対象外だった。
+   **全員 min>=3 の集合**はどのメンバー起点でもJevWorkerがno-opになりjev_resultが
+   永久に揃わない(candidate停滞・受入#18の下地の1入力クラス)。
+   min2メンバーを1人でも含む集合はそのメンバー起点の評価で回収されるため影響は
+   「純min>=3集合」に限られる。修正案: JevWorker起点読取の人数ガード緩和
+   (load_group_origin 相当への差替え or load_origin への分岐追加)。
+2. **[Important] D-06上位1集合の同一実行内の順序依存**(group_engine._SELECT_PENDING_GROUPS
+   にORDER BYなし)。同一起点が属す重複2集合が同一finalize実行で低→高の順に処理されると
+   両方proposed化される(try_promoteの比較対象は「作成済みlatches」のため)。
+   解釈記録6「メンバー重複集合の上位1**近似**」の承認済み設計の限界の具体化。
+   修正案: finalizeで全対象のscore計算後にD-06順へソートしてから集約tx+try_promote。
+3. **[Important] Pool×起点ペア(手順4b)の未所属pending行が1対1上位4枠を圧迫しうる**
+   (min>=3のPool候補が集合に入らなかった場合、pair_kind=one_on_one扱いで選択されるが
+   strict H再検証が必ず失敗しpending永続・LLM課税なし)。design §2.4「Jev予算を
+   人数不成立ペアに浪費しない」は課税面では守られるが、1対1最低4件の実効が減りうる。
+   修正案: 1対1分類に両端人数条件を課す等。
+
+Minor(deferred・報告のみ): (a) _SELECT_GROUP_PAIRS にORDER BYなし(pair_mapの同ペア
+複数バージョン行の選択がSQL意味論上不定・現実は新行が勝つ) (b) 世代リセット後の
+メンバー間ペア再生成は「相手が起点のPool上位15に入る」経路のみ(INSERT競合skip時は
+直接更新されない) (c) aggregate計算済み・閾値未満の集合も互換行列SQL・geo逆転等を
+毎評価で実行(早期continue可能) (d) ON CONFLICT昇格でlatches.group_candidate_idが
+旧gidのまま残りうる(M3回答系での参照不一致の恐れ)+_PAIR_COMPATのgeo_radius_m
+COALESCE非対称(§9-3のSQL本文どおり)。
+
+Declined to judge: uuid[]のON CONFLICT/`@>`/`&&`の実DB挙動(§5-12・スーパーバイザー
+検証時のintegration試験1・6・9が担う)・HNSW 2回の実行時間(§5-13・試験2のprintで
+記録)・select_jev_targetsの「1対1<4件時にグループへ8枠全部」の解釈(design §2.4
+疑似コードどおり)。
+
+## スーパーバイザー検証結果(2026-09-29・マージ前)
+
+- test-ci初回: **20件失敗**(groupengine 11・既存latchengine 8・test_geo headピン1)→
+  原因診断のうえsupervisorが直接修正(ff771ed):
+  1. **実装欠陥1件(本体)**: uuid[]バインドの文字列リテラル形式がasyncpgで不通
+     (「a sized iterable container expected」)。計画§9-14の規律がws-6実態
+     (要素毎スカラーbind)と異なる読みだった。uuid_array(list返し)へ統一
+  2. **試験設計7系統**: visibility既定・貪欲法の3人確定による4人集合前提のずれ×2・
+     D-06重複2集合の非決定性(距離分離でPool固定)・DELETE認証もれ・guard拒否の
+     回復不能性(llm_failure型へ)・(2,4)起点の1対1干渉(D-08同時3件の非決定的抑制)・
+     latches照会のsorted化・test_geo headピン0005もれ
+- 修正後: lint緑・unit 965 passed・**test-ci 1125 passed(1030+unit84+integration11・exit 0)**
+- migrate: 0005適用確認(alembic head=0005・uq_group_candidates_intent_ids_open存在)
+- design §5-12(uuid[]のON CONFLICT/@>/&&推論): integration試験1・6・9の実行で実証
+  (1125 passedに含まれる)。§5-13(HNSW検索2回の実行時間): 試験2の所要で確認
+  (groupengine 11件全体39秒・1件あたりLayer5枠≦2秒に余裕)
+- 残存: ユーザー/match_candidates/notifications/latch_status_events=0件。
+  デバッグ中の失敗実行由来のgroup_candidates 47・latches 94(orphan)を掃除し
+  group_candidates/latches/calibration_records=0件。geo実データ復旧済み

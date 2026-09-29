@@ -4,7 +4,8 @@ SQL+PostGISのみ(AI不使用)。全条件を WHERE 句の確定文字列に集�
 Layer 2 が同一文字列を使う(層順を1クエリで体現・試験と本番のWHERE乖離
 なし — design §2.1)。pass/fail判定はDBへ一任しPythonで再判定しない。
 visibilityは判定対象外(06 §2)。flexibilityはMVPで常にnullのため実装
-しない(design §1.4-5)。
+しない(design §1.4-5)。design §2.2: BASE(人数除く)はグループPool検索・
+緩和H再検証が使う。
 """
 
 from __future__ import annotations
@@ -31,8 +32,9 @@ _BUDGET_PAIR = """(
         END
     )"""
 
-# Layer 1 の全条件(06 §2・design §2.6)。layer2 が同一文字列を使用する
-LAYER1_WHERE = f"""
+# design §2.2: 人数行のみを分離した最小分割。HEAD+ONE_ON_ONE+TAIL は
+# 従来の LAYER1_WHERE とバイト同一(1対1検索の文字列不変・承認事項1)
+LAYER1_WHERE_HEAD = f"""
     i.status = 'active'
     AND i.embedding IS NOT NULL
     AND i.user_id <> CAST(:origin_user_id AS uuid)
@@ -50,9 +52,11 @@ LAYER1_WHERE = f"""
             AS double precision))
     AND ({_BUDGET_PAIR} IS NULL
          OR {_BUDGET_PAIR} >= {PAIR_BUDGET_MIN_YEN})
-    AND i.participants_min <= 2
+"""
+ONE_ON_ONE_PARTICIPANTS = """    AND i.participants_min <= 2
     AND i.participants_max >= 2
-    AND NOT EXISTS (
+"""
+LAYER1_WHERE_TAIL = """    AND NOT EXISTS (
         SELECT 1 FROM blocks b
         WHERE (b.blocker_id = CAST(:origin_user_id AS uuid)
                AND b.blocked_id = i.user_id)
@@ -68,6 +72,12 @@ LAYER1_WHERE = f"""
         )
     )
 """
+# 人数行(06 §2「2 ∈ [min_i, max_i] が双方」)を除いたLayer 1条件。
+# グループPool検索(group_engine._POOL_SEARCH)と緩和H再検証
+# (layer4._H_RECHECK_GROUP)が人数を差し替えて使う(design §2.2)
+LAYER1_WHERE_BASE = f"{LAYER1_WHERE_HEAD}{LAYER1_WHERE_TAIL}"
+# Layer 1 の全条件(06 §2・design §2.6)。layer2 が同一文字列を使用する
+LAYER1_WHERE = f"{LAYER1_WHERE_HEAD}{ONE_ON_ONE_PARTICIPANTS}{LAYER1_WHERE_TAIL}"
 
 _SELECT_HARD = text(f"""
     SELECT i.id, i.version, i.user_id

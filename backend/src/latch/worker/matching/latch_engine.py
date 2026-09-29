@@ -3,7 +3,9 @@
 latch_score計算(L = H × MutualScore × C)・latches行生成/昇格・D-07再提案
 制御・nearby存在通知・D-08上限検査・75分ルール・D-05回答期限式・提示順drain。
 永続化はtext()生SQLのみ(jev.pyと同一形式)。時刻はClock経由のみ。
-ws-7拡張点: latches生成・proposal生成・drain・try_promoteは1対1構成。
+ws-7: 1対1経路はグループ所属ペアを除外(_SELECT_TARGETS)し、try_promoteは
+|S|人(2〜4要素)へ対応・グループlatchesのみD-06重複上位チェックを行う。
+_evaluate_pairは読取tx前+書込tx1の統合構成(I-1対策・承認事項4)。
 intent_ids正規化はsorted(集合側も同様に正規化する)。
 """
 
@@ -19,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from latch.core.clock import Clock
-from latch.worker.matching import latch_calc, layer4
+from latch.worker.matching import group_calc, latch_calc, layer4
 from latch.worker.matching import origin as origin_mod
 from latch.worker.matching import proposal as proposal_mod
 from latch.worker.matching.proposal import LatchIntentInputs
@@ -30,8 +32,9 @@ NOTIFICATION_PROPOSAL = "proposal"
 NOTIFICATION_NEARBY = "nearby_candidate"
 
 # フェーズ1: 起点に紐づく「計算済みでない評価行」(design §2.2。
-# 起点version一致・latch_score IS NULL(冪等ガード)・相手version=相手現行のEXISTS)
-_SELECT_TARGETS = text("""
+# 起点version一致・latch_score IS NULL(冪等ガード)・相手version=相手現行のEXISTS。
+# グループ所属ペアは対象外(design §2.7-1 — 集合評価と1対1評価の混線防止)
+_SELECT_TARGETS = text(f"""
     SELECT mc.id, mc.intent_a_id, mc.intent_b_id, mc.intent_a_version,
            mc.intent_b_version, mc.jev_result, mc.cheap_judge_score
     FROM match_candidates mc
@@ -50,6 +53,7 @@ _SELECT_TARGETS = text("""
             AND p.version = (CASE WHEN mc.intent_a_id = CAST(:origin AS uuid)
                                   THEN mc.intent_b_version
                                   ELSE mc.intent_a_version END))
+      AND NOT {layer4.GROUP_PAIR_EXISTS}
     ORDER BY mc.cheap_judge_score DESC NULLS LAST,
              (CASE WHEN mc.intent_a_id = CAST(:origin AS uuid)
                    THEN mc.intent_b_id ELSE mc.intent_a_id END) ASC
@@ -135,10 +139,11 @@ _INSERT_NOTIFICATION = text("""
 """)
 
 # D-08日次上限カウント(真実はnotifications・design §2.6。0時リセットは
-# day_start/day_nextの日付条件の動的切り替えで成立 — カウンタリセットジョブ不要)
+# day_start/day_nextの日付条件の動的切り替えで成立 — カウンタリセットジョブ不要。
+# |S|人対応: user_id = ANY(uuid[])(design §2.7-2)
 _COUNT_DAILY_NOTIFICATIONS = text("""
     SELECT user_id, COUNT(*) FROM notifications
-    WHERE user_id IN (CAST(:u0 AS uuid), CAST(:u1 AS uuid))
+    WHERE user_id = ANY(CAST(:users AS uuid[]))
       AND type IN ('proposal', 'nearby_candidate')
       AND created_at >= CAST(:day_start AS timestamptz)
       AND created_at < CAST(:day_next AS timestamptz)
@@ -152,11 +157,22 @@ _COUNT_OPEN_PROPOSED = text("""
       AND intent_ids @> ARRAY[CAST(:intent_id AS uuid)]
 """)
 
-# try_promote手順1: 行ロック(design §2.6・06 §6の直列化方式)
+# try_promote手順1: 行ロック(design §2.6・06 §6の直列化方式。
+# ws-7: group_candidate_id・scoreを追加 — D-06上位チェック用)
 _SELECT_LATCH_FOR_UPDATE = text("""
-    SELECT id, status, intent_ids, expires_at
+    SELECT id, status, intent_ids, expires_at, group_candidate_id, score
     FROM latches WHERE id = CAST(:latch_id AS uuid)
     FOR UPDATE
+""")
+
+# D-06通知順序: メンバーが重なる開いている集合(design §2.6)
+_SELECT_HIGHER_GROUP_LATCH = text("""
+    SELECT l.score, l.intent_ids
+    FROM latches l
+    WHERE l.status IN ('candidate', 'proposed', 'partial_accept')
+      AND l.group_candidate_id IS NOT NULL
+      AND l.id <> CAST(:self AS uuid)
+      AND l.intent_ids && CAST(:my_ids AS uuid[])
 """)
 
 # 75分/deadline<=nowの破棄(条件付きUPDATE — design §2.6手順2)
@@ -411,15 +427,17 @@ async def _count_daily_notifications(
     conn, user_ids: list[uuid.UUID], day_start, day_next
 ) -> dict[uuid.UUID, int]:
     """D-08日次上限カウント(真実はnotifications・design §2.6・0時リセットは
-    日付条件の切替で成立)。user_idsは0〜2要素(片方muted・nearby単独は1要素。
-    1要素のときu1=u0の同一INで意味等価)。空listはSQLを実行せず{}(上限消費なし)。"""
+    日付条件の切替で成立)。user_idsは0〜4要素(2者または3〜4者の参加者)。
+    空listはSQLを実行せず{}(上限消費なし)。"""
     if not user_ids:
         return {}
-    u0 = user_ids[0]
-    u1 = user_ids[1] if len(user_ids) > 1 else u0
     res = await conn.execute(
         _COUNT_DAILY_NOTIFICATIONS,
-        {"u0": u0, "u1": u1, "day_start": day_start, "day_next": day_next},
+        {
+            "users": group_calc.uuid_array(user_ids),
+            "day_start": day_start,
+            "day_next": day_next,
+        },
     )
     rows = res.fetchall()
     return {_coerce_uuid(uid): int(cnt) for uid, cnt in rows}
@@ -432,23 +450,45 @@ async def _count_open_proposed(conn, intent_id: uuid.UUID) -> int:
 
 
 async def _select_latch_for_update(conn, latch_id: uuid.UUID) -> tuple | None:
-    """try_promote手順1: 行ロック(id, status, intent_ids, expires_at)。"""
+    """try_promote手順1: 行ロック(id, status, intent_ids, expires_at,
+    group_candidate_id, score)。"""
     res = await conn.execute(_SELECT_LATCH_FOR_UPDATE, {"latch_id": latch_id})
     row = res.first()
     if row is None:
         return None
-    return (_coerce_uuid(row[0]), row[1], [_coerce_uuid(x) for x in row[2]], row[3])
+    return (
+        _coerce_uuid(row[0]),
+        row[1],
+        [_coerce_uuid(x) for x in row[2]],
+        row[3],
+        row[4],
+        row[5],
+    )
 
 
-async def _read_participants(
-    conn, a_id: uuid.UUID, b_id: uuid.UUID
-) -> list[Participant]:
-    """両者の_SELECT_INTENT_INPUTS読取(expiry/level/time_startを返す)。
+async def _has_higher_group_latch(
+    conn, self_id: uuid.UUID, self_ids: list[uuid.UUID], self_score: float
+) -> bool:
+    """自分より上位(aggregate降順→サイズ昇順→辞書順)の重複集合があるか。"""
+    res = await conn.execute(
+        _SELECT_HIGHER_GROUP_LATCH,
+        {"self": self_id, "my_ids": group_calc.uuid_array(self_ids)},
+    )
+    for score, ids in res.fetchall():
+        other_ids = sorted(_coerce_uuid(x) for x in ids)
+        if group_calc.dominates(self_score, self_ids, float(score), other_ids):
+            return True
+    return False
 
-    行なし・expires_at NULLのIntentは除外(呼び出し側が2要素未満で対象外化)。
+
+async def _read_participants(conn, intent_ids: list[uuid.UUID]) -> list[Participant]:
+    """全参加者の_SELECT_INTENT_INPUTS読取(2〜4要素)。
+
+    行なし・expires_at NULLのIntentは除外(呼び出し側が
+    len(parts) < len(intent_ids) で対象外化)。順序はintent_idsどおり。
     """
     out: list[Participant] = []
-    for intent_id in (a_id, b_id):
+    for intent_id in intent_ids:
         row = (
             (await conn.execute(_SELECT_INTENT_INPUTS, {"intent_id": intent_id}))
             .mappings()
@@ -501,7 +541,7 @@ class LatchEngine:
     同一部品を呼ぶ)。冪等: 選択SQLのlatch_score IS NULL・ON CONFLICT・
     条件付きUPDATE。モジュール属性経由で origin/layer4/latch_calc/proposal
     を呼ぶ(runnerと同一規律・unit試験がmonkeypatchで差し替え可能)。
-    ws-7拡張点: latches生成・proposal・drain・try_promoteは1対1構成。
+    try_promote(latch_id) はpublic(GroupEngine.finalizeが呼ぶ・ws-7)。
     """
 
     def __init__(self, *, engine: AsyncEngine, clock: Clock, geo=None) -> None:
@@ -528,30 +568,25 @@ class LatchEngine:
         await self._drain()
 
     async def _evaluate_pair(self, org, row: LatchTargetRow) -> None:
-        """1ペア: H再検証→スコア計算→latches生成/昇格 or nearby(design §2.2〜2.7)。"""
+        """1ペア: 材料読取(tx前)→tx1(H再検証+退避つきUPDATE+D-07+latches+events)。
+
+        I-1対策(design §2.7-4・承認事項4): 失敗しうる読取をtx前に済ませ、
+        計算(latch_score退避UPDATE)と生成物(latches INSERT・status_events)を
+        同一txで書く。読取段階の失敗はlatch_score NULLのまま残るため、
+        復旧後の再handleで再選択される(ws-6の引継ぎ空白の構造解消)。
+        """
         now = self._clock.now()
         peer_id = (
             row.intent_b_id if row.intent_a_id == org.intent_id else row.intent_a_id
         )
         a_id, b_id = sorted((org.intent_id, peer_id))
-        # tx1: H再検証 + 退避つきlatch_score UPDATE(design §2.2)
-        async with self._engine.begin() as conn:
-            if not await layer4.hard_constraint_holds(conn, org, peer_id):
-                await _close_h_broken(conn, row.row_id, now)
-                return
-            mutual = min(
-                float(row.jev_result["would_a_accept_b"]),
-                float(row.jev_result["would_b_accept_a"]),
-            )
-            score = latch_calc.LATCH_C * mutual
-            rec = await _record_score(conn, row.row_id, score, now)
-        if rec is None:
-            return
-        _, prev_latch_score = rec
-        # tx外の読取: proposal入力・geo中点・D-07履歴(短tx内包)
+        # tx前の読取(全材料・短tx内包): peer入力が欠けていれば書かない
         origin_inputs = await _read_intent_inputs(self._engine, org.intent_id)
         peer_inputs = await _read_intent_inputs(self._engine, peer_id)
         if origin_inputs is None or peer_inputs is None:
+            logger.info(
+                "latch inputs missing row_id=%s peer_id=%s", row.row_id, peer_id
+            )
             return
         target = latch_calc.pair_target_time(
             origin_inputs.time_start, peer_inputs.time_start
@@ -560,177 +595,170 @@ class LatchEngine:
         area = await self._area_name(origin_inputs, peer_inputs)
         responses = await _read_latch_responses(self._engine, a_id, b_id)
         has_no, latest_defer_at = latch_calc.d07_history_inputs(responses)
+        mutual = min(
+            float(row.jev_result["would_a_accept_b"]),
+            float(row.jev_result["would_b_accept_a"]),
+        )
+        score = latch_calc.LATCH_C * mutual
         deadline0 = latch_calc.response_deadline(now, target, min_expires)
-        if score >= latch_calc.LATCH_THRESHOLD:
-            await self._proposal_path(
-                a_id=a_id,
-                b_id=b_id,
-                score=score,
-                prev=prev_latch_score,
-                origin_inputs=origin_inputs,
-                peer_inputs=peer_inputs,
-                target=target,
-                min_expires=min_expires,
-                area=area,
-                deadline0=deadline0,
-                has_no=has_no,
-                latest_defer_at=latest_defer_at,
-                now=now,
-            )
-            return
-        await self._nearby_path(
-            a_id=a_id,
-            b_id=b_id,
-            score=score,
-            origin_inputs=origin_inputs,
-            peer_inputs=peer_inputs,
-            min_expires=min_expires,
-            deadline0=deadline0,
-            has_no=has_no,
-            now=now,
-        )
-
-    async def _proposal_path(
-        self,
-        *,
-        a_id,
-        b_id,
-        score,
-        prev,
-        origin_inputs,
-        peer_inputs,
-        target,
-        min_expires,
-        area,
-        deadline0,
-        has_no,
-        latest_defer_at,
-        now,
-    ) -> None:
-        """閾値超過: D-07判定→latches INSERT/昇格→try_promote(§2.3〜2.4)。"""
-        allowed = latch_calc.d07_allows(
-            has_no_response=has_no,
-            latest_defer_at=latest_defer_at,
-            now=now,
-            target_time=target,
-            new_score=score,
-            prev_latch_score=prev,
-        )
-        if not allowed:
-            logger.info("latch d07 denied a=%s b=%s", a_id, b_id)
-            return
-        proposal = proposal_mod.build_proposal(
-            origin=origin_inputs,
-            peer=peer_inputs,
-            score=score,
-            area_name=area,
-        )
+        # tx1: H再検証(SELECT) + 退避つきlatch_score UPDATE + 生成物
+        latch_id: uuid.UUID | None = None
         async with self._engine.begin() as conn:
-            latch_id = await _insert_latch(
-                conn,
-                a_id=a_id,
-                b_id=b_id,
-                proposal=proposal,
-                score=score,
-                deadline=deadline0,
-                expires=min_expires,
-                now=now,
-            )
-            if latch_id is not None:
-                await _insert_latch_event(conn, latch_id, None, "candidate", None, now)
-            else:
-                # ON CONFLICT: 既存開いている行の昇格判定(§2.3)
-                found = await _find_open_latch(conn, a_id, b_id)
-                if found is None:
-                    return
-                lid, status = found
-                if status != "candidate":
-                    logger.info(
-                        "latch open row exists latch_id=%s status=%s", lid, status
-                    )
-                    return
+            if not await layer4.hard_constraint_holds(conn, org, peer_id):
+                await _close_h_broken(conn, row.row_id, now)
+                return
+            rec = await _record_score(conn, row.row_id, score, now)
+            if rec is None:
+                return
+            _, prev_latch_score = rec
+            if score >= latch_calc.LATCH_THRESHOLD:
                 if not latch_calc.d07_allows(
                     has_no_response=has_no,
                     latest_defer_at=latest_defer_at,
                     now=now,
                     target_time=target,
                     new_score=score,
-                    prev_latch_score=prev,
+                    prev_latch_score=prev_latch_score,
                 ):
-                    logger.info("latch d07 denied on promotion a=%s b=%s", a_id, b_id)
+                    logger.info("latch d07 denied a=%s b=%s", a_id, b_id)
                     return
-                if not await _update_for_promotion(
-                    conn, lid, score=score, proposal=proposal, deadline=deadline0
-                ):
-                    return
-                latch_id = lid
-        await self._try_promote(latch_id)
+                proposal = proposal_mod.build_proposal(
+                    origin=origin_inputs,
+                    peer=peer_inputs,
+                    score=score,
+                    area_name=area,
+                )
+                latch_id = await _insert_latch(
+                    conn,
+                    a_id=a_id,
+                    b_id=b_id,
+                    proposal=proposal,
+                    score=score,
+                    deadline=deadline0,
+                    expires=min_expires,
+                    now=now,
+                )
+                if latch_id is not None:
+                    await _insert_latch_event(
+                        conn, latch_id, None, "candidate", None, now
+                    )
+                else:
+                    found = await _find_open_latch(conn, a_id, b_id)
+                    if found is None:
+                        return
+                    lid, status = found
+                    if status != "candidate":
+                        logger.info(
+                            "latch open row exists latch_id=%s status=%s",
+                            lid,
+                            status,
+                        )
+                        return
+                    if not latch_calc.d07_allows(
+                        has_no_response=has_no,
+                        latest_defer_at=latest_defer_at,
+                        now=now,
+                        target_time=target,
+                        new_score=score,
+                        prev_latch_score=prev_latch_score,
+                    ):
+                        logger.info(
+                            "latch d07 denied on promotion a=%s b=%s", a_id, b_id
+                        )
+                        return
+                    if not await _update_for_promotion(
+                        conn, lid, score=score, proposal=proposal, deadline=deadline0
+                    ):
+                        return
+                    latch_id = lid
+            else:
+                # nearbyはtry_promoteしない(candidateのまま・引用#9)
+                await self._nearby_in_tx(
+                    conn,
+                    a_id=a_id,
+                    b_id=b_id,
+                    score=score,
+                    origin_inputs=origin_inputs,
+                    peer_inputs=peer_inputs,
+                    deadline0=deadline0,
+                    min_expires=min_expires,
+                    has_no=has_no,
+                    now=now,
+                )
+        if latch_id is not None:
+            await self.try_promote(latch_id)
 
-    async def _nearby_path(
+    async def _nearby_in_tx(
         self,
+        conn,
         *,
         a_id,
         b_id,
         score,
         origin_inputs,
         peer_inputs,
-        min_expires,
         deadline0,
+        min_expires,
         has_no,
         now,
-    ) -> None:
-        """閾値未満: nearby_also参加者への存在通知(§2.7・引用#9)。"""
+    ) -> uuid.UUID | None:
+        """閾値未満: nearby_also参加者への存在通知(§2.7・引用#9・集約tx内)。
+
+        戻り値は「新規INSERT成功ならlatch_id・開いている行あり/対象なしはNone」。
+        nearbyはtry_promoteしない(candidateのまま)。
+        """
         notify_targets = [
             inp
             for inp in (origin_inputs, peer_inputs)
             if inp.notification_level == "nearby_also"
         ]
         if not notify_targets:
-            return
+            return None
         if has_no:
-            return  # 存在通知も出さない(D-07の一貫適用・設計確定)
-        async with self._engine.begin() as conn:
-            latch_id = await _insert_latch(
-                conn,
-                a_id=a_id,
-                b_id=b_id,
-                proposal=proposal_mod.nearby_proposal(),
-                score=score,
-                deadline=deadline0,
-                expires=min_expires,
-                now=now,
-            )
-            if latch_id is None:
-                return  # 開いている行あり・閾値未満評価では既存行を更新しない
-            await _insert_latch_event(conn, latch_id, None, "candidate", None, now)
-            day_start = layer4.jst_day_start(self._clock.jst_date())
-            day_next = day_start + timedelta(days=1)
-            counts = await _count_daily_notifications(
-                conn, [u.user_id for u in notify_targets], day_start, day_next
-            )
-            for u in notify_targets:
-                if counts.get(u.user_id, 0) < latch_calc.D08_DAILY_LIMIT:
-                    await _insert_notification(
-                        conn, u.user_id, NOTIFICATION_NEARBY, latch_id, now
-                    )
-                else:
-                    logger.info("latch nearby daily limit uid=%s", u.user_id)
+            return None  # 存在通知も出さない(D-07の一貫適用・設計確定)
+        latch_id = await _insert_latch(
+            conn,
+            a_id=a_id,
+            b_id=b_id,
+            proposal=proposal_mod.nearby_proposal(),
+            score=score,
+            deadline=deadline0,
+            expires=min_expires,
+            now=now,
+        )
+        if latch_id is None:
+            return None  # 開いている行あり・閾値未満評価では既存行を更新しない
+        await _insert_latch_event(conn, latch_id, None, "candidate", None, now)
+        day_start = layer4.jst_day_start(self._clock.jst_date())
+        day_next = day_start + timedelta(days=1)
+        counts = await _count_daily_notifications(
+            conn, [u.user_id for u in notify_targets], day_start, day_next
+        )
+        for u in notify_targets:
+            if counts.get(u.user_id, 0) < latch_calc.D08_DAILY_LIMIT:
+                await _insert_notification(
+                    conn, u.user_id, NOTIFICATION_NEARBY, latch_id, now
+                )
+            else:
+                logger.info("latch nearby daily limit uid=%s", u.user_id)
+        return latch_id
 
-    async def _try_promote(self, latch_id: uuid.UUID) -> None:
+    async def try_promote(self, latch_id: uuid.UUID) -> None:
         """提示判定(1tx・design §2.6手順1〜9・Review Focus 4の手順順序)。
 
         手順: 行ロック→(now採取・参加者読取)→75分ルール→expires_at切れ
-        対象外化→D-05再計算(deadline<=nowは75分と同一扱い)→D-08日次→
-        D-08同時→条件付きproposed遷移→イベント+notifications(muted除外)。
-        上限超過はcandidateのままreturn(破棄しない — 引用#8)。
+        対象外化→D-06重複上位チェック(グループのみ)→D-05再計算(deadline<=nowは
+        75分と同一扱い)→D-08日次→D-08同時→条件付きproposed遷移→
+        イベント+notifications(muted除外)。上限超過はcandidateのままreturn
+        (破棄しない — 引用#8)。ws-7で|S|人対応(2〜4要素のintent_ids)。
         """
         async with self._engine.begin() as conn:
             row = await _select_latch_for_update(conn, latch_id)
             if row is None or row[1] != "candidate":
                 return
             now = self._clock.now()  # FOR UPDATE取得後に採取
-            parts = await _read_participants(conn, row[2][0], row[2][1])
-            if len(parts) < 2:
+            parts = await _read_participants(conn, row[2])
+            if len(parts) < len(row[2]):
                 return  # 参加Intent欠損(削除等)は対象外
             target = max(p.time_start for p in parts)
             min_expires = min(p.expires_at for p in parts)
@@ -744,6 +772,9 @@ class LatchEngine:
             # expires_at切れはexpiry_sweeper(M3-3)の担当・ここでは対象外化のみ
             if row[3] <= now:
                 return
+            if row[4] is not None:  # グループlatchesのみ(design §2.6)
+                if await _has_higher_group_latch(conn, latch_id, row[2], float(row[5])):
+                    return  # candidateのまま(上位の行が閉じた後のdrainで提示)
             deadline = latch_calc.response_deadline(now, target, min_expires)
             if deadline <= now:
                 # 導出期限が通知時刻を過ぎない場合は通知しない(引用#4・防御)
@@ -787,7 +818,7 @@ class LatchEngine:
         now = self._clock.now()
         ids = await _drain_candidates(self._engine, now, latch_calc.LATCH_THRESHOLD)
         for latch_id in ids:
-            await self._try_promote(latch_id)
+            await self.try_promote(latch_id)
 
     async def _area_name(self, a: LatchIntentInputs, b: LatchIntentInputs):
         """geo中点の逆転ジオコーディング(承認済み解釈・読取のみtx外)。"""
