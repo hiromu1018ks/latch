@@ -195,10 +195,10 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **687件を約5秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **787件を約5.5秒**(`make test`)。フロントエンドも
   **81件を約0.6秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
-- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 131件を含め計
-  **818件を約30秒**
+- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 139件を含め計
+  **926件を約3分**(2026-09-29に実行して確認しました)
 
 数秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
 「壊して試す」学習法(Lab 2)が気軽にできます。この速さ自体が、このプロジェクトの
@@ -267,13 +267,14 @@ latch/
 | `make ps` | 5サービスの状態一覧。`(healthy)` は健康診断合格の印 |
 | `make logs` | 5サービスのログを流し見る。Ctrl+Cで停止 |
 | `make lint` | コードの書式・静的検査(ruff)。コミット前に緑を確認 |
-| `make test` | unit テスト687件。約5秒。最もよく使う |
+| `make test` | unit テスト787件。約5.5秒。最もよく使う |
 | `make test-ci` | unit+integration。実DB・実Redis・実Pub/Subエミュレータを使う。実行中は常設workerを一時停止し、終わると復帰する(第9章9.8) |
 | `make migrate` | DB定義を最新版に更新(Alembic) |
 | `make geo-import` | 鹿児島の地物データをDBへ取り込み(数分) |
 | `make geo-verify` | 「天文館」の正転・逆転の動作確認 |
 | `make g1-gate` | G1精度ゲート(実APIでParserの精度を測定)。`.env` に鍵と `LATCH_LLM_MODE=real` が必要。手順は `howtos/g1-gate.md` |
 | `make embed-smoke` | Embeddingの実APIスモーク(1呼び出し・約$0.000015)。`.env` に `LATCH_LLM_MODE=real` と `LATCH_GEMINI_API_KEY` が必要(第10章10.4) |
+| `make jev-smoke` | Jevの実APIスモーク(1呼び出し・課金)。`.env` に `LATCH_LLM_MODE=real` と3つの鍵が必要。`FALLBACK=1` でフォールバック側の直接呼び出し(第13章13.8) |
 | `cd frontend && npm install` | フロントエンドの依存を導入。初回と、`package.json` が変わった後に実行 |
 | `cd frontend && npm run dev` | 画面の開発サーバーを起動(http://localhost:5173/)。`/v1` をapiへ転送する |
 | `cd frontend && npm test` | フロントエンドのunit テスト81件。約0.6秒 |

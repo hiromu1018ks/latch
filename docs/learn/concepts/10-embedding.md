@@ -215,7 +215,9 @@ def _http_options():
 なお、ci環境(compose)のworkerは今も `llm_mode=stub` です。鍵をciに渡さない構成を
 保ったまま、Embedding系統だけをrealに切り替える構築関数 `build_embedding_gateway`
 が新設されました(gateway.py)。Parser系統のreal化を壊さずに系統単位で差し替える、
-第5章で読んだ「差し替え単位=プロバイダ」の考え方そのものです。stubでも
+第5章で読んだ「差し替え単位=プロバイダ」の考え方そのものです。その後のws-5で
+Jev系統のreal化が加わり、この関数はEmbeddingとJevの両方をreal化する
+`build_worker_gateway` へ名前を変えています(第13章13.8で使います)。stubでも
 `embedding_model` には本番と同じ `"gemini-embedding-001"` を書き込みます。この列の
 値は「本番で再エンベディングが必要な対象を特定する」ためのラベルです。stubで
 試験するときも同じラベルで通す約束だからです(ws-2設計 §2.2)。
@@ -394,7 +396,7 @@ publishします。event_typeは `embedding_completed`。第9章で「6種のeve
 最後に、第9章9.7で予告した「予約だけ置いたフック」のその後を書いておきます。
 ws-1はstage1の中に `embedding_hook` という呼び出し位置を予約しました。実際にws-2が
 実装したとき、埋め場所はこのフックではなく **Workerの配線** に変わりました
-(`worker/main.py:185` の `_kick_embedding`)。理由は、あのフックがDBトランザクションの
+(`worker/main.py:221` の `_kick_embedding`)。理由は、あのフックがDBトランザクションの
 **中**で呼ばれる位置だったためです。外部API呼び出し(最大2秒)をトランザクションの
 中で行うと10.5で読んだ問題が全部起きます。再試行なしの規律とも矛盾します。そこで、
 Stage1の処理がコミットした**直後**、ackを返す**前**にEmbeddingWorkerを呼ぶ位置へ
@@ -415,11 +417,11 @@ Stage1の処理がコミットした**直後**、ackを返す**前**にEmbedding
         await self._embedding.handle(intent_id, version)
 ```
 
-(`worker/main.py:185` から)
+(`worker/main.py:221` から)
 
 ack前にキックを終える意味も第9章の読みが効きます。キックの途中でWorkerが落ちたら、
 ackされない知らせは再配信されます。再配信ではstage1はduplicateと判定しますが、
-Workerはduplicateでもキックを呼ぶ(`main.py:148` の分岐)ので、未完了の埋め込みは
+Workerはduplicateでもキックを呼ぶ(`main.py:188` の分岐)なので、未完了の埋め込みは
 再配信で回収されます。LLM失敗だけはバックフィルが、それ以外の失敗は再配信が拾う。
 at-least-onceの世界の最後の1枚として、ここでも配達の重複を「冪等な処理」で
 消化しています。

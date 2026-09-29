@@ -138,8 +138,9 @@ LLMGateway本体・StubLLM・この章で読んだIntentParseServiceは、1行�
 
 その後のM2 ws-2では、Embedding系統が同じ考え方で実体化されました。ただしこの
 `build_llm_gateway`(APIプロセス用)を変えるのではなく、Worker用のもう1つの構築関数
-`build_embedding_gateway` が新しく作られています。Parser系統の契約(鍵・分岐)を
-変えずに、Embedding系統だけを実APIへ差し替えるための分離です(第10章10.4)。
+`build_embedding_gateway` が新しく作られています(その後のws-5でJev系統のreal化が
+加わり、`build_worker_gateway` へ育っています)。Parser系統の契約(鍵・分岐)を
+変えずに、系統単位で実APIへ差し替えるための分離です(第10章10.4・第13章)。
 
 実APIを実際に使うのは、Parserの精度を測るG1ゲートという専用の経路だけです。
 その実行手順は、作業レシピとして `howtos/g1-gate.md` にまとめてあります。

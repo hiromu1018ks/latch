@@ -173,7 +173,7 @@ WorkerがDBから読むので、郵便局には「どこを見ればいいか」
 受け側のWorkerは、`compose.yaml` のworkerサービスが走らせる
 `backend/src/latch/worker/main.py` です。起動すると、 Pub/Subのsubscriptionへ
 **ストリーミングpull**(届いたそばから順次受け取る受信形態)を登録します。
-新しいメッセージが届くたびに `_dispatch` が呼ばれます(`worker/main.py:112`)。
+新しいメッセージが届くたびに `_dispatch` が呼ばれます(`worker/main.py:180`)。
 
 ```python
     async def _dispatch(self, event: IncomingEvent) -> None:
@@ -337,7 +337,7 @@ EOF
 pendingのまま残っています。放っておくと30秒後にフォールバックリレー(9.2)が
 再publishしてしまいます。窓が解放したとき、Workerは最新versionの処理後に、
 吸収行を「統合されたので処理しない」の理由つきでprocessedに閉じます
-(`worker/main.py:133` の `_on_release`。理由は `discard_reason` として
+(`worker/main.py:207` の `_on_release`。理由は `discard_reason` として
 payloadに記録)。全行がprocessedかquarantinedで閉じる——outboxの帳尻は
 必ず合わせる、がこの設計の規律です。
 
