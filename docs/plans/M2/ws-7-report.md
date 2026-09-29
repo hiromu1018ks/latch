@@ -8,7 +8,7 @@
 | # | 条件 | 結果 | 証拠(コマンド出力の要点) |
 |---|---|---|---|
 | 1 | make lint / make test | PASS | `All checks passed!` / `959 passed, 159 deselected in 6.84s`(unit全件グリーン。159 deselected=integration〔既存149+本単位10〕) |
-| 2 | integration 10試験の収集 | 収集確認済み/test-ci=スーパーバイザー検証待ち | `uv run pytest --collect-only tests/integration/test_matching_groupengine.py -q` → `10 tests collected in 0.05s`(exit 0) |
+| 2 | integration 10試験の収集 | 収集確認済み/test-ci=スーパーバイザー検証待ち | `uv run pytest --collect-only tests/integration/test_matching_groupengine.py -q` → 修正パス後は `11 tests collected`(計画10件+supervisor裁定の試験11・exit 0) |
 | 3 | 実時間参照がclock.pyのみ | PASS | `rg -n 'datetime\.now\|utcnow\|time\.time\|time\.monotonic\|time\.sleep\|from time import' backend/src` → `backend/src/latch/core/clock.py:33` の1件のみ。`pytest tests/unit/test_arch_no_direct_time.py` → `1 passed` |
 | 4 | alembic 0001〜0004・docs無変更+チェーン確認 | PASS | `git diff --stat main -- 'backend/alembic/versions/0001*' …0004* docs` → 出力なし(空)。チェーン静的確認 `heads= ['0005']`・walk=[0005,0004,0003,0002,0001] |
 | 5 | 変更ファイル=§4の22ファイル | PASS | `git diff --name-only main \| sort` → §4の一覧(作成7+変更15)と完全一致(下記コミット一覧後の `git status --short` も空) |
@@ -54,9 +54,10 @@ migrate/test-ci/docker系は実装側で未実行。wave単独のため並走と
 3. `make migrate` — 0005適用確認(alembic_version=0005・索引 `\di uq_group_candidates_intent_ids_open` の存在)
 4. `uv run pytest --collect-only tests/integration/test_matching_groupengine.py -q`
    (backend/内・収集10件の確認。実行前の静的確認)
-5. `make test-ci` — 既存全数+本単位integration 10件がグリーン。
-   design §5-12のON CONFLICT/包含推論は試験1・6・9が実証。
-   design §5-13のHNSW 2回の実行時間は試験2の所要から確認(≤2秒予算・06 §1)
+5. `make test-ci` — 既存全数+本単位integration 11件(計画10+修正パスの試験11)が
+   グリーン。design §5-12のON CONFLICT/包含推論は試験1・6・9が実証。
+   design §5-13のHNSW 2回の実行時間は試験2の所要から確認(≤2秒予算・06 §1)。
+   Important-1(純min=3集合のfallback起点読取)は試験11が実証
 6. 時刻参照がclock.pyのみ: `rg -n 'datetime\.now|utcnow|time\.time|time\.monotonic|
    time\.sleep|from time import' backend/src` が core/clock.py のみ
 7. alembic無変更確認: `git diff main -- 'backend/alembic/versions/000[1-4]*'` が空
@@ -76,7 +77,10 @@ b35b528 feat: upsert_pair(ID直指定UPSERT)とJevWorkerのgroup_ctx受け渡し
 3174b55 feat: GroupEngine.handle(人数緩和Pool検索・互換行列・貪欲法による集合生成)
 3b6b224 feat: GroupEngine.finalize(集約tx・I-1対策)とbuild_group_proposal
 d4d9900 feat: 削除Eventのgroup_candidates無効化と_run_post_retrieval共通チェーン配線
-(report) test: GroupEngine integration 10試験(収集のみ)とws-7実行報告
+76f19e8 test: GroupEngine integration 10試験(収集のみ)とws-7実行報告
+fccb282 docs: ws-7報告書へ最終レビュー結果(Important3件の引継ぎ・Minor4件)を追記
+d87dec7 fix: 最終レビューImportant3件(起点fallback・finalize D-06順・選択除外)+integration全起点評価
+(report) docs: 報告書へ修正パス(supervisor裁定3件)の記録を追記
 ```
 
 ## 補足(詰まった点・判断した点)
@@ -108,14 +112,52 @@ d4d9900 feat: 削除Eventのgroup_candidates無効化と_run_post_retrieval共�
    7件FAIL+2件PASS(1対1単独入力の配分試験2件は現行実装でも通る性質)。Task 3 も同様に
    2件FAIL+1件PASS(回帰ピン)。いずれも実装後に全件PASSで固定値どおり。
 
-## 最終レビュー結果(ブランチ全体・外部レビュアー1名・fix見送り分の引継ぎ)
+## 修正パス(supervisor裁定 2026-09-29・設計補完として3件を実装)
+
+最終レビューの引継ぎ3件をスーパーバイザーが「本単位で修正してよい」と裁定
+(design.md/plan.md本体は変更せず本節に記録)。TDD(実装前にテスト)で対応:
+
+1. **[Important-1] JevWorker起点読取のグループfallback**(`jev.py _phase1`):
+   `load_origin` が SKIP_PARTICIPANTS のときのみ `group_engine.load_group_origin`
+   (max>=3ガード)へフォールバックして再読取し、それもskipならno-op。
+   origin.pyは変更なし(§5禁止どおり)。module属性経由の差し替え規律も既存どおり
+   (`jev_mod.group_engine_mod.load_group_origin`)。unit試験3件追加
+   (SKIP_PARTICIPANTS起点のfallback評価開始・min2max4起点はfallback不呼出・
+   両ガードskipでno-op)。純min>=3集合(受入#18の下地)が評価停滞しなくなる。
+2. **[Important-2] finalizeのD-06順処理**(`group_engine.py finalize`):
+   読取フェーズ(検査・世代リセット・全ペア揃い・H再検証・材料読取・score計算)で
+   確定対象(`_ReadyGroup`)を集め、D-06順(aggregate降順→集合サイズ昇順→
+   intent_ids辞書順)にソートしてから集約tx+latches INSERT+try_promoteを実行。
+   try_promoteの上位チェックは作成済みlatchesを見るため、高位→低位の処理順で
+   下位が正しく抑制される(同一実行内の順序依存を解消)。unit試験2件追加
+   (低→高・高→低の両並びで高位先の処理順)。
+3. **[Important-3] select_jev_rowsの選択除外**(`layer4._SELECT_JEV_ROWS`):
+   WHEREへ「is_group OR 両端Intentともparticipantsが2∈[min,max]」を追加
+   (起点側 o・相手側 p。相手idはORDER BYと同一のCASE式)。未所属のmin>=3ペア
+   (strict H再検証が必ず失敗しpending永続する行)が1対1上位4枠を消費しなくなる。
+   unit試験1件追加(SQLピン)。
+4. **integration試験11を追加**(収集のみ・計11件): 純min=3集合のE2E下地
+   (3名ともmin=3/max=4→生成→fallback起点読取→全ペア評価→集約→latches)。
+   Important-1の実DB証明はスーパーバイザー検証時のこの試験が担う。
+5. **既存integration試験の評価呼び出し修正**(test_1/3/7/9/10・収集のみで
+   実行してこなかったため未発覚だった潜在FAIL): JevWorkerは起点が端点のペア行
+   しか選ばないため、種以外のメンバー間ペア(b×c等)の評価には各メンバー起点の
+   JevWorker実行が必要(design §2.5「評価は複数イベントにまたがって進む」)。
+   `_jev_eval_all` ヘルパー(全メンバー起点でhandle)へ統一。あわせて test_3 の
+   guard制限を種起点の選択対象3件に合わせ2へ・test_4 の配分期待値を実挙動
+   (種起点1イベントの選択対象は1対1a×P6件+グループa×G3件 → 1対1 5+グループ 3)
+   へ修正。
+
+コミット: fix 3件+integration(fccb282以降・コミット一覧参照)。
+
+## 最終レビュー結果(ブランチ全体・外部レビュアー1名・上記修正パスの元)
 
 Critical なし。規律違反(Clock・text()/CAST・uuid[]形式・変更禁止ファイル・alembic/docs)なし・
 layer1分割のバイト一致を機械検証済み。Review Focus 5点はすべて「防御あり」
 (unit試験+SQLピンの全数確認)。ただし**設計(design)・計画書の確定値どおりの実装から
 生じる重要な指摘3件**があり、いずれも修正が計画スコープ外の判断
 (design §2.4への追加・§9-3 SQL全文変更等)を要するため「計画書にない判断は勝手に
-決めず報告欄に記録」の規律どおり fix せず記録する(スーパーバイザー裁定待ち):
+決めず報告欄に記録」の規律どおり記録し(上記「修正パス」でsupervisor裁定後に対応):
 
 1. **[Important] JevWorkerの起点読取が1対1ガードのまま**(jev.py:208・origin.py:119-120)。
    design §2.2 は「min>=3がPoolに永久に入らない」問題を案Bで解決したが、JevWorker._phase1 の
