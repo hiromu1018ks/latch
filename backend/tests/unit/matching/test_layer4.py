@@ -8,9 +8,9 @@ from sqlalchemy.dialects import postgresql
 from latch.core.clock import JST
 from latch.worker.matching import layer1, layer4
 from latch.worker.matching.layer4 import (
-    JevCandidateRow,
     K_J,
     ONE_ON_ONE_MIN,
+    JevCandidateRow,
     jst_day_start,
     jst_month_start,
     select_jev_targets,
