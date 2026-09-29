@@ -3,6 +3,7 @@
 M1/M2の呼び出し側はこのパッケージ越しにGatewayを利用する(design §3.1)。
 """
 
+from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
 from latch.llm.errors import (
     JevOutputInvalidError,
     LLMConnectionError,
@@ -31,7 +32,6 @@ from latch.llm.providers import (
 )
 from latch.llm.records import SendRecord, send_log
 from latch.llm.stub import StubLLM
-from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
 from latch.llm.typesafe import TypeSafeJevProvider
 
 __all__ = [
