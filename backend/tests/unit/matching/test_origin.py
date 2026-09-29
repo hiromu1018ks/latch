@@ -4,6 +4,7 @@
 (06 §2二重防御の基準一致)。実DBのSQL正当性はintegration(test-ci)が担う。
 """
 
+import json
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -68,6 +69,7 @@ def _row(**overrides):
         geo_radius_m=None,
         time_start=NOW + timedelta(hours=3),
         time_end=None,
+        structured_data=None,
         status="active",
         embedding="[1.0,0.0]",
         lon=130.5581,
@@ -186,3 +188,29 @@ async def test_normalize_pair_orders_by_uuid():
     assert normalize_pair(org, smaller) == (smaller, org.intent_id)
     # 起点が小さい側 → a=起点
     assert normalize_pair(org, bigger) == (org.intent_id, bigger)
+
+
+# -- soft_texts抽出(M2 ws-4・design §3.2) --
+
+
+async def test_origin_soft_texts_extraction():
+    """structured_data(str返り含む)からsoft_texts抽出・降格除外。"""
+    sd = json.dumps(
+        {
+            "soft_constraints": [
+                {"text": "焼肉", "downgraded_from_ng": False},
+                {"text": "個室", "downgraded_from_ng": True},
+                {"text": "静か"},
+            ]
+        }
+    )
+    loaded = await _load(_row(structured_data=sd))
+    assert loaded.origin is not None
+    assert loaded.origin.soft_texts == ("焼肉", "静か")
+
+
+async def test_origin_soft_texts_empty_variants():
+    loaded = await _load(_row(structured_data=None))
+    assert loaded.origin is not None and loaded.origin.soft_texts == ()
+    loaded2 = await _load(_row(structured_data='{"soft_constraints": []}'))
+    assert loaded2.origin is not None and loaded2.origin.soft_texts == ()

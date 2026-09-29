@@ -8,6 +8,8 @@ runnerはモジュール属性経由で関数を呼ぶため差し替え可能(�
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from latch.core.clock import FakeClock
 from latch.worker.matching import runner
 from latch.worker.matching.candidates import CandidatePair
@@ -39,6 +41,7 @@ def _origin() -> Origin:
         time_start=NOW,
         time_end=NOW + timedelta(hours=3),
         embedding="[1.0]",
+        soft_texts=("焼肉",),
         user_ge_20=True,
         evaluated_at=NOW,
     )
@@ -79,14 +82,25 @@ async def test_normal_path_records_pairs(monkeypatch):
     async def fake_load(conn, clock, iid):
         return OriginLoad(origin=org, skip_reason=None)
 
+    target = RetrievedCandidate(
+        intent_id=TARGET,
+        version=2,
+        similarity=0.98,
+        time_start=NOW,  # Δ0→時間近さ1.0
+        budget_max=None,  # 片方NULL→予算近さ0.5
+        soft_texts=("焼肉",),  # 同一文言→語彙1.0
+    )
+
     async def fake_topk(conn, o):
         assert o is org
-        return ([RetrievedCandidate(TARGET, 2, 0.98)], 7)
+        return ([target], 7)
 
     upserted = {}
 
-    async def fake_upsert(conn, *, origin, candidate_id, candidate_version, similarity):
-        upserted["args"] = (candidate_id, candidate_version, similarity)
+    async def fake_upsert(
+        conn, *, origin, candidate_id, candidate_version, similarity, cheap_score
+    ):
+        upserted["args"] = (candidate_id, candidate_version, similarity, cheap_score)
         a, b = sorted((origin.intent_id, candidate_id))
         return CandidatePair(a, b, similarity)
 
@@ -101,7 +115,13 @@ async def test_normal_path_records_pairs(monkeypatch):
     assert outcome.layer1_pass_count == 7
     assert len(outcome.pairs) == 1
     assert outcome.pairs[0].retrieval_score == 0.98
-    assert upserted["args"] == (TARGET, 2, 0.98)
+    # Layer 3: 0.5*0.98 + 0.3*((1.0+0.5)/2) + 0.2*1.0 = 0.815(手計算)
+    expected = 0.5 * 0.98 + 0.3 * 0.75 + 0.2 * 1.0
+    assert upserted["args"][:3] == (TARGET, 2, 0.98)
+    assert upserted["args"][3] == pytest.approx(expected)
+    assert len(outcome.topkc) == 1
+    assert outcome.topkc[0].intent_id == TARGET
+    assert outcome.topkc[0].cheap_score == pytest.approx(expected)
 
 
 async def test_empty_result_records_nothing(monkeypatch):
@@ -125,3 +145,59 @@ async def test_empty_result_records_nothing(monkeypatch):
     assert outcome.skip_reason is None
     assert outcome.version == 1
     assert outcome.pairs == [] and outcome.layer1_pass_count == 0
+
+
+# -- Layer 3 組込みの追加検証(M2 ws-4・design §2.3) --
+
+
+async def test_layer3_pipeline_orders_and_scores(monkeypatch):
+    """全候補へcheap_score計算→全件UPSERT→topkc選定(design §2.3)。"""
+    org = _origin()  # time_start=NOW・budget_max=None・soft_texts=("焼肉",)
+
+    async def fake_load(conn, clock, iid):
+        return OriginLoad(origin=org, skip_reason=None)
+
+    c1 = RetrievedCandidate(
+        intent_id=uuid.UUID("00000000-0000-4000-8000-0000000000c1"),
+        version=1,
+        similarity=1.0,
+        time_start=NOW,  # 時間近さ1.0
+        budget_max=None,  # 予算近さ0.5(片方NULL)
+        soft_texts=("焼肉好き",),  # 語彙1/3(design §4.1の手計算例)
+    )
+    c2 = RetrievedCandidate(
+        intent_id=uuid.UUID("00000000-0000-4000-8000-0000000000c2"),
+        version=1,
+        similarity=0.5,
+        time_start=NOW + timedelta(minutes=180),  # 時間近さ0.0(飽和)
+        budget_max=None,  # 予算近さ0.5
+        soft_texts=(),  # 片方空→語彙0.0
+    )
+
+    async def fake_topk(conn, o):
+        return ([c1, c2], 2)
+
+    upserts: list[tuple[uuid.UUID, float]] = []
+
+    async def fake_upsert(
+        conn, *, origin, candidate_id, candidate_version, similarity, cheap_score
+    ):
+        upserts.append((candidate_id, cheap_score))
+        a, b = sorted((origin.intent_id, candidate_id))
+        return CandidatePair(a, b, similarity)
+
+    monkeypatch.setattr(runner.origin, "load_origin", fake_load)
+    monkeypatch.setattr(runner.layer2, "retrieve_topk", fake_topk)
+    monkeypatch.setattr(runner.candidates, "upsert_candidate", fake_upsert)
+
+    outcome = await runner.run_candidate_retrieval(None, FakeClock(NOW), IID)
+    # 全件(Layer 2通過2件とも)UPSERTへ回る(K_c内外の全候補が記録に残る)
+    assert [u[0] for u in upserts] == [c1.intent_id, c2.intent_id]
+    expected_c1 = 0.5 * 1.0 + 0.3 * 0.75 + 0.2 * (1 / 3)
+    expected_c2 = 0.5 * 0.5 + 0.3 * 0.25 + 0.2 * 0.0
+    assert upserts[0][1] == pytest.approx(expected_c1)
+    assert upserts[1][1] == pytest.approx(expected_c2)
+    # topkcはcheap_score降順
+    assert [s.intent_id for s in outcome.topkc] == [c1.intent_id, c2.intent_id]
+    assert outcome.topkc[0].cheap_score == pytest.approx(expected_c1)
+    assert outcome.topkc[0].similarity == 1.0

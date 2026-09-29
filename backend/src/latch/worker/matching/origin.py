@@ -5,6 +5,8 @@
 保存時補完(intents/completion.py)への防御としてここでも補完する。
 20歳判定はAPI側検証(users.age_years・JST暦日)と同じ基準(06 §2の二重防御)。
 SQLはtext()生SQL・CAST(:x AS ...)形式(§2グローバル制約)。
+M2 ws-4: structured_data を読み Layer 3 語彙計算用の soft_texts(降格除外済み)
+を Origin へ持たせる(design §3.2)。
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from latch.core.clock import Clock
 from latch.intents.completion import DEFAULT_RADIUS_M, default_time_end
 from latch.users.service import age_years
+from latch.worker.matching.layer3 import soft_texts
 
 # no-op理由(design §2.5・RetrievalOutcome.skip_reason の値域)
 SKIP_NOT_FOUND = "origin_not_found"
@@ -32,6 +35,7 @@ _SELECT_ORIGIN = text("""
     SELECT i.id, i.version, i.user_id, i.category_primary, i.alcohol_involved,
            i.budget_max, i.participants_min, i.participants_max,
            i.geo_radius_m, i.time_start, i.time_end, i.status, i.embedding,
+           i.structured_data,
            ST_X(i.geo_center::geometry) AS lon,
            ST_Y(i.geo_center::geometry) AS lat,
            u.birth_date
@@ -59,6 +63,7 @@ class Origin:
     time_start: datetime
     time_end: datetime
     embedding: str  # '[0.1, ...]'(asyncpgはvector列を文字列で返す — design §5-2)
+    soft_texts: tuple[str, ...]  # 降格除外済みのsoft_constraints文言(06 §4語彙計算用)
     user_ge_20: bool  # 評価時点のJST暦日で満20歳(users.age_yearsと同基準)
     evaluated_at: datetime  # load_origin時点のclock.now()(bind_paramsのnow)
 
@@ -134,6 +139,7 @@ async def load_origin(
             else default_time_end(row.time_start)
         ),
         embedding=embedding,
+        soft_texts=soft_texts(row.structured_data),
         user_ge_20=age_years(row.birth_date, clock.jst_date()) >= 20,
         evaluated_at=clock.now(),
     )

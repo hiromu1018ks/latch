@@ -29,6 +29,7 @@ _UPSERT_KEYS = (
     "intent_a_version",
     "intent_b_version",
     "retrieval_score",
+    "cheap_judge_score",
     "now",
 )
 
@@ -107,14 +108,15 @@ def test_upsert_on_conflict_targets_unique_columns():
     assert "updated_at = EXCLUDED.updated_at" in sql
 
 
-def test_upsert_do_update_touches_score_only():
-    """DO UPDATE SET は retrieval_score/updated_at のみ(statusを壊さない —
-    design §2.3。evaluated/skipped/closedへの遷移はws-4以降/stage1の担当)。"""
+def test_upsert_do_update_touches_scores_only():
+    """DO UPDATE SET は retrieval_score/cheap_judge_score/updated_at のみ
+    (statusを壊さない — design §2.3。evaluated/skipped/closedへの遷移は
+    ws-5/stage1の担当)。"""
     sql = str(candidates._UPSERT)
     update_clause = sql.split("DO UPDATE SET", 1)[1]
     assert "status" not in update_clause
-    assert "cheap_judge_score" not in update_clause
-    # 新規行は status='pending'(05 §2・Layer 1〜2時点でJev未評価)
+    assert "cheap_judge_score = EXCLUDED.cheap_judge_score" in update_clause
+    # 新規行は status='pending'(05 §2・Layer 1〜3時点でJev未評価)
     insert_part = sql.split("DO UPDATE", 1)[0]
     assert "'pending'" in insert_part
 
@@ -123,3 +125,23 @@ def test_upsert_sql_all_bind_params_recognized():
     compiled = str(candidates._UPSERT.compile(dialect=postgresql.dialect()))
     for key in _UPSERT_KEYS:
         assert f":{key}" not in compiled, key
+
+
+# -- Layer 3 組込みのSQLピン(M2 ws-4・design §3.2 — 機械的追随) --
+
+
+def test_layer2_sql_selects_layer3_columns():
+    """Layer 3計算に必要な対象側データの列追加(design §3.2)。"""
+    sql = str(layer2._SELECT_TOPK)
+    assert "i.time_start" in sql
+    assert "i.budget_max" in sql
+    assert "i.structured_data" in sql
+
+
+def test_upsert_writes_cheap_judge_score():
+    """INSERT列とDO UPDATE句の両方に cheap_judge_score(design §2.3全件記録)。"""
+    sql = str(candidates._UPSERT)
+    insert_part = sql.split("DO UPDATE", 1)[0]
+    assert "cheap_judge_score" in insert_part
+    update_clause = sql.split("DO UPDATE SET", 1)[1]
+    assert "cheap_judge_score = EXCLUDED.cheap_judge_score" in update_clause

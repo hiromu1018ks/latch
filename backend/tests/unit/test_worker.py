@@ -177,3 +177,48 @@ async def test_run_starts_subscription_and_stops_gracefully(fake_clock):
     assert worker.bus.subscribers  # subscribe済み
     await _stop(worker, task)
     assert worker._subscription.stopped == 1
+
+
+# -- _run_matching DI配線(M2 ws-4・design §2.6・§2.7)。ReevalGuardスタブで検証 --
+
+IID = uuid.UUID("00000000-0000-4000-8000-0000000000aa")
+
+
+class _FakeReeval:
+    """ReevalGuardスタブ(allowの呼び出しを記録)。"""
+
+    def __init__(self, allowed: bool) -> None:
+        self.allowed = allowed
+        self.calls: list[uuid.UUID] = []
+
+    async def allow(self, intent_id):
+        self.calls.append(intent_id)
+        return self.allowed
+
+
+async def test_run_matching_runs_retrieval_when_allowed(fake_clock, monkeypatch):
+    """ガード許可時: run_candidate_retrieval を conn・clock・intent_id で呼ぶ。"""
+    called: list[tuple[object, object, uuid.UUID]] = []
+
+    async def fake_retrieval(conn, clock, intent_id):
+        called.append((conn, clock, intent_id))
+
+    monkeypatch.setattr("latch.worker.main.run_candidate_retrieval", fake_retrieval)
+    guard = _FakeReeval(True)
+    worker = Worker(clock=fake_clock, bus=_FakeBus(), reeval=guard)
+    await worker._run_matching(None, IID)
+    assert called == [(None, fake_clock, IID)]
+    assert guard.calls == [IID]
+
+
+async def test_run_matching_suppressed_when_reeval_denies(fake_clock, monkeypatch):
+    """ガード拒否時: run_candidate_retrieval は呼ばれない(design §2.6)。"""
+
+    async def fake_retrieval(conn, clock, intent_id):
+        raise AssertionError("ガード拒否では呼ばれない")
+
+    monkeypatch.setattr("latch.worker.main.run_candidate_retrieval", fake_retrieval)
+    guard = _FakeReeval(False)
+    worker = Worker(clock=fake_clock, bus=_FakeBus(), reeval=guard)
+    await worker._run_matching(None, IID)  # 例外なくreturn(スキップ)
+    assert guard.calls == [IID]

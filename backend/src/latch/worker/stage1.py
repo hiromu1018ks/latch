@@ -5,6 +5,8 @@
 (5回・バックオフ)→quarantined。削除済みIntentへの参照Eventは正当な
 遅延Eventとしてprocessed破棄、payload不正のみ隔離(06 §9・design §2.4)。
 SQLはtext()生SQL・時刻はClock明示値(§2グローバル制約)。
+M2 ws-4: embedding_completed 種別で matching_hook(Layer 1〜3)を
+同一トランザクションで呼ぶ。
 """
 
 from __future__ import annotations
@@ -127,12 +129,15 @@ class Stage1:
         settings: Settings,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         embedding_hook: Callable[[str, uuid.UUID, int], Awaitable[None]] | None = None,
+        matching_hook: Callable[[AsyncConnection, uuid.UUID], Awaitable[None]]
+        | None = None,
     ) -> None:
         self._engine = engine
         self._clock = clock
         self._retry_max = settings.event_retry_max
         self._sleep = sleep
         self._embedding_hook = embedding_hook  # ws-2が実体を置く(design §2.5)
+        self._matching_hook = matching_hook  # ws-4が実体を置く(design §2.7)
 
     # -- 受信入口 --
 
@@ -279,7 +284,12 @@ class Stage1:
             elif event_type in (EVENT_CREATED, EVENT_UPDATED):
                 if self._embedding_hook is not None:
                     await self._embedding_hook(event_type, intent_id, version)
-            # expired / scheduled / embedding_completed は処理実体なし(processed)
+            elif event_type == _EVENT_EMBEDDING_COMPLETED:
+                # Layer 1〜3をこのトランザクションへ同乗(design §2.7)。
+                # 失敗→ロールバック→再試行5回→quarantinedの既存経路に載る
+                if self._matching_hook is not None:
+                    await self._matching_hook(conn, intent_id)
+            # expired / scheduled は処理実体なし(processed)
             await conn.execute(
                 _MARK_PROCESSED, {"row_id": row_id, "now": now, "extra": "{}"}
             )

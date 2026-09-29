@@ -9,6 +9,8 @@ import json
 import uuid
 from datetime import UTC, datetime
 
+import pytest
+
 from latch.core.clock import FakeClock
 from latch.events import IncomingEvent
 from latch.settings import Settings
@@ -147,13 +149,14 @@ def _noop_ack() -> None:
     pass
 
 
-def _stage1(engine, clock=None, sleep=None, hook=None) -> Stage1:
+def _stage1(engine, clock=None, sleep=None, hook=None, matching_hook=None) -> Stage1:
     return Stage1(
         engine=engine,
         clock=clock if clock is not None else FakeClock(S1_NOW),
         settings=Settings(),
         sleep=sleep if sleep is not None else (lambda s: _await_none()),
         embedding_hook=hook,
+        matching_hook=matching_hook,
     )
 
 
@@ -442,3 +445,90 @@ async def test_quarantine_direct_conflict_with_uuid_instance():
     params = engine.conn.calls[2][1]
     assert params["row_id"] == ROW_ID  # UUID型がそのまま渡る(str再構築しない)
     assert params["extra"] is not None
+
+
+# -- matching フック(M2 ws-4・design §2.7) --
+
+
+async def test_matching_hook_called_for_embedding_completed():
+    """embedding_completedでmatchingフックがconnとintent_idで呼ばれる。"""
+    calls: list[tuple[object, uuid.UUID]] = []
+
+    async def mhook(conn, intent_id):
+        calls.append((conn, intent_id))
+
+    engine = ScriptedEngine(
+        [
+            FakeResult(("pending",)),
+            FakeResult((1,)),
+            FakeResult(None, 1),
+        ]
+    )
+    await _stage1(engine, matching_hook=mhook).process(
+        _event("embedding_completed", IID, 1),
+        ("embedding_completed", IID, 1),
+        ROW_ID,
+    )
+    assert calls == [(engine.conn, IID)]  # 同一トランザクションのconn
+
+
+async def test_matching_hook_absent_keeps_processed():
+    """hookなしでも embedding_completed は従来どおり processed(処理実体なし)。"""
+    engine = ScriptedEngine(
+        [
+            FakeResult(("pending",)),
+            FakeResult((1,)),
+            FakeResult(None, 1),
+        ]
+    )
+    result = await _stage1(engine).process(
+        _event("embedding_completed", IID, 1),
+        ("embedding_completed", IID, 1),
+        ROW_ID,
+    )
+    assert result == "processed"
+
+
+async def test_matching_hook_failure_blocks_processed():
+    """hook例外は握られず伝播=processedにならない(design §2.7 — Stage1の
+    再試行(Retryable/SQLAlchemyError)で捕まらない例外は呼び出し側へ)。"""
+
+    async def mhook(conn, intent_id):
+        raise RuntimeError("matching failed")
+
+    engine = ScriptedEngine(
+        [
+            FakeResult(("pending",)),
+            FakeResult((1,)),
+        ]
+    )
+    with pytest.raises(RuntimeError):
+        await _stage1(engine, matching_hook=mhook).process(
+            _event("embedding_completed", IID, 1),
+            ("embedding_completed", IID, 1),
+            ROW_ID,
+        )
+    # processed遷移SQL(_MARK_PROCESSED)には到達していない
+    assert all(
+        "processed" not in sql or "quarantined" in sql for sql, _ in engine.conn.calls
+    ) or not any("SET status = 'processed'" in sql for sql, _ in engine.conn.calls)
+
+
+async def test_matching_hook_not_called_for_other_types():
+    """created/updatedではmatchingフックは呼ばれない(Embeddingキックは別)。"""
+    calls: list[uuid.UUID] = []
+
+    async def mhook(conn, intent_id):
+        calls.append(intent_id)
+
+    engine = ScriptedEngine(
+        [
+            FakeResult(("pending",)),
+            FakeResult((1,)),
+            FakeResult(None, 1),
+        ]
+    )
+    await _stage1(engine, matching_hook=mhook).process(
+        _event("created", IID, 1), ("created", IID, 1), ROW_ID
+    )
+    assert calls == []

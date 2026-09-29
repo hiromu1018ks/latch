@@ -452,7 +452,9 @@ async def test_8_age_boundary_jst(api_client, db_engine, field):
         api_client, db_engine, hb, _payload(_structured(category="meal"))
     )
     await _set(
-        db_engine, t_bday["id"], "category_primary = 'drinking', alcohol_involved = true"
+        db_engine,
+        t_bday["id"],
+        "category_primary = 'drinking', alcohol_involved = true",
     )
     # 誕生日は明日(=19歳)→ fail
     hc, _ = await _user(api_client, field, _birth_jst_years_ago(20, plus_days=1))
