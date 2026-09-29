@@ -10,8 +10,8 @@ import pytest
 from latch.core.clock import FakeClock
 from latch.llm.anthropic import AnthropicParserProvider
 from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
-from latch.llm.gemini import GeminiEmbeddingProvider
 from latch.llm.gateway import build_llm_gateway, build_worker_gateway
+from latch.llm.gemini import GeminiEmbeddingProvider
 from latch.llm.records import LOGGER_NAME
 from latch.llm.stub import StubLLM
 from latch.llm.typesafe import TypeSafeJevProvider

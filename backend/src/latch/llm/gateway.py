@@ -290,14 +290,22 @@ def build_worker_gateway(clock: Clock, settings: Settings) -> LLMGateway:
         delay_jev_ms=settings.llm_stub_delay_jev_ms,
     )
     if settings.llm_mode == "stub":
-        return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub, jev_fallback=stub)
+        return LLMGateway(
+            clock=clock, parser=stub, embedding=stub, jev=stub, jev_fallback=stub
+        )
     if settings.llm_mode == "real":
         if not settings.llm_gemini_api_key:
-            raise ValueError("llm_mode='real' requires llm_gemini_api_key (embedding gateway)")
+            raise ValueError(
+                "llm_mode='real' requires llm_gemini_api_key (embedding gateway)"
+            )
         if not settings.llm_typesafe_api_key:
-            raise ValueError("llm_mode='real' requires llm_typesafe_api_key (jev gateway)")
+            raise ValueError(
+                "llm_mode='real' requires llm_typesafe_api_key (jev gateway)"
+            )
         if not settings.llm_anthropic_api_key:
-            raise ValueError("llm_mode='real' requires llm_anthropic_api_key (jev fallback)")
+            raise ValueError(
+                "llm_mode='real' requires llm_anthropic_api_key (jev fallback)"
+            )
         embedding = GeminiEmbeddingProvider(api_key=settings.llm_gemini_api_key)
         jev = TypeSafeJevProvider(
             api_key=settings.llm_typesafe_api_key,

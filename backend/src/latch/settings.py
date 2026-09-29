@@ -103,9 +103,7 @@ class Settings(BaseSettings):
     # みプロセスへ渡す。ci環境(compose)へは渡さない(workerはstubのため)
     llm_typesafe_api_key: str = Field(
         default="",
-        validation_alias=AliasChoices(
-            "LATCH_TYPESAFE_API_KEY", "llm_typesafe_api_key"
-        ),
+        validation_alias=AliasChoices("LATCH_TYPESAFE_API_KEY", "llm_typesafe_api_key"),
     )
     # 接続先API URL(公式APIを明示渡し — anthropic_base_urlと同一判断)
     llm_typesafe_base_url: str = Field(
