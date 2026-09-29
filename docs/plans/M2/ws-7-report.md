@@ -107,3 +107,44 @@ d4d9900 feat: 削除Eventのgroup_candidates無効化と_run_post_retrieval共�
 8. **Task 4 のExpectedとの差異(記録)**: 計画Expected「新規9件FAIL」に対し実際は
    7件FAIL+2件PASS(1対1単独入力の配分試験2件は現行実装でも通る性質)。Task 3 も同様に
    2件FAIL+1件PASS(回帰ピン)。いずれも実装後に全件PASSで固定値どおり。
+
+## 最終レビュー結果(ブランチ全体・外部レビュアー1名・fix見送り分の引継ぎ)
+
+Critical なし。規律違反(Clock・text()/CAST・uuid[]形式・変更禁止ファイル・alembic/docs)なし・
+layer1分割のバイト一致を機械検証済み。Review Focus 5点はすべて「防御あり」
+(unit試験+SQLピンの全数確認)。ただし**設計(design)・計画書の確定値どおりの実装から
+生じる重要な指摘3件**があり、いずれも修正が計画スコープ外の判断
+(design §2.4への追加・§9-3 SQL全文変更等)を要するため「計画書にない判断は勝手に
+決めず報告欄に記録」の規律どおり fix せず記録する(スーパーバイザー裁定待ち):
+
+1. **[Important] JevWorkerの起点読取が1対1ガードのまま**(jev.py:208・origin.py:119-120)。
+   design §2.2 は「min>=3がPoolに永久に入らない」問題を案Bで解決したが、JevWorker._phase1 の
+   `origin.load_origin`(人数ガード 2∈[min,max])は§2.4の議論対象外だった。
+   **全員 min>=3 の集合**はどのメンバー起点でもJevWorkerがno-opになりjev_resultが
+   永久に揃わない(candidate停滞・受入#18の下地の1入力クラス)。
+   min2メンバーを1人でも含む集合はそのメンバー起点の評価で回収されるため影響は
+   「純min>=3集合」に限られる。修正案: JevWorker起点読取の人数ガード緩和
+   (load_group_origin 相当への差替え or load_origin への分岐追加)。
+2. **[Important] D-06上位1集合の同一実行内の順序依存**(group_engine._SELECT_PENDING_GROUPS
+   にORDER BYなし)。同一起点が属す重複2集合が同一finalize実行で低→高の順に処理されると
+   両方proposed化される(try_promoteの比較対象は「作成済みlatches」のため)。
+   解釈記録6「メンバー重複集合の上位1**近似**」の承認済み設計の限界の具体化。
+   修正案: finalizeで全対象のscore計算後にD-06順へソートしてから集約tx+try_promote。
+3. **[Important] Pool×起点ペア(手順4b)の未所属pending行が1対1上位4枠を圧迫しうる**
+   (min>=3のPool候補が集合に入らなかった場合、pair_kind=one_on_one扱いで選択されるが
+   strict H再検証が必ず失敗しpending永続・LLM課税なし)。design §2.4「Jev予算を
+   人数不成立ペアに浪費しない」は課税面では守られるが、1対1最低4件の実効が減りうる。
+   修正案: 1対1分類に両端人数条件を課す等。
+
+Minor(deferred・報告のみ): (a) _SELECT_GROUP_PAIRS にORDER BYなし(pair_mapの同ペア
+複数バージョン行の選択がSQL意味論上不定・現実は新行が勝つ) (b) 世代リセット後の
+メンバー間ペア再生成は「相手が起点のPool上位15に入る」経路のみ(INSERT競合skip時は
+直接更新されない) (c) aggregate計算済み・閾値未満の集合も互換行列SQL・geo逆転等を
+毎評価で実行(早期continue可能) (d) ON CONFLICT昇格でlatches.group_candidate_idが
+旧gidのまま残りうる(M3回答系での参照不一致の恐れ)+_PAIR_COMPATのgeo_radius_m
+COALESCE非対称(§9-3のSQL本文どおり)。
+
+Declined to judge: uuid[]のON CONFLICT/`@>`/`&&`の実DB挙動(§5-12・スーパーバイザー
+検証時のintegration試験1・6・9が担う)・HNSW 2回の実行時間(§5-13・試験2のprintで
+記録)・select_jev_targetsの「1対1<4件時にグループへ8枠全部」の解釈(design §2.4
+疑似コードどおり)。
