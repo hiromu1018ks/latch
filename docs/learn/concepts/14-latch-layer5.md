@@ -22,8 +22,8 @@
   §2.7のnotifications一元化・§2.8の直接投入)と `docs/plans/M2/ws-6-report.md`。
   本文の「NN §X」は `docs/NN-*.md` の第X節を指します(06 §6・§9〜§10=Layer 5と再評価・
   03 D-05/D-07/D-08=期限と再提案と上限・05 §2=データモデル・08 §2.2〜§2.3=通知の表示)
-- 次に読むもの: まだ書かれていません。Layer 5まででM2の山場は越えました。
-  次章以降は実装の進行とともに追加されます(グループマッチ・回答APIの予定)
+- 次に読むもの: `concepts/15-group-match.md`(第15章。この章が作ったlatchesと
+  try_promoteの枠を、3〜4人のグループがどう共用するかを読みます)
 
 ## 14.1 評価が終わっても、まだ誰にも何も届いていない
 
@@ -37,31 +37,31 @@ jev_resultというJSONが入り、statusが'evaluated'になりました。7つ
 保留する・期限で切る」という行為に変えるのが、この章で読むLayer 5です。
 
 コード上の位置から入ります。Layer 4とLayer 5は、同じ場所から次々に呼ばれます。
-第13章13.6で見た `_kick_jev` です。
+第13章13.6で見た `_kick_jev` です。ws-7でグループ処理が前後に加わったとき、
+このキックの中身は共通ヘルパー `_run_post_retrieval` へまとめられました
+(4段のチェーンのうち、この章で読むのは中央の2段です。前後の2段は第15章)。
 
 ```python
-    async def _kick_jev(
-        self, event_type: str, intent_id: uuid.UUID, version: int
-    ) -> None:
-        """Stage1処理コミット後・ack前のLayer 4→Layer 5キック(design §2.1案A)。
+    async def _run_post_retrieval(self, intent_id: uuid.UUID) -> None:
+        """L1〜3後の共通チェーン(design §2.1案A)。
 
-        embedding_completedのみ(06 §1「Layer 1〜5はembedding_completed起点」)。
-        JevWorker完了後にLatchEngineを直列実行(Layer 5+通知の層別予算≤2秒を
-        1連の流れで守る)。DB失敗はここから伝播して_dispatch/_on_releaseの
-        既存exceptが受け、ackなし再配信が回収する(冪等ガード
-        latch_score IS NULL・ON CONFLICT・条件付きUPDATE)。Jev・Latchそれぞれ
-        未注入(ws-1/ws-5資産の試験)は何もしない。version引数はhandleが
-        起点読取で再検証するため使わない(IFは起点非依存)。
+        GroupEngine.handle(生成)→ JevWorker(group_ctx付き)→ LatchEngine(1対1)
+        → GroupEngine.finalize(集約)。各部品は未注入なら何もしない
+        (ws-1/ws-5/ws-6資産の試験互換)。DB失敗は伝播し_dispatch/_on_release
+        の既存except・Runnerの握りへ載る(各部のガードで冪等)。
         """
-        if event_type != EVENT_EMBEDDING_COMPLETED:
-            return
+        group_ctx = None
+        if self._group is not None:
+            group_ctx = await self._group.handle(intent_id)
         if self._jev is not None:
-            await self._jev.handle(intent_id)
+            await self._jev.handle(intent_id, group_ctx)
         if self._latch is not None:
             await self._latch.handle(intent_id)
+        if self._group is not None:
+            await self._group.finalize(intent_id)
 ```
 
-(`worker/main.py:268` から)
+(`worker/main.py:280` から)
 
 JevWorkerの `handle(intent_id)` が帰ってきたら、すぐさま `LatchEngine.handle(intent_id)`
 を呼ぶ。この「直列」の選択には理由があります。Embedding→Jev→Latchの処理を
@@ -232,7 +232,7 @@ latches行のproposal列には、提案カードの中身がJSONで入ります�
 |---|---|---|
 | time_summary | 対象時刻 | 2人のtime_startのうち遅い方(max)をJSTの `YYYY-MM-DD HH:MM` へ |
 | area_name | 地域名 | 2人のgeo_centerの中点を約1kmグリッドの代表点へ丸め、地物名へ逆変換 |
-| headcount | 人数 | 2(1対1のため。グループ対応は後続単位) |
+| headcount | 人数 | 2(1対1のため。グループでは集合の人数3〜4。第15章15.6) |
 | category_primary | 大分類 | Layer 1の完全一致条件により両者で同じ値 |
 | category_secondary | 詳分類 | 起点Intent(評価の「種」)側の値 |
 | budget | 予算 | 2人のbudget_maxの最小値。NULLは無視、両方NULLならnull |
@@ -295,7 +295,7 @@ match_levelは `latch_calc.py` の純関数で3段階に分けます。0.90以�
 この「1日6件」を数える場所はどこでしょうか。第7章のレート制限と第12章の
 JevカウンタはRedisのINCRでした。ところが今回は違います。**notificationsテーブル
 の行を数えます**。当日の日付範囲で `type IN ('proposal', 'nearby_candidate')` の
-行をCOUNTするだけです(`latch_engine.py:139` の `_COUNT_DAILY_NOTIFICATIONS`)。
+行をCOUNTするだけです(`latch_engine.py:144` の `_COUNT_DAILY_NOTIFICATIONS`)。
 
 カウンタを使わない理由は、ws-6設計 §2.7にはっきり書かれています。第12章のD-16
 カウンタは「実行回数のブレーキ」で、呼び出す前にINCRして境界を問うことが本質
@@ -311,7 +311,7 @@ JevカウンタはRedisのINCRでした。ところが今回は違います。**
 変わるだけなので、「0時にカウンタを
 ゼロに戻すジョブ」は不要です。
 
-この検査を含む `try_promote` の手順を、順に追います(`latch_engine.py:719` から)。
+この検査を含む `try_promote` の手順を、順に追います(`latch_engine.py:746` から)。
 
 ```text
 1. latches行を SELECT ... FOR UPDATE で行ロックして読む(candidateであることを確認)
@@ -330,6 +330,9 @@ status = 'candidate'` と書いておけば、行数が0のとき=他の経路�
 とき、何もせず終わります。誰が先に着いても結果が同じ——競合の数を数えず、
 条件で負かす作法です。手順5で「通知する側」と言ったのは、muted(通知オフ)の
 参加者がいるためです。この人への通知行は書きません(14.8)。
+なおws-7で、グループのlatches(`group_candidate_id` が入っている行)には、手順2の
+直後に「メンバーが重なる開いている集合のうち、自分より上位はないか」という
+D-06の関所がひとつ加わりました(第15章15.7)。
 
 最後に、保留キューを回す仕組み。**drain(ドレイン=溜まったものを抜く)**と呼ばれる
 処理が、LatchEngine.handleの末尾で毎回走ります。
@@ -347,7 +350,7 @@ _DRAIN_CANDIDATES = text("""
 """)
 ```
 
-(`worker/matching/latch_engine.py:179` から)
+(`worker/matching/latch_engine.py:195` から)
 
 並び順が提示の優先順位です。**対象時刻が近いものから先に**(明日の約束は今夜の
 約束より後回し)。時刻が同じなら**スコアが高い方を先に**。この順で並べたcandidate
@@ -704,14 +707,16 @@ docker compose exec -T db psql -U latch -d latch \
 
 ### 演習4: 配線を確認する
 
-`_kick_jev` の中でLayer 4とLayer 5が直列になっていることは、rgで追えます。
+Layer 4とLayer 5が直列になっていることは、rgで追えます。
 
 ```bash
-rg -n "_kick_jev|_run_direct_pipeline|LatchEngine" backend/src/latch/worker/main.py
+rg -n "_run_post_retrieval|_kick_jev|_run_direct_pipeline" backend/src/latch/worker/main.py
 ```
 
-`_kick_jev` の定義(268行付近)と、再評価用の `_run_direct_pipeline`(288行付近)の
-2か所で、`self._latch.handle` が呼ばれている並びが見つかれば正解です。
+`_run_post_retrieval` の定義(280行付近)の中で `self._jev.handle` の次に
+`self._latch.handle` が並んでいて、それを `_kick_jev`(298行付近・Embedding完了起点)
+と `_run_direct_pipeline`(316行付近・再評価起点)の2か所が呼んでいれば正解です
+(ws-7でチェーンの前後にGroupEngineが加わった経緯は第15章15.8)。
 
 ## 14.11 この章の再統合
 
