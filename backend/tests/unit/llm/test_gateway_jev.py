@@ -10,7 +10,7 @@ from latch.core.clock import FakeClock
 from latch.llm.errors import LLMProviderError, LLMTimeoutError
 from latch.llm.gateway import LLMGateway, Timeouts
 from latch.llm.records import LOGGER_NAME
-from latch.llm.stub import DEFAULT_JEV_RESPONSE, StubLLM
+from latch.llm.stub import StubLLM
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
 INTENT_A = "Intent A:\n[hard] category: drinking\n[hard] time: 2026-09-26 20:00–23:00"
@@ -34,11 +34,14 @@ def _send_payloads(caplog) -> list[dict]:
     return [json.loads(m.getMessage()) for m in messages]
 
 
-async def test_judge_returns_7_question_response(clock):
+async def test_judge_returns_judgment_from_stub_envelope(clock):
     resp = await _gateway(clock, StubLLM()).judge_pair(
         intent_a=INTENT_A, intent_b=INTENT_B, intent_ids=["i-1", "i-2"]
     )
-    assert resp == DEFAULT_JEV_RESPONSE  # 07 第4節 7設問JSON
+    assert resp.provider == "typesafe_jev"  # 第一候補経路(スタブでも)
+    assert resp.model == "jev-1.13.0"
+    assert resp.result["would_a_accept_b"] == 0.5
+    assert resp.result["jev_5axis"]["purpose_fit"] == {"value": 0.5, "confidence": 0.5}
 
 
 async def test_judge_records_send_record_with_two_intent_ids(clock, caplog):
@@ -63,9 +66,13 @@ async def test_judge_timeout_records_then_raises(clock, caplog):
             await gw.judge_pair(
                 intent_a=INTENT_A, intent_b=INTENT_B, intent_ids=["i-1", "i-2"]
             )
-    (payload,) = _send_payloads(caplog)
-    assert payload["status"] == "timeout"
-    assert payload["error_code"] == "LLMTimeoutError"
+    # jev_fallback未注入=第一候補と同一スタブ → timeoutは双障害(送信記録2件)
+    p1, p2 = _send_payloads(caplog)
+    assert [p["status"] for p in (p1, p2)] == ["timeout", "timeout"]
+    assert [p["error_code"] for p in (p1, p2)] == [
+        "LLMTimeoutError",
+        "LLMTimeoutError",
+    ]
 
 
 async def test_judge_provider_error_records_then_raises(clock, caplog):

@@ -18,13 +18,14 @@ import redis.asyncio as redis_async
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.events import EventBus, IncomingEvent, make_event_bus
-from latch.intents.events import EVENT_CREATED, EVENT_UPDATED
-from latch.llm.gateway import build_embedding_gateway
+from latch.intents.events import EVENT_CREATED, EVENT_EMBEDDING_COMPLETED, EVENT_UPDATED
+from latch.llm.gateway import build_worker_gateway
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
-from latch.worker.cost import ReevalGuard
+from latch.worker.cost import JevCostGuard, JevCostStore, ReevalGuard
 from latch.worker.debounce import DebounceEntry, DebounceGroup, TrailingDebouncer
 from latch.worker.embedding import EmbeddingWorker
+from latch.worker.jev import JevWorker
 from latch.worker.matching import run_candidate_retrieval
 from latch.worker.stage1 import Stage1
 
@@ -49,6 +50,7 @@ class Worker:
         embedding: EmbeddingWorker | None = None,
         backfill: BackfillRunner | None = None,
         reeval: ReevalGuard | None = None,
+        jev: JevWorker | None = None,
     ) -> None:
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.settings: Settings = settings if settings is not None else Settings()
@@ -60,6 +62,7 @@ class Worker:
         self._embedding = embedding
         self._backfill = backfill
         self._reeval = reeval
+        self._jev = jev
         self._stop = asyncio.Event()
         self._subscription = None
 
@@ -115,13 +118,15 @@ class Worker:
             )
             self._stage1 = stage1
             self._debouncer = debouncer
+            # GatewayはembeddingとJevWorkerで同一インスタンスを共有(§9-14)
+            gateway = build_worker_gateway(self.clock, self.settings)
             embedding = (
                 self._embedding
                 if self._embedding is not None
                 else EmbeddingWorker(
                     engine=engine,
                     clock=self.clock,
-                    gateway=build_embedding_gateway(self.clock, self.settings),
+                    gateway=gateway,
                     bus=bus,
                 )
             )
@@ -137,6 +142,19 @@ class Worker:
             )
             self._embedding = embedding
             self._backfill = backfill
+            # JevWorker DI(M2 ws-5・§9-14): embeddingと同一Gatewayインスタンス
+            # (build_worker_gatewayは1本化済み)・guard/cost_storeはreevalと
+            # 同一redis接続から構築。注入済み(ws-1資産の試験・integration)は
+            # 再構築しない。redis不使用の構成では構築しない
+            if self._jev is None and redis_client is not None:
+                cost_store = JevCostStore(redis_client)
+                self._jev = JevWorker(
+                    engine=engine,
+                    clock=self.clock,
+                    gateway=gateway,
+                    guard=JevCostGuard(store=cost_store, clock=self.clock),
+                    cost_store=cost_store,
+                )
             await bus.ensure()
             self._subscription = await bus.subscribe(self._dispatch)
             debouncer_task = asyncio.create_task(debouncer.run(stop=self._stop))
@@ -168,6 +186,7 @@ class Worker:
                     and result.triple is not None
                 ):
                     await self._kick_embedding(*result.triple)
+                    await self._kick_jev(*result.triple)
                 event.ack()
                 return
             if result.kind == "debounce":
@@ -212,6 +231,22 @@ class Worker:
         if self._embedding is None or event_type not in (EVENT_CREATED, EVENT_UPDATED):
             return
         await self._embedding.handle(intent_id, version)
+
+    async def _kick_jev(
+        self, event_type: str, intent_id: uuid.UUID, version: int
+    ) -> None:
+        """Stage1処理コミット後・ack前のLayer 4キック(design §2.1案B)。
+
+        embedding_completedのみ(06 §1「Layer 1〜5はembedding_completed起点」)。
+        JevLLM失敗はhandle内でskipped記録に変換し、DB失敗・Guard Redis失敗は
+        ここから伝播して_dispatch/_on_releaseの既存exceptが受け、ackなし
+        再配信が回収する(冪等ガード jev_result IS NULL)。Jev未注入(ws-1資産
+        の試験)は何もしない。version引数はhandleが起点読取で再検証するため
+        使わない(IFは起点非依存 — ws-6がbucket起点から呼ぶ)。
+        """
+        if self._jev is None or event_type != EVENT_EMBEDDING_COMPLETED:
+            return
+        await self._jev.handle(intent_id)
 
     async def _run_matching(self, conn, intent_id: uuid.UUID) -> None:
         """embedding_completed 起点の Layer 1〜3 実行(design §2.6・§2.7)。

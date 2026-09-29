@@ -16,11 +16,22 @@ from typing import Any
 
 from latch.core.clock import Clock
 from latch.llm.anthropic import AnthropicParserProvider
-from latch.llm.errors import LLMError, LLMProviderError, LLMTimeoutError
+from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
+from latch.llm.errors import (
+    JevOutputInvalidError,
+    LLMConnectionError,
+    LLMError,
+    LLMOverloadedError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+)
 from latch.llm.gemini import GeminiEmbeddingProvider
+from latch.llm.jev import JevJudgment, validate_and_normalize
 from latch.llm.providers import EmbeddingProvider, JevProvider, ParserProvider
 from latch.llm.records import SendRecord, SendStatus, SystemName, send_log
 from latch.llm.stub import StubLLM
+from latch.llm.typesafe import TypeSafeJevProvider
 from latch.settings import Settings
 
 TIMEOUT_PARSER_S = 10.0  # 07 第1節(D-17)同期・再試行なし
@@ -51,12 +62,16 @@ class LLMGateway:
         parser: ParserProvider,
         embedding: EmbeddingProvider,
         jev: JevProvider,
+        jev_fallback: JevProvider | None = None,
         timeouts: Timeouts | None = None,
     ) -> None:
         self._clock = clock
         self._parser = parser
         self._embedding = embedding
         self._jev = jev
+        # 未注入時は第一候補と同一(§9-5 — 既存のLLMGateway直構築試験を
+        # 無変更で通すための既定。real構成ではbuild_worker_gatewayが明示渡し)
+        self._jev_fallback = jev_fallback if jev_fallback is not None else jev
         self._timeouts = timeouts if timeouts is not None else Timeouts()
 
     async def parse_intent(
@@ -88,15 +103,59 @@ class LLMGateway:
 
     async def judge_pair(
         self, *, intent_a: str, intent_b: str, intent_ids: list[str]
+    ) -> JevJudgment:
+        """07 第4節。2 Intent分の正規化テキスト→7設問JSON。timeout 6秒。
+
+        第一候補=TypeSafe Jev。429/529/timeout/接続障害の4種でフォールバックLLM
+        へ切替(07 §4切替表・design §2.2)。LLMProviderError(400系)と
+        JevOutputInvalidError(出力検証失敗=実装不整合)は切替せず伝播する。
+        切替時は各呼び出しが既存_callを通るため送信記録2件。フォールバック失敗
+        (双障害)はそのまま伝播(D-15の縮退はLayer 4が記録に変換する)。
+        """
+        try:
+            envelope = await self._jev_call(
+                intent_a, intent_b, intent_ids, fallback=False
+            )
+            try:
+                result = validate_and_normalize(envelope)
+            except JevOutputInvalidError as exc:
+                # 検証対象の経路を例外へ載せて再送出(§9-4 — Layer 4の内訳計上用)
+                raise JevOutputInvalidError(str(exc), provider="typesafe_jev") from exc
+            return JevJudgment(
+                provider="typesafe_jev",
+                model=_envelope_model(envelope),
+                result=result,
+            )
+        except (
+            LLMTimeoutError,
+            LLMRateLimitError,
+            LLMOverloadedError,
+            LLMConnectionError,
+        ):
+            pass  # 07 §4の切替条件4種。LLMProviderError・JevOutputInvalidErrorは伝播
+        envelope = await self._jev_call(intent_a, intent_b, intent_ids, fallback=True)
+        try:
+            result = validate_and_normalize(envelope)
+        except JevOutputInvalidError as exc:
+            raise JevOutputInvalidError(str(exc), provider="fallback_llm") from exc
+        return JevJudgment(provider="fallback_llm", model=None, result=result)
+
+    async def _jev_call(
+        self, intent_a: str, intent_b: str, intent_ids: list[str], *, fallback: bool
     ) -> dict:
-        """07 第4節。2 Intent分の正規化テキスト→7設問JSON。timeout 6秒。"""
+        """Jev呼び出し1回(fallback=TrueはフォールバックLLM側)。
+
+        circuit breaker(ws-8)の注入ポイントは第一候補側(fallback=False)。
+        本単位では実装しない(design §2.10)。
+        """
+        provider = self._jev_fallback if fallback else self._jev
         return await self._call(
             system="jev",
-            destination=self._jev.name,
+            destination=provider.name,
             timeout_s=self._timeouts.jev_s,
             intent_ids=intent_ids,
             user_id=None,
-            invoke=lambda: self._jev.judge(intent_a, intent_b),
+            invoke=lambda: provider.judge(intent_a, intent_b),
         )
 
     async def _call(
@@ -171,6 +230,12 @@ class LLMGateway:
         return result
 
 
+def _envelope_model(envelope: object) -> str | None:
+    """envelopeから応答バージョンIDを取り出す(第一候補のJevJudgment.model)。"""
+    model = envelope.get("model") if isinstance(envelope, dict) else None
+    return str(model) if model is not None else None
+
+
 def build_llm_gateway(
     clock: Clock,
     settings: Settings,
@@ -209,14 +274,15 @@ def build_llm_gateway(
     raise ValueError(f"unknown llm_mode: {settings.llm_mode!r} ('stub' or 'real')")
 
 
-def build_embedding_gateway(clock: Clock, settings: Settings) -> LLMGateway:
-    """Worker・スモーク用のGateway構築(M2 ws-2・design §2.8-B)。
+def build_worker_gateway(clock: Clock, settings: Settings) -> LLMGateway:
+    """Worker・スモーク用のGateway構築(M2 ws-5・design §2.8)。
 
-    llm_mode="stub": 3系統すべてStubLLM(ci環境・unit/integration試験)。
-    llm_mode="real": Embedding系統のみGeminiEmbeddingProvider実API
-    (parser・jevはstub継続 — APIプロセスのbuild_llm_gateway契約は無変更)。
-    gemini鍵の欠落はfail-fast(静かにスタブへ落ちない)。Jev系統のreal化は
-    ws-5が同じ形で追加する。
+    llm_mode="stub": 3系統+jev_fallbackすべてStubLLM(同一インスタンス)。
+    llm_mode="real": Embedding系統=GeminiEmbeddingProvider・Jev系統=
+    TypeSafeJevProvider・フォールバック=AnthropicJevFallbackProvider
+    (llm_anthropic_api_keyはparserと共用)。parser系統はstub継続
+    (APIプロセスのbuild_llm_gateway契約は無変更)。鍵の欠落はfail-fast
+    (静かにスタブへ落ちない)。
     """
     stub = StubLLM(
         delay_parser_ms=settings.llm_stub_delay_parser_ms,
@@ -224,12 +290,36 @@ def build_embedding_gateway(clock: Clock, settings: Settings) -> LLMGateway:
         delay_jev_ms=settings.llm_stub_delay_jev_ms,
     )
     if settings.llm_mode == "stub":
-        return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub)
+        return LLMGateway(
+            clock=clock, parser=stub, embedding=stub, jev=stub, jev_fallback=stub
+        )
     if settings.llm_mode == "real":
         if not settings.llm_gemini_api_key:
             raise ValueError(
                 "llm_mode='real' requires llm_gemini_api_key (embedding gateway)"
             )
+        if not settings.llm_typesafe_api_key:
+            raise ValueError(
+                "llm_mode='real' requires llm_typesafe_api_key (jev gateway)"
+            )
+        if not settings.llm_anthropic_api_key:
+            raise ValueError(
+                "llm_mode='real' requires llm_anthropic_api_key (jev fallback)"
+            )
         embedding = GeminiEmbeddingProvider(api_key=settings.llm_gemini_api_key)
-        return LLMGateway(clock=clock, parser=stub, embedding=embedding, jev=stub)
+        jev = TypeSafeJevProvider(
+            api_key=settings.llm_typesafe_api_key,
+            base_url=settings.llm_typesafe_base_url,
+        )
+        jev_fallback = AnthropicJevFallbackProvider(
+            api_key=settings.llm_anthropic_api_key,
+            base_url=settings.llm_anthropic_base_url,
+        )
+        return LLMGateway(
+            clock=clock,
+            parser=stub,
+            embedding=embedding,
+            jev=jev,
+            jev_fallback=jev_fallback,
+        )
     raise ValueError(f"unknown llm_mode: {settings.llm_mode!r} ('stub' or 'real')")

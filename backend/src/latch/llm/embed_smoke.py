@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 
 from latch.core.clock import SystemClock
-from latch.llm.gateway import build_embedding_gateway
+from latch.llm.gateway import build_worker_gateway
 from latch.llm.gemini import GEMINI_EMBEDDING_MODEL
 from latch.llm.providers import EMBEDDING_DIMENSIONS
 from latch.settings import Settings
@@ -29,7 +29,7 @@ async def main() -> int:
     if not settings.llm_gemini_api_key:
         print("[embed-smoke] FAIL: LATCH_GEMINI_API_KEY が未設定(.env)")
         return 1
-    gateway = build_embedding_gateway(SystemClock(), settings)  # 鍵欠落はfail-fast
+    gateway = build_worker_gateway(SystemClock(), settings)  # 鍵欠落はfail-fast
     loop = asyncio.get_running_loop()
     started = loop.time()
     vec = await gateway.embed_intent(text=SAMPLE_TEXT, intent_id="embed-smoke")

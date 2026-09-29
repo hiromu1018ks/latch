@@ -98,6 +98,20 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("LATCH_GEMINI_API_KEY", "llm_gemini_api_key"),
     )
+    # TypeSafe Jev API鍵(Layer 4第一候補・M2 ws-5)。gemini鍵と同一規律: 実値は
+    # .env(git管理外)へ書き、make jev-smoke(uv run --env-file ../.env)経由での
+    # みプロセスへ渡す。ci環境(compose)へは渡さない(workerはstubのため)
+    llm_typesafe_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("LATCH_TYPESAFE_API_KEY", "llm_typesafe_api_key"),
+    )
+    # 接続先API URL(公式APIを明示渡し — anthropic_base_urlと同一判断)
+    llm_typesafe_base_url: str = Field(
+        default="https://api.typesafe.ai",
+        validation_alias=AliasChoices(
+            "LATCH_TYPESAFE_BASE_URL", "llm_typesafe_base_url"
+        ),
+    )
     # バックフィル周期タスク(06 D-15・design §2.5)。初期値(計測後に調整 — 06 §9-10)
     embedding_backfill_interval_sec: int = 300
     embedding_backfill_batch_limit: int = 50
