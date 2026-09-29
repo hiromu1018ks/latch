@@ -395,7 +395,7 @@ async def test_4_h_recheck_closes_evaluated_pair(
     ha = await _user(api_client, field)
     a = await _intent(api_client, db_engine, ha, _structured())
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured())
+    b = await _intent(api_client, db_engine, hb, _structured())  # 窓外へ動かす相手
     hc = await _user(api_client, field)
     c = await _intent(api_client, db_engine, hc, _structured())  # pending対照
     await _run_retrieval(db_engine, clock, a["id"])
@@ -467,7 +467,7 @@ async def test_6_reselection_rules(
     ha = await _user(api_client, field)
     a = await _intent(api_client, db_engine, ha, _structured())
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured())
+    await _intent(api_client, db_engine, hb, _structured())  # 相手(値で参照しない)
     await _run_retrieval(db_engine, clock, a["id"])
     guard, store = _stores(redis_client, redis_sweep, clock)
     failing = LLMGateway(
@@ -491,7 +491,7 @@ async def test_6_reselection_rules(
     ha2 = await _user(api_client, field)
     a2 = await _intent(api_client, db_engine, ha2, _structured())
     hb2 = await _user(api_client, field)
-    b2 = await _intent(api_client, db_engine, hb2, _structured())
+    await _intent(api_client, db_engine, hb2, _structured())  # 相手(値で参照しない)
     await _run_retrieval(db_engine, clock2, a2["id"])
     guard_store2 = JevCostStore(redis_client, key_prefix=redis_sweep)
     day2 = clock2.jst_date().strftime("%Y%m%d")
@@ -519,7 +519,7 @@ async def test_7_record_execution_breakdown(
     ha = await _user(api_client, field)
     a = await _intent(api_client, db_engine, ha, _structured())
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured())
+    await _intent(api_client, db_engine, hb, _structured())  # 相手(値で参照しない)
     await _run_retrieval(db_engine, clock, a["id"])
     guard, store = _stores(redis_client, redis_sweep, clock)
     day = clock.jst_date().strftime("%Y%m%d")
@@ -562,7 +562,7 @@ async def test_8_stage1_wiring_to_jev(
     ha = await _user(api_client, field)
     a = await _intent(api_client, db_engine, ha, _structured())
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured())
+    await _intent(api_client, db_engine, hb, _structured())  # 相手(値で参照しない)
     guard, store = _stores(redis_client, redis_sweep, clock)
     worker = _jev_worker(db_engine, clock, _stub_gateway(StubLLM()), guard, store)
 
