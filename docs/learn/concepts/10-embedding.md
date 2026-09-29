@@ -21,7 +21,7 @@
   本文の「NN §X」は `docs/NN-*.md` の第X節を指します(07 §3=Embedding対象テキストの
   形式定義・06 D-15=バックフィルの規定)
 - 次に読むもの: `concepts/11-matching-retrieval.md`(第11章。この章の終わりで発行される
-  embedding_completed を起点に、マッチング前半のLayer 1・Layer 2が動きます)
+  embedding_completed を起点に、マッチングのLayer 1〜3が動きます)
 
 ## 10.1 語彙が違っても「意味が近い」を比べたい
 
@@ -382,12 +382,14 @@ publishします。event_typeは `embedding_completed`。第9章で「6種のeve
 (`intents/events.py:23`)。冪等キーの3点組は(embedding_completed, intent_id, version)
 で、INSERTは `ON CONFLICT DO NOTHING`(第9章9.3と同じ形式)です。
 
-この知らせを受け取った側のマッチング処理(Layer 1〜5)は、次の単位が担当します。
+この知らせを受け取った側のマッチング処理は、後続の単位が担当します。
 つまりこの章の完成ラインは「embedding_completedが発行され、次の単位が消費できる
 状態」。第1段(created/updated→Embedding)と第2段(embedding_completed→マッチング)を
 分けたのは、失敗の性質が違うからです。Embeddingは外部API相手なので失敗が日常的で、
 バックフィルという回収が要る。マッチングはDB内の処理で、失敗は再試行5回の
 ステージ処理に載せられる(第9章9.7)。**どこで区切るか=どこで回収するか**の設計です。
+(2026-09-29追記: この読みのとおり、ws-4でembedding_completedを起点にLayer 1〜3が
+動くようになりました。第11章・第12章がその消費側です)
 
 最後に、第9章9.7で予告した「予約だけ置いたフック」のその後を書いておきます。
 ws-1はstage1の中に `embedding_hook` という呼び出し位置を予約しました。実際にws-2が

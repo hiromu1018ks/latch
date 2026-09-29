@@ -21,8 +21,8 @@
   §2.3のUPSERT・§2.6の条件確定表)と `docs/plans/M2/ws-3-report.md`。
   本文の「NN §X」は `docs/NN-*.md` の第X節を指します(06 §2=Layer 1の判定規則・
   06 §3=Layer 2・05 §2=match_candidatesの定義)
-- 次に読むもの: 後続単位の章(Layer 3 Cheap Judge以降の評価と、embedding_completedから
-  この章の関数を呼ぶ配線。実装された時点で追加されます)
+- 次に読むもの: `concepts/12-cheap-judge-cost-guard.md`(第12章。この章の50件を
+  20件へ絞るLayer 3と、embedding_completedからこの章の関数を呼ぶ配線・コスト保護)
 
 ## 11.1 数万件の中から相手を選ぶ、2段の漏斗
 
@@ -47,15 +47,17 @@ Layer 3以降は1ペアずつ点数をつける処理なので、数万件の相
 (Layer 1)、**意味の近さで「これ以上評価する価値がある」上位だけを残す**(Layer 2)。
 後続の評価層に流れる相手を漏斗の幅で制御する、という積み方です。
 
-この章で読むのはLayer 1とLayer 2の2層です。残りの3層はまだ実装されていません。
-もう1つ、正直に書いておきます。**この2層をembedding_completedから呼び出す配線も、
-まだ実装されていません**(ws-3の次の単位です)。Stage1は今もembedding_completedを
-受信したら、version検査だけしてprocessedで閉じます(第9章9.7)。
-この章の関数は、試験から直接呼ばれて動いている状態です。だからこそ関数の形が
-きれいです。この章で読む `run_candidate_retrieval` は、DB接続とClockを引数で
-受け取るただの関数で、WorkerもPub/Subも知りません。呼び出し方を後から選べる
-(ws-3設計 §2.4)。配線前に実体を作るこの順番は、第9章の「経路を先に開通させる」と
-対になるものです——「関数を先に確定させる」ステップ、と呼べます。
+この章で読むのはLayer 1とLayer 2の2層です。この単位(ws-3)の時点では、
+残りの3層も、この2層をembedding_completedから呼び出す配線も、**まだ実装されて
+いない**状態でした。Stage1はembedding_completedを受信したら、version検査だけして
+processedで閉じていました(第9章9.7)。この章の関数は、試験から直接呼ばれて
+動いている状態でした。だからこそ関数の形がきれいです。この章で読む
+`run_candidate_retrieval` は、DB接続とClockを引数で受け取るただの関数で、
+WorkerもPub/Subも知りません。呼び出し方を後から選べる(ws-3設計 §2.4)。
+配線前に実体を作るこの順番は、第9章の「経路を先に開通させる」と対になる
+ものです——「関数を先に確定させる」ステップ、と呼べます。
+なお、この配線は次の単位(ws-4)で実装され、Layer 1〜3がEventから駆動される
+ようになりました。読み方は第12章12.5で扱います。
 
 ## 11.2 絶対に成立しない相手は、AIに聞かずにSQLで落とす
 
@@ -197,7 +199,10 @@ _SELECT_TOPK = text(f"""
     SELECT i.id,
            i.version,
            1 - (i.embedding <=> CAST(:origin_embedding AS vector)) AS similarity,
-           COUNT(*) OVER () AS pass_count
+           COUNT(*) OVER () AS pass_count,
+           i.time_start,
+           i.budget_max,
+           i.structured_data
     FROM intents i
     JOIN users u ON u.id = i.user_id
     WHERE {LAYER1_WHERE}
@@ -221,6 +226,11 @@ _SELECT_TOPK = text(f"""
 各行に添えます。LIMITで切り詰める**前**の通過件数が、切り詰め後の50行と同じ
 SQLで取れる、という仕掛けです。「Layer 1を何件が通ったか」は、Layer 3以降の
 混み具合を見る手がかりになるため、戻り値に載せています。
+
+SELECTの末尾3列(`i.time_start, i.budget_max, i.structured_data`)は、ws-4で
+次の層(Layer 3)の計算のために追加されたものです(第12章で使います)。この単位
+(ws-3)の時点ではid・version・類似度・件数の4列だけでした。「次の層に必要な
+データは、同じSELECTでついでに取ってくる」と、後に1クエリで済む形へ育ちました。
 
 起点側のベクトルの渡し方に、実装の苦労が1つあります。asyncpgドライバは
 pgvectorの `vector` 型の列を**文字列**(`'[0.1, 0.2, ...]'` の形)で返します。
@@ -290,20 +300,23 @@ UNIQUE (intent_a_id, intent_b_id, intent_a_version, intent_b_version)
 (05 §2。alembic 0001で作成済み)「評価はバージョン組ごとに1レコード」という
 規定の実体です。
 
-書き込みはUPSERTです。`candidates.py:22` のSQLを見ます。
+書き込みはUPSERTです。`candidates.py:22` のSQLを見ます(引用はws-4で
+cheap_judge_score列が追加された後の現状です。ws-3の時点では
+retrieval_scoreだけでした)。
 
 ```python
 _UPSERT = text("""
     INSERT INTO match_candidates (
         intent_a_id, intent_b_id, intent_a_version, intent_b_version,
-        retrieval_score, status, created_at, updated_at
+        retrieval_score, cheap_judge_score, status, created_at, updated_at
     ) VALUES (
         :intent_a_id, :intent_b_id, :intent_a_version, :intent_b_version,
-        :retrieval_score, 'pending', :now, :now
+        :retrieval_score, :cheap_judge_score, 'pending', :now, :now
     )
     ON CONFLICT (intent_a_id, intent_b_id, intent_a_version, intent_b_version)
     DO UPDATE SET
         retrieval_score = EXCLUDED.retrieval_score,
+        cheap_judge_score = EXCLUDED.cheap_judge_score,
         updated_at = EXCLUDED.updated_at
 """)
 ```
@@ -317,9 +330,10 @@ UPSERT(アップサート)は「あったらUPDATE、なければINSERT」を1�
 INSERTされない=行は常に1行)。上書きの対象は、**同一バージョン内の再評価**です。
 将来、30分ごとの再評価(時間Bucket。ws-6で実装)で同じ4列組を再び評価したとき、
 DO NOTHING だと古い retrieval_score が残り続けます。最新の評価で塗り替えるため、
-DO UPDATE にして、更新するのは `retrieval_score` と `updated_at` の2列だけです
-(ws-3設計 §2.3)。status は UPDATE 側で触りません。値の遷移——`pending`(評価待ち)
-から `evaluated`/`skipped`(Layer 3以降)へ、`closed`(削除処理)へ——は、後続の
+DO UPDATE にして、更新するのはスコアの列(retrieval_score・cheap_judge_score)と
+`updated_at` だけです(ws-3設計 §2.3。cheap_judge_scoreはws-4で追加)。status は
+UPDATE 側で触りません。値の遷移——`pending`(評価待ち)から `evaluated`/
+`skipped`(Layer 4のJev。第12章12.6)へ、`closed`(削除処理)へ——は、後続の
 層や処理の担当だからです。この帳簿では「候補を見つけた」までが担当、
 という線引きです。
 
@@ -362,8 +376,10 @@ COALESCEと同じ気質)。起点の人数検査は
 
 関数群がDB接続とClockを引数に取るだけの形(11.1で見ました)なのは、この検証も
 含めた全体を1つのトランザクションで包めるためです。試験は `engine.begin()` で
-直接包んで呼びます。Workerへの配線は次の単位が選ぶもので、独立したトランザクション
-として切ることも、Stage1の処理に同乗させることもできます。例外は握りません。SQLの
+直接包んで呼びます。Workerへの配線は次の単位が選ぶものでした——実際にws-4は
+Stage1の処理への同乗を選びました(第12章12.5)。独立したトランザクションとして
+切ることも、同乗させることもできる形が、この選択をあとから自由にしたのです。
+例外は握りません。SQLの
 失敗は呼び出し側へ伝播して、再試行の経路(第9章9.7)に載せる約束です(ws-3設計 §2.4)。
 
 ## 11.8 自分で確かめる
@@ -402,20 +418,21 @@ COALESCEと同じ気質)。起点の人数検査は
    `scaled` のように長さが倍になっても1.0のままである点が「向きだけを見る」の
    実感です。pgvectorの `<=>` はこの cosine の「距離」側(1−類似度)を返します
 
-2. `uv run pytest tests/unit/matching/test_origin.py -v` を実行する(12件)。
-   試験名から、skip理由6種の分岐・20歳計算の境界(誕生日当日と前日)・
-   UUIDの正規化がそれぞれ試験になっていることを読み取る
+2. `uv run pytest tests/unit/matching/test_origin.py -v` を実行する(14件。
+   ws-4でstructured_data読み取りの試験が2件加わりました)。試験名から、skip理由6種の
+   分岐・20歳計算の境界(誕生日当日と前日)・UUIDの正規化がそれぞれ試験に
+   なっていることを読み取る
 
-3. `uv run pytest tests/unit/matching/test_layer_sql.py -v` を実行する(10件)。
-   この試験はSQLの文字列そのものを検査する型です(第6章6.7のtest_store_sql.pyの
-   流儀)。`CAST(:x AS ...)` 形式が保たれていること・ORDER BYに第2キー
-   `i.id ASC` があること・LIMITが50であること・ON CONFLICTの列指定を、
-   試験コードを開いて確認する
+3. `uv run pytest tests/unit/matching/test_layer_sql.py -v` を実行する(12件。
+   ws-4でLayer 3列のピンが2件加わりました)。この試験はSQLの文字列そのものを
+   検査する型です(第6章6.7のtest_store_sql.pyの流儀)。`CAST(:x AS ...)` 形式が
+   保たれていること・ORDER BYに第2キー `i.id ASC` があること・LIMITが50である
+   こと・ON CONFLICTの列指定を、試験コードを開いて確認する
 
-4. `uv run pytest tests/unit/matching/test_matching_runner.py -v` を実行する(3件)。
-   スタブのconnと関数を差し込んで、skipのとき検索と記録が1回も呼ばれないことを
-   確かめる試験です。何を差し替えているかを読むと、11.7の「関数を選べる」設計が
-   試験にも効いているのが分かります
+4. `uv run pytest tests/unit/matching/test_matching_runner.py -v` を実行する(4件。
+   ws-4でLayer 3呼び出しの試験が1件加わりました)。スタブのconnと関数を差し込んで、
+   skipのとき検索と記録が1回も呼ばれないことを確かめる試験です。何を差し替えて
+   いるかを読むと、11.7の「関数を選べる」設計が試験にも効いているのが分かります
 
 5. `rg -n "HNSW|<=>" backend/src/latch/worker/matching/` を実行する。
    コード上にHNSWという言葉が(コメントを除けば)索引定義として現れないこと、
@@ -441,11 +458,11 @@ COALESCEと同じ気質)。起点の人数検査は
   retrieval_scoreだけ塗り替えるUPSERT。statusの遷移は後続の層の担当
 - 起点に不備(非active・embedding NULL等)があれば検索前に理由つきで抜ける。
   関数はDB接続とClockだけを引数に取り、Workerのイベント経路に依存しない。
-  配線は次の単位が選ぶ
+  配線は次の単位が選ぶ(そしてws-4で、Stage1への同乗が選ばれた——第12章)
 
 保存されたIntentがベクトルになり(第10章)、そのベクトルで候補が選ばれ、帳簿に
 乗るまでを読みました。帳簿に乗った候補は、まだ「意味が近い順に並んだ50組」に
-すぎません。この組が本当に成立するかを点数づけるLayer 3以降と、embedding_completed
+すぎません。この組をさらに対象を絞り込み点数づけるLayer 3と、embedding_completed
 からこの章の関数を呼ぶ配線——読者の手持ちは、もうその全部の前提です。
 
 ## 11.10 用語集(この章で登場した言葉)

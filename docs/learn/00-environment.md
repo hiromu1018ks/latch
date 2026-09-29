@@ -195,10 +195,10 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **643件を約5秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **687件を約5秒**(`make test`)。フロントエンドも
   **81件を約0.6秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
-- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 126件を含め計
-  **769件を約30秒**
+- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 131件を含め計
+  **818件を約30秒**
 
 数秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
 「壊して試す」学習法(Lab 2)が気軽にできます。この速さ自体が、このプロジェクトの
@@ -249,7 +249,7 @@ latch/
 │   │   ├── llm/           AI(LLM)呼び出しの単一経路
 │   │   ├── geo/           地名⇔座標の変換(ジオコーディング)
 │   │   ├── events/        知らせの運搬(EventBusポート・Pub/Sub実装・回収リレー)(第9章)
-│   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチング)(第9章〜第11章)
+│   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチングとコスト保護)(第9章〜第12章)
 │   └── tests/             テスト(unit/=部品単体, integration/=組み合わせ)
 ├── compose.yaml           5サービス(db/redis/pubsub/api/worker)の定義
 ├── Makefile               よく使うコマンドのショートカット集
@@ -267,7 +267,7 @@ latch/
 | `make ps` | 5サービスの状態一覧。`(healthy)` は健康診断合格の印 |
 | `make logs` | 5サービスのログを流し見る。Ctrl+Cで停止 |
 | `make lint` | コードの書式・静的検査(ruff)。コミット前に緑を確認 |
-| `make test` | unit テスト643件。約5秒。最もよく使う |
+| `make test` | unit テスト687件。約5秒。最もよく使う |
 | `make test-ci` | unit+integration。実DB・実Redis・実Pub/Subエミュレータを使う。実行中は常設workerを一時停止し、終わると復帰する(第9章9.8) |
 | `make migrate` | DB定義を最新版に更新(Alembic) |
 | `make geo-import` | 鹿児島の地物データをDBへ取り込み(数分) |
