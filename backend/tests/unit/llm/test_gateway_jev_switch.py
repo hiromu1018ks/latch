@@ -51,8 +51,7 @@ class _RecordingStub(StubLLM):
                 "answers": {
                     k: (
                         {"type": "noul", "noul": 0.5}
-                        if k
-                        in ("would_a_accept_b", "would_b_accept_a", "latent_yes")
+                        if k in ("would_a_accept_b", "would_b_accept_a", "latent_yes")
                         else {"type": "score", "score": 2.0, "confidence": None}
                     )
                     for k in (
@@ -171,7 +170,8 @@ async def test_fallback_failure_propagates(caplog):
 
 
 async def test_fallback_invalid_output_propagates(caplog):
-    gw = _gateway(_ThrowingJev(LLMRateLimitError("429")), StubLLM(jev_response={"answers": {}}))
+    bad = StubLLM(jev_response={"answers": {}})
+    gw = _gateway(_ThrowingJev(LLMRateLimitError("429")), bad)
     with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
         with pytest.raises(JevOutputInvalidError) as ei:
             await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
