@@ -212,6 +212,7 @@
   - スーパーバイザー独立検証(test-ci初回)で4件失敗を検出 → supervisor直接修正207c59e: (1)test_geoのheadピン0002→0003もれ(機械的追随) (2)ペア行のintent_a_id<intent_b_id正規化に対する方向バイアスクエリ(test_2・4) (3)asyncpgへstrでなくdatetimeを渡す(test_4) (4)active保存時のtime_end補完(start+3h)により窓全体を動かす必要(test_4) (5)同一関数内パート間の時間窓分離もれ(test_7・fallback計上3倍) (6)K_j=8/イベントの再実行期待は「残りpendingは次処理で消化」が仕様(test_2)
   - 経過: 実装中にエージェント側API接続断(EAI_AGAIN・テザリング切替)で1度中断 → 再開指示で完走(M1 ws-4と同様・成果物への影響なし)
   - 修正後: **マージ後main test-ci 926 passed**・lint緑・alembic 0003・jev-smoke両経路OK・残存ゼロ(Redis ws5-*・users m2ws5-%)
+- 学習資産追従: ws-5分 43825c6(第13章「お金を払う判定と、信用しない作法: Layer 4 Jevとフォールバック切替」新設+既存6ファイル更新。演習4本は実行済み出力つき・実API課金のjev-smoke手順は教材化せず案内のみ)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
