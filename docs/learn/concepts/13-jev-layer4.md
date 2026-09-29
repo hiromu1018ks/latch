@@ -26,8 +26,8 @@
   Guard契約・§2.6の世代スキップ・§2.7のskip_reason)と
   `docs/plans/M2/ws-5-report.md`。本文の「NN §X」は `docs/NN-*.md` の第X節を
   指します(07 §4=Jevの入出力と切替・06 §5=Layer 4の規定・05 §2=jev_result)
-- 次に読むもの: 後続単位の章(Layer 5 LATCH Engine——この章で記録したjev_resultを
-  消費してスコアと提案を作る層。実装された時点で追加されます)
+- 次に読むもの: `concepts/14-latch-layer5.md`(第14章。この章で記録したjev_resultを
+  消費してスコアと提案を作るLayer 5 LATCH Engineです)
 
 ## 13.1 20件に残った相手へ、お金を払って最後の質問を投げる
 
@@ -381,12 +381,15 @@ EmbeddingWorkerを呼んでいました。今回、その隣に1行増えてい�
                     await self._kick_jev(*result.triple)
 ```
 
-(`worker/main.py:188` から)
+(`worker/main.py:221` から)
 
-`_kick_jev`(`main.py:235`)は、Eventの種類がembedding_completedのときだけ
+`_kick_jev`(`main.py:268`)は、Eventの種類がembedding_completedのときだけ
 JevWorkerを呼ぶ小さな門番です。作りは `_kick_embedding` のコピーのような形で、
 これも意図的です。**配線の形を既存の隣に合わせる**ことで、読む側の学習成本を
 下げ、将来の変更箇所も「並びのこの辺」と予測しやすくなります。
+(この章を書いた時点ではJevWorkerだけを呼んでいましたが、ws-6でLayer 5の
+LatchEngineが同じ `_kick_jev` の続きとして直列実行されるようになりました。
+続きは第14章です)
 
 第12章12.5を思い出してください。Layer 1〜3は、EventをprocessedにするUPDATEと
 **同一のトランザクションに同乗**しました。DB内の処理だから失敗すればロール

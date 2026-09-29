@@ -396,7 +396,7 @@ publishします。event_typeは `embedding_completed`。第9章で「6種のeve
 最後に、第9章9.7で予告した「予約だけ置いたフック」のその後を書いておきます。
 ws-1はstage1の中に `embedding_hook` という呼び出し位置を予約しました。実際にws-2が
 実装したとき、埋め場所はこのフックではなく **Workerの配線** に変わりました
-(`worker/main.py:221` の `_kick_embedding`)。理由は、あのフックがDBトランザクションの
+(`worker/main.py:254` の `_kick_embedding`)。理由は、あのフックがDBトランザクションの
 **中**で呼ばれる位置だったためです。外部API呼び出し(最大2秒)をトランザクションの
 中で行うと10.5で読んだ問題が全部起きます。再試行なしの規律とも矛盾します。そこで、
 Stage1の処理がコミットした**直後**、ackを返す**前**にEmbeddingWorkerを呼ぶ位置へ
@@ -417,11 +417,11 @@ Stage1の処理がコミットした**直後**、ackを返す**前**にEmbedding
         await self._embedding.handle(intent_id, version)
 ```
 
-(`worker/main.py:221` から)
+(`worker/main.py:254` から)
 
 ack前にキックを終える意味も第9章の読みが効きます。キックの途中でWorkerが落ちたら、
 ackされない知らせは再配信されます。再配信ではstage1はduplicateと判定しますが、
-Workerはduplicateでもキックを呼ぶ(`main.py:188` の分岐)なので、未完了の埋め込みは
+Workerはduplicateでもキックを呼ぶ(`main.py:221` の分岐)なので、未完了の埋め込みは
 再配信で回収されます。LLM失敗だけはバックフィルが、それ以外の失敗は再配信が拾う。
 at-least-onceの世界の最後の1枚として、ここでも配達の重複を「冪等な処理」で
 消化しています。

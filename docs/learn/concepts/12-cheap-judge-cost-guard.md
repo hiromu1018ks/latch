@@ -309,7 +309,7 @@ quarantinedの経路にそのまま載ります。同じ「フック」という
 性質(外部APIか、DB内か)によって埋める場所が変わる——第9章・第10章で積んだ
 読みが、ここで報われます。
 
-呼ばれる実体は `worker/main.py:216` の `_run_matching` です。
+呼ばれる実体は `worker/main.py:303` の `_run_matching` です。
 
 ```python
     async def _run_matching(self, conn, intent_id: uuid.UUID) -> None:
