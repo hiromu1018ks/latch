@@ -197,3 +197,49 @@ degraded 1/2/4〜8は第2バッチで全通過。残りの修正(integration再�
 5. 検証: `make lint`グリーン・`make test` 1016 passed・integration 2ファイル
    12件収集・差分は上記2ファイルのみ。cheapjudge/jev/latchengine系の失敗は
    k2/k3漏洩+E1死エントリの干渉のみのため個別対応なし(本修正で根源解消)。
+
+## 補足4(run 5〜7の修正とスーパーバイザー検証結果 — 2026-09-30)
+
+### run 5残4失敗の修正(supervisor直接修正 6eb1b78)
+
+1. **degraded test_3: 相手Intent bの作成が丸ごと欠落**(起点のみでretrieval→
+   候補必然ゼロ)。bを追加(test_1と同一構成)
+2. **k1⑧: `notifications.latch_id` は不存在列**(latch_idはpayload JSONB)→
+   `payload->>'latch_id'` と `id::text` の照合へ
+3. **k3: `match_events.version` は不存在列**(versionはpayload)→
+   `payload->>'version'`(text比較)へ
+4. **k2: 比較対象をペア集合(重複込み)へ**(10 §4.7「match_candidatesが二重生成
+   しない」の文言どおり。status遷移はJev評価の正当な進行のため比較外)
+5. run 6の残1失敗= k1⑧掃除のlatches削除がlatch_status_events FK違反
+   (e1e92bb・field teardownと同順序へ)
+
+### スーパーバイザー検証結果(検証手順§7どおり)
+
+- **test-ci: 1188 passed(run 7・MAKE_EXIT=0)**。api・workerイメージを
+  worktreeコードで再ビルド後。経過: run 2=20失敗+2エラー(purge Makefile欠陥
+  fe22042を含む)→run 3=24失敗(notifications FK欠落を特定)→run 4=17失敗
+  (HNSW死エントリ汚染を特定)→run 5=4失敗→run 6=1失敗→run 7=全グリーン
+- **残存・孤立行: すべて0件**(users m2ws8*/intents/match_candidates/
+  group_candidates/latches/pending events・孤立gc/latches=0。test_schema
+  掃除teardownによりM0以来の累積seed行・毒payload eventも恒久解消)。
+  Redisは試験prefix ws8*=0(jev:*/reeval:*はworker既定prefixの日次/TTLキー
+  で自然失効・intent uuid単位のため干渉なし)
+- **g2-gate部分実行: exit 0**(first/fallback各2ペア=計4成功。証拠=
+  docs/testassets/results/g2-jev-result-20260930-122004.yaml・partial=true
+  明記・goldset SHA・usage合計記録)。実コスト≈$0.02
+- lint再実行グリーン・テストbasename一意(重複0)・alembic head=0005不変・
+  arch test(test-ci内)グリーン
+
+### 事故記録(正直に)
+
+- **g2-gate引数不達による全件実行の開始と即時停止**: `make g2-gate -- --limit 2`
+  の `--` はmakeの文法ではrecipeへ転送されず、520ペア全件(≈$4.75相当)の
+  実行が開始された。ユーザー条件(評価の実行前に金額を報告してから)に反する
+  ため約9分で停止(沈没コストあり・レポート未生成のため証拠は残らなかった)。
+  対処: g2-gateターゲットの引数をmake変数ARGS経由へ変更(853f92f)。
+  計画書§9-17の「--で渡す」記述が誤りだった
+- **環境の既存欠陥2件(本単位スコープ外・ユーザーへ報告済み)**:
+  (1) compose.yamlのworkerサービスにLATCH_DATABASE_URL設定がなくコンテナ
+  workerが127.0.0.1:5432接続失敗で稼働不能(api側のみ設定あり。test-ciは
+  in-process workerのため影響なし)(2) test_schema.py由来の残行汚染は
+  61b0de3で解消(本文のとおり)
