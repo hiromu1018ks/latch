@@ -205,11 +205,15 @@ _CLOSE_GROUP_BY_ID = text("""
     WHERE id = CAST(:gid AS uuid) AND status = 'candidate'
 """)
 
-# 昇格時のcandidate行更新(latch_engine._UPDATE_FOR_PROMOTIONと同型)
+# 昇格時のcandidate行更新(latch_engine._UPDATE_FOR_PROMOTIONと同型。
+# group_candidate_idも書く: 同一intent_idsの新世代集合(gid')が既存の
+# 開いているlatches行へ昇格するとき旧gidが残るのを防ぐ — ws-7引継ぎの
+# 確定・M3 ws-1 design §2.10)
 _UPDATE_GROUP_LATCH_FOR_PROMOTION = text("""
     UPDATE latches
     SET score = :score, proposal = CAST(:proposal AS jsonb),
-        response_deadline = CAST(:deadline AS timestamptz)
+        response_deadline = CAST(:deadline AS timestamptz),
+        group_candidate_id = CAST(:gid AS uuid)
     WHERE id = CAST(:latch_id AS uuid) AND status = 'candidate'
     RETURNING id
 """)
@@ -509,8 +513,9 @@ async def _update_group_latch_for_promotion(
     score: float,
     proposal: dict,
     deadline,
+    gid: uuid.UUID,
 ) -> bool:
-    """昇格時のcandidate行更新(score/proposal/response_deadlineの3列のみ)。"""
+    """昇格時のcandidate行更新(score/proposal/response_deadline/group_candidate_id)。"""
     res = await conn.execute(
         _UPDATE_GROUP_LATCH_FOR_PROMOTION,
         {
@@ -518,6 +523,7 @@ async def _update_group_latch_for_promotion(
             "score": score,
             "proposal": json.dumps(proposal, ensure_ascii=False),
             "deadline": deadline,
+            "gid": gid,
         },
     )
     return res.first() is not None
@@ -923,6 +929,7 @@ class GroupEngine:
                         score=r.score,
                         proposal=proposal,
                         deadline=deadline0,
+                        gid=r.gid,
                     ):
                         continue
                     latch_id = found[0]

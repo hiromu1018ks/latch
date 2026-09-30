@@ -187,13 +187,16 @@ def _future(hours: float) -> str:
     return (now + timedelta(hours=hours)).isoformat()
 
 
-def _structured(*, start: str | None = None) -> dict:
-    return {
+def _structured(*, start: str | None = None, expires: str | None = None) -> dict:
+    structured = {
         "category": {"primary": CATEGORY, "secondary": None},
         "alcohol_involved": False,
         "time": {"start": start or _future(BASE_HOURS), "end": None},
         "location": {"name": "天文館"},
     }
+    if expires is not None:
+        structured["expires_at"] = expires  # 明示期限(補完のスナップ回避)
+    return structured
 
 
 def _payload(structured: dict) -> dict:
@@ -725,10 +728,20 @@ async def test_4_bucket_reeval_generates_candidates(
     # catch-up対象外になる
     bucket_ahead = clock.now() + timedelta(minutes=45)
     start = bucket_ahead.isoformat()
+    # 明示expires(supervisor直接修正・2026-09-30): 期限nullの補完は
+    # 「今夜JST 23:30/翌日12:00/翌日23:30/now+72h」の最寄りへスナップするため、
+    # 21:30〜23:30 JST帯の実行では今夜23:30(=now+2時間以内)が最寄りになり
+    # a/bがcatch-up対象化してrun_once()!=0で失敗する(日次の時限爆弾)。
+    # 期限を明示的に十分遠方へ置き、時刻帯に依存しない決定性を担保する。
+    expires = (clock.now() + timedelta(hours=6)).isoformat()
     ha = await _user(api_client, field)
-    a = await _intent(api_client, db_engine, ha, _structured(start=start), vec)
+    a = await _intent(
+        api_client, db_engine, ha, _structured(start=start, expires=expires), vec
+    )
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured(start=start), vec)
+    b = await _intent(
+        api_client, db_engine, hb, _structured(start=start, expires=expires), vec
+    )
     calls: list[str] = []
 
     async def pipeline(intent_id):

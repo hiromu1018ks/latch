@@ -58,6 +58,9 @@ def test_all_v1_routes_are_rate_limited():
         "/v1/intents/{intent_id}": 3,  # GET + PATCH + DELETE
         "/v1/intents/{intent_id}/pause": 1,
         "/v1/intents/{intent_id}/resume": 1,
+        "/v1/latches": 1,  # M3 ws-1(一覧)
+        "/v1/latches/{latch_id}": 1,  # M3 ws-1(詳細)
+        "/v1/latches/{latch_id}/response": 1,  # M3 ws-1(回答)
         "/v1/users": 1,
         "/v1/users/me": 1,
     }

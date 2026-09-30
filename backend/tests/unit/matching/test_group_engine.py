@@ -911,3 +911,16 @@ def test_select_group_pairs_orders_for_determinism():
 
     sql = str(_SELECT_GROUP_PAIRS)
     assert "ORDER BY intent_a_id, intent_b_id, updated_at DESC" in sql
+
+
+def test_promotion_update_writes_group_candidate_id():
+    """昇格UPDATEはgroup_candidate_idも書く(§2.10・ws-7引継ぎの確定)。
+
+    ON CONFLICTで既存の開いているlatches行へ昇格するとき、旧gidのまま
+    残っていた問題への対処。SET句とbind paramのピン。
+    """
+    raw = str(ge._UPDATE_GROUP_LATCH_FOR_PROMOTION)
+    assert "group_candidate_id = CAST(:gid AS uuid)" in raw
+    assert "score = :score" in raw
+    assert "response_deadline = CAST(:deadline AS timestamptz)" in raw
+    assert "WHERE id = CAST(:latch_id AS uuid) AND status = 'candidate'" in raw

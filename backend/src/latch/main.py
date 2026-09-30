@@ -30,6 +30,7 @@ from latch.events import FallbackRelay, make_event_bus
 from latch.intents import IntentsError, make_intent_parse_service, parse_router
 from latch.intents.routes import intents_crud_router
 from latch.intents.service import make_intent_service
+from latch.latches import LatchesError, latches_router, make_latches_service
 from latch.ratelimit import make_rate_limiter
 from latch.ratelimit.errors import RateLimitError
 from latch.settings import Settings
@@ -40,6 +41,7 @@ from latch.users.service import make_user_service
 logger = logging.getLogger("latch.auth")
 users_logger = logging.getLogger("latch.users")
 intents_logger = logging.getLogger("latch.intents")
+latches_logger = logging.getLogger("latch.latches")
 ratelimit_logger = logging.getLogger("latch.ratelimit")
 
 
@@ -50,6 +52,7 @@ async def _lifespan(app: FastAPI):
     build_users = not hasattr(app.state, "users_service")
     build_intents = not hasattr(app.state, "intent_parse_service")
     build_intents_crud = not hasattr(app.state, "intent_service")
+    build_latches = not hasattr(app.state, "latches_service")
     build_rate_limit = not hasattr(app.state, "rate_limiter")
     build_events = not hasattr(app.state, "event_bus")
     if not (
@@ -57,6 +60,7 @@ async def _lifespan(app: FastAPI):
         or build_users
         or build_intents
         or build_intents_crud
+        or build_latches
         or build_rate_limit
         or build_events
     ):
@@ -132,6 +136,10 @@ async def _lifespan(app: FastAPI):
             limiter=app.state.rate_limiter if build_rate_limit else None,
             event_bus=getattr(app.state, "event_bus", None),
         )
+    if build_latches:
+        app.state.latches_service = make_latches_service(
+            clock=app.state.clock, engine=engine
+        )
     try:
         yield
     finally:
@@ -163,6 +171,7 @@ def create_app(
     intent_parse_service=None,
     intent_service=None,
     rate_limiter=None,
+    latches_service=None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.clock = clock if clock is not None else SystemClock()
@@ -177,6 +186,8 @@ def create_app(
         app.state.intent_service = intent_service
     if rate_limiter is not None:
         app.state.rate_limiter = rate_limiter
+    if latches_service is not None:
+        app.state.latches_service = latches_service
 
     @app.get("/health")
     async def health(
@@ -189,6 +200,7 @@ def create_app(
     app.include_router(users_router)
     app.include_router(parse_router)
     app.include_router(intents_crud_router)
+    app.include_router(latches_router)
 
     @app.exception_handler(AuthError)
     async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
@@ -211,6 +223,16 @@ def create_app(
         request: Request, exc: IntentsError
     ) -> JSONResponse:
         intents_logger.warning("intents.error code=%s", exc.code)
+        return JSONResponse(
+            status_code=exc.http_status,
+            content=_error_body(exc.code, str(exc)),
+        )
+
+    @app.exception_handler(LatchesError)
+    async def latches_error_handler(
+        request: Request, exc: LatchesError
+    ) -> JSONResponse:
+        latches_logger.warning("latches.error code=%s", exc.code)
         return JSONResponse(
             status_code=exc.http_status,
             content=_error_body(exc.code, str(exc)),

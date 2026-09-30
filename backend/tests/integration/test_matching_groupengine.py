@@ -1143,3 +1143,139 @@ async def test_11_pure_min3_group_e2e(
     latch = await _group_latch_of(db_engine, ids)
     assert latch is not None and latch[1] == "proposed"
     assert float(latch[2]) == 0.85  # min(0.9,0.85)×C
+
+
+async def test_promotion_overwrites_group_candidate_id(
+    api_client, db_engine, field, redis_client, redis_sweep
+):
+    """世代交代昇格: 開いているlatches行へ昇格時gidが新世代へ書き換わる(§2.10)。
+
+    旧世代(gid_old・closed)が残したcandidate行latchesへ、同一メンバーの
+    新世代集合(gid_new)のfinalizeがON CONFLICT昇格する。
+    """
+    import json as json_mod
+
+    clock = _clock()
+    start = _future(BASE_HOURS)
+    expires = _future(FAR_EXPIRES_H)
+    members: list[dict] = []
+    for _ in range(4):
+        h, _s = await _user(api_client, field)
+        members.append(
+            await _intent(
+                api_client,
+                db_engine,
+                h,
+                _structured(
+                    start=start, expires=expires, budget_max=4000, participants=(2, 4)
+                ),
+            )
+        )
+    ids = [m["id"] for m in members]
+    now = SystemClock().now()
+    ms = {"seed_id": ids[0], "versions": {i: 1 for i in ids}}
+    async with db_engine.begin() as conn:
+        # 旧世代: 閉じた集合+candidatesのまま残っているlatches行
+        res_old = await conn.execute(
+            text("""
+                INSERT INTO group_candidates
+                    (intent_ids, member_scores, status, created_at, updated_at)
+                VALUES (CAST(:ids AS uuid[]), CAST(:ms AS jsonb), 'closed',
+                        CAST(:now AS timestamptz), CAST(:now AS timestamptz))
+                RETURNING id
+            """),
+            {
+                "ids": [uuid_mod.UUID(i) for i in ids],
+                "ms": json_mod.dumps(ms),
+                "now": now,
+            },
+        )
+        gid_old = str(res_old.first()[0])
+        await conn.execute(
+            text("""
+                INSERT INTO latches
+                    (intent_ids, group_candidate_id, proposal, score, status,
+                     response_deadline, expires_at, created_at)
+                VALUES (CAST(:ids AS uuid[]), CAST(:gid AS uuid),
+                        CAST(:proposal AS jsonb), :score, 'candidate',
+                        CAST(:deadline AS timestamptz),
+                        CAST(:expires AS timestamptz), CAST(:now AS timestamptz))
+            """),
+            {
+                "ids": [uuid_mod.UUID(i) for i in ids],
+                "gid": gid_old,
+                "proposal": json_mod.dumps({"headcount": 4, "match_level": "low"}),
+                "score": 0.5,
+                "deadline": now + timedelta(hours=2),
+                "expires": now + timedelta(days=5),
+                "now": now,
+            },
+        )
+        # 新世代: candidate集合(0005部分UNIQUEは旧がclosedのため共存可)
+        res_new = await conn.execute(
+            text("""
+                INSERT INTO group_candidates
+                    (intent_ids, member_scores, status, created_at, updated_at)
+                VALUES (CAST(:ids AS uuid[]), CAST(:ms AS jsonb), 'candidate',
+                        CAST(:now AS timestamptz), CAST(:now AS timestamptz))
+                RETURNING id
+            """),
+            {
+                "ids": [uuid_mod.UUID(i) for i in ids],
+                "ms": json_mod.dumps(ms),
+                "now": now,
+            },
+        )
+        gid_new = str(res_new.first()[0])
+        # 全6ペアのjev_result直書き(世代=現行version 1)
+        jev = {
+            "would_a_accept_b": 0.9,
+            "would_b_accept_a": 0.85,
+            "jev_5axis": {},
+            "provider": "fixture",
+            "model": None,
+        }
+        for x in range(4):
+            for y in range(x + 1, 4):
+                # 実物パイプライン(candidates.py normalize_pair)と同一の
+                # a<b正規化・UPSERT(workerが同キー行を書いていても通す)
+                lo_id, hi_id = sorted((ids[x], ids[y]))
+                await conn.execute(
+                    text("""
+                        INSERT INTO match_candidates
+                            (intent_a_id, intent_b_id, intent_a_version,
+                             intent_b_version, retrieval_score,
+                             cheap_judge_score, jev_result, status,
+                             created_at, updated_at)
+                        VALUES (CAST(:a AS uuid), CAST(:b AS uuid), 1, 1, 0.9,
+                                0.9, CAST(:jev AS jsonb), 'evaluated',
+                                CAST(:now AS timestamptz),
+                                CAST(:now AS timestamptz))
+                        ON CONFLICT (intent_a_id, intent_b_id,
+                                     intent_a_version, intent_b_version)
+                        DO UPDATE SET jev_result = EXCLUDED.jev_result,
+                            status = 'evaluated',
+                            updated_at = EXCLUDED.updated_at
+                    """),
+                    {
+                        "a": uuid_mod.UUID(lo_id),
+                        "b": uuid_mod.UUID(hi_id),
+                        "jev": json_mod.dumps(jev),
+                        "now": now,
+                    },
+                )
+    group = _group_engine(db_engine, clock)
+    await group.finalize(uuid_mod.UUID(ids[0]))
+    async with db_engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    "SELECT status, group_candidate_id FROM latches"
+                    " WHERE intent_ids = CAST(:ids AS uuid[])"
+                ),
+                {"ids": [uuid_mod.UUID(i) for i in ids]},
+            )
+        ).first()
+    assert row is not None
+    assert row[0] in ("candidate", "proposed")  # try_promote後proposed
+    assert str(row[1]) == gid_new  # 旧gid_old → 新gid_newへ書き換わる(§2.10)
