@@ -232,6 +232,7 @@
 
 - ws-8 / 設計 675edcc(supervisor承認: design §5の8件=①p95実装解釈②min_samples=2③breakerプロセス内メモリ④02#5〜#12ci実施⑤D-16上限試験はM4⑥Gateway公開IF追加⑦Minor 4件処置〔(a)のみws-8〕⑧test-ciへpurge-match-sub挿入。独立突合は設計§6に記録。解釈3件はG2時確認事項④へ)/ 2026-09-30
   - 経過: 実装中にAPI接続断で1度中断(agent1・調査完了直後の執筆開始時)→再開指示で完走(影響なし)
+- ws-8 / 計画 dd01544(3,940行・Task 1〜13・SQL/コード全文記載。§9にIF確定事項20件+Self-Review記録。機械チェック合格: basename一意〔新規5ファイル既存96と衝突なし〕・ピン試験追随访問〔JevJudgment構成ピンなしでusage追加無傷・test_llm_factoryは§9-20で対応規定・group_engineへORDER BYピン追加〕・DB干渉対抗策〔prefix teardown+&&掃除・now+5日統一・Redis prefix分離〕。design配置102→118 Intent・冪等試験分離の修正は§9-15/16に理由つき記録)/ 2026-09-30実装着手
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
