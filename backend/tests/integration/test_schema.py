@@ -4,12 +4,16 @@
 挙動検証(#5〜#7・#9)は後段のタスクでこのファイルへ追記する。
 """
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
+
+from latch.core.db import create_db_engine
+from latch.settings import Settings
 
 pytestmark = pytest.mark.integration
 
@@ -195,6 +199,56 @@ async def test_unique_constraints_exist(db_engine):
 # --- 挙動検証(design §4.2 #5〜#7・#9)。時刻は固定リテラル(決定性) ---
 
 TS = "TIMESTAMPTZ '2026-09-27 12:00:00+00'"
+
+
+async def _sweep_fixed_ts_rows() -> None:
+    """このファイルが固定TSで挿入・COMMITした行をFK依存の葉→根で削除する
+    (ws-8 supervisor追加指示・design §2.7対抗策実証のため)。
+
+    挿入行はlatches/group_candidatesの構造的孤立行(intent_idsが参照先不在の
+    ランダムuuid)とmatch_eventsの毒payload行({})で、放置するとci-dbへ
+    累積し検証手順4(孤立行0件)を成立不能にする。全INSERTが固定TSリテラルを
+    使うため created_at = TS固定値 で一意に識別できる(rollbackするCHECK試験は
+    行を残さないため影響なし)。latches→group_candidatesの順は
+    fk_latches_group_candidate(latchesがgroup_candidatesを参照)のため。
+    """
+    engine = create_db_engine(Settings())
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(f"DELETE FROM calibration_records WHERE created_at = {TS}")
+            )
+            await conn.execute(
+                text(
+                    "DELETE FROM latch_status_events WHERE latch_id IN"
+                    f" (SELECT id FROM latches WHERE created_at = {TS})"
+                )
+            )
+            await conn.execute(
+                text(
+                    "DELETE FROM notifications WHERE user_id IN"
+                    f" (SELECT id FROM users WHERE created_at = {TS})"
+                )
+            )
+            await conn.execute(text(f"DELETE FROM latches WHERE created_at = {TS}"))
+            await conn.execute(
+                text(f"DELETE FROM group_candidates WHERE created_at = {TS}")
+            )
+            await conn.execute(
+                text(f"DELETE FROM match_events WHERE created_at = {TS}")
+            )
+            await conn.execute(text(f"DELETE FROM intents WHERE created_at = {TS}"))
+            await conn.execute(text(f"DELETE FROM users WHERE created_at = {TS}"))
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _sweep_fixed_ts_rows_on_exit():
+    """ファイル内全試験終了後に固定TS行を掃除(autouse・試験本体は無変更)。"""
+    yield
+    asyncio.run(_sweep_fixed_ts_rows())
+
 
 # バインドパラメータ用の同instant(asyncpgのtimestamptzバインドはdatetime要求)
 ANON_TS = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)

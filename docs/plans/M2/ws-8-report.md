@@ -145,3 +145,24 @@ cf3193a feat: circuit breakerの状態機(llm/breaker.py)とunit試験12件
    へ変更。
 5. 検証: `make lint`グリーン・`make test` 1016 passed・`pytest --collect-only`
    integration 2ファイル12件収集・差分は上記2ファイルのみ。
+6. **test_schema.py由来の残行掃除(supervisor承認のスコープ追加)**:
+   test_schema.pyは固定TS(2026-09-27 12:00:00+00)リテラルで行をINSERTして
+   COMMITするが削除しないため、①latches/group_candidatesの構造的孤立行
+   (intent_idsが参照先不在のランダムuuid)②match_eventsのpayload={}行
+   (api relayのint(None)による永久再送ループの毒)が毎test-ci実行ごとに
+   ci-db へ累積し、design §2.7の対抗策実証(検証手順4・孤立行0件)を成立
+   不能にしていた。対処=ファイル末尾(全試験終了後)に走るautouse(module)
+   teardownを追加し、削除条件 created_at = TS固定値 でこのファイルの挿入行を
+   一意識別してFK依存の葉→根の順(calibration_records・latch_status_events
+   〔latch_id経由〕→notifications〔user_id経由・防御〕→latches→
+   group_candidates→match_events→intents→users)で削除。rollbackするCHECK
+   試験は行を残さないため影響なし・試験本体の検証内容は無変更(teardownのみ)。
+   削除順序について: 指示の列挙「users/intents/…の順でよい」に対し、
+   intents.fk_intents_userがusersを参照するため文字どおりusers先だとFK違反に
+   なることから、FK依存の実態どおりusersを最後にする逆順で実装した
+   (latches→group_candidatesもfk_latches_group_candidateのため同順序)。
+   スコープ追加の理由: 本単位の対抗策(purge-match-sub・field teardown)の
+   実証条件「test-ci後の孤立行0件」がM0由来のこの汚染によって構造的に
+   成立しないため(design §2.7・検証手順4の前提回復)。
+   検証: `make lint`グリーン・`make test` 1016 passed・test_schema.py
+   25件収集・実行はスーパーバイザー検証時(integration実行禁止のため)。
