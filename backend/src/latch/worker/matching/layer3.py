@@ -110,6 +110,15 @@ def _bigrams(texts: tuple[str, ...]) -> frozenset[str]:
     return frozenset(grams)
 
 
+def bigrams(texts: tuple[str, ...]) -> frozenset[str]:
+    """文字bigram集合のpublic版(M3 ws-1 design §2.6)。
+
+    segment判定(calibration)が語彙計算と同一のトークン化を使うための公開IF。
+    _bigramsと同一実装(パイプライン内でトークン化を一つに保つ)。
+    """
+    return _bigrams(texts)
+
+
 def vocab_overlap(texts_a: tuple[str, ...], texts_b: tuple[str, ...]) -> float:
     """語彙重なり: bigram集合のJaccard係数(design §2.2)。
 

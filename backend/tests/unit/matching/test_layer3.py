@@ -89,6 +89,14 @@ def test_bigrams_nfkc_short_and_no_cross_text():
     assert "BC" not in _bigrams(("AB", "CD"))  # またがない
 
 
+def test_bigrams_public_wrapper_matches_private():
+    """public版bigramsは_bigramsと同一実装(segment判定が再利用・M3 ws-1)。"""
+    from latch.worker.matching.layer3 import bigrams
+
+    assert bigrams(("焼肉", "ビアバー")) == _bigrams(("焼肉", "ビアバー"))
+    assert bigrams(()) == frozenset()
+
+
 def test_vocab_overlap_jaccard():
     """同一文言=1.0・共通なし=0.0・部分一致=手計算値・空の扱い。"""
     assert vocab_overlap(("焼肉",), ("焼肉",)) == 1.0
