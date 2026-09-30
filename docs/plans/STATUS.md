@@ -6,11 +6,11 @@
 
 ## 現在
 
-- フェーズ: **M2進行中**(2026-09-28 Goサイン+単位表承認。単位=ws-1〜ws-8)
+- フェーズ: **M2実装完了・G2ゲート判定待ち**(2026-09-30 ws-1〜ws-8すべてマージ。マージ後main test-ci 1188 passed)
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
-- 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分すべて同期済み
-- 次の着手: ws-8(縮退運転+G2ハーネス)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)**
+- 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-7分すべて同期済み(ws-8分はagent4待ち)
+- 次の着手: **G2ゲート判定の準備**。残るは人間領域: ①日本語評価の実行(520ペア両経路≈$4.75・再実行込み上限$15。**実行前にスーパーバイザーが金額を報告してから**)②合格基準草案(スーパーバイザー草案→オーナー最終決定)③G2時確認事項①〜④の承認(score正規化・Layer 5解釈5件・ws-7解釈9件・ws-8解釈3件=下記)④TypeSafe契約詳細の確認記録(任意)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)**
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -36,7 +36,7 @@
 | ws-5 | Layer 4 Jev: LLM GatewayへSystem One IF追加(state+型つき質問→answers)・TypeSafe Jev(jev-1.13.0)・429/529/timeoutでフォールバックLLM(Sonnet 5)へ切替(SDK backoff無効化・再試行なし)・jev_resultへprovider/model記録・K_j=8配分(1対1最低4回保証・未判定ペア継続優先)・同一評価世代スキップ(同バージョン組はH再検証のみ) | M2-6 / 06 §5・07 v0.5 §1・§4・04 §4 D-16 | ws-4・T1(確定済み) | 完了 |
 | ws-6 | Layer 5 LATCH Engine: L=H×MutualScore×C(mutual=min)・閾値0.80・D-08上限(日6件/ユーザー・同時3件/Intent)超過はlatches candidate保留・提示順(対象時刻昇順・Score降順)・提示時D-05式再計算・proposal生成(visibility分岐: summary_only全フィールド/hidden_until_matchはheadcount+match_level)・nearby_also存在通知・muted通知抑制・D-07再提案制御(defer抑制min(24時間,残時間/2)・\|Δscore\|≧0.05・世代変化は無条件)・latch_status_events記録・再評価経路(30分Bucket・catch-upスキャン2時間/30分) | M2-7 / 06 §6・§9〜§10・03 D-05/D-07/D-08 | ws-5 | 完了 |
 | ws-7 | グループマッチ: 候補Pool(同一Bucket・地域・カテゴリ・Layer 3通過・上限15・cheap_score降順)・貪欲法(種max>=3+Hard互換追加・3〜4人・作成user_id相異)・group_candidates記録+全ペアmatch_candidates生成・集約=H×min(ペアMutualScore)×C・通知はaggregate降順1集合のみ・未判定ペアはstatus=candidate保持し次評価のJev予算最優先 | M2-8 / 06 §5・§7〜§8・D-06・D-24 | ws-6 | 完了 |
-| ws-8 | 縮退運転+G2ハーネス: circuit breaker(窓1分・第一候補エラー率50%超 or p95>6秒で開放・開放中フォールバックLLM継続・60秒後半開・1リクエスト試験)・フォールバックも失敗でskipped保留・02#5〜#12 E2E・K上限裏付け試験・冪等性(同一Event2回投入)・障害注入 | M2-10 / 06 D-15・10 §4.5〜§4.7 | ws-1〜ws-7 | 未着手 |
+| ws-8 | 縮退運転+G2ハーネス: circuit breaker(窓1分・第一候補エラー率50%超 or p95>6秒で開放・開放中フォールバックLLM継続・60秒後半開・1リクエスト試験)・フォールバックも失敗でskipped保留・02#5〜#12 E2E・K上限裏付け試験・冪等性(同一Event2回投入)・障害注入 | M2-10 / 06 D-15・10 §4.5〜§4.7 | ws-1〜ws-7 | 完了 |
 
 実行wave: ws-1 → (ws-2 ∥ ws-3) → ws-4 → ws-5 → ws-6 → ws-7 → ws-8
 
@@ -233,6 +233,10 @@
 - ws-8 / 設計 675edcc(supervisor承認: design §5の8件=①p95実装解釈②min_samples=2③breakerプロセス内メモリ④02#5〜#12ci実施⑤D-16上限試験はM4⑥Gateway公開IF追加⑦Minor 4件処置〔(a)のみws-8〕⑧test-ciへpurge-match-sub挿入。独立突合は設計§6に記録。解釈3件はG2時確認事項④へ)/ 2026-09-30
   - 経過: 実装中にAPI接続断で1度中断(agent1・調査完了直後の執筆開始時)→再開指示で完走(影響なし)
 - ws-8 / 計画 dd01544(3,940行・Task 1〜13・SQL/コード全文記載。§9にIF確定事項20件+Self-Review記録。機械チェック合格: basename一意〔新規5ファイル既存96と衝突なし〕・ピン試験追随访問〔JevJudgment構成ピンなしでusage追加無傷・test_llm_factoryは§9-20で対応規定・group_engineへORDER BYピン追加〕・DB干渉対抗策〔prefix teardown+&&掃除・now+5日統一・Redis prefix分離〕。design配置102→118 Intent・冪等試験分離の修正は§9-15/16に理由つき記録)/ 2026-09-30実装着手
+- ws-8 / マージ f1eb6eb(計画 dd01544・実装はb43258fまで・22コミット)/ docs/plans/M2/ws-8-report.md(+g2部分実行証拠 docs/testassets/results/g2-jev-result-20260930-122004.yaml)/ 2026-09-30
+  - agent3実装(36分・13コミット)+検証7ランの修正サイクル(test-ci初回20失敗+2エラー→1188 passedまで)。**テスト設計・環境の欠陥を大量に検出・修正**(報告書補足2〜4に全記録): ①Makefile purgeのエミュレータenv欠落(fe22042・supervisor直接修正)②teardownのlatch_status_events/notifications FK欠落(2段階で判明・0b622d6+b779821)③**test_schema.pyのM0由来残行汚染**(固定TS孤立行+payload={}のrelay毒eventを毎run累積——61b0de3の掃除teardownで恒久解消・api relay26万行ループの正体)④**HNSW死エントリ汚染**(全テスト同一ベクトルE1の削除行が近似探索予算を食う→テスト毎一意ベクトル5ed3c41)⑤k2/k3手動teardownのassert失敗時スキップ→field fixture化⑥k1⑧掃除のFK順序(e1e92bb)⑦test_3相手Intent欠落・k1⑧のnotifications.latch_id不在列・k3のversion不在列・k2比較のペア集合化(6eb1b78)⑧g2-gateのmake引数転送欠陥(853f92f・**`make --`転送なしの事故で520全件実行が開始され約9分で停止——実行前金額報告の条件を一時破った。沈没コストあり・報告書に正直記録**)
+  - スーパーバイザー独立検証: worktree 1016 unit passed・**test-ci run 7=1188 passed一発のち、マージ後main test-ci 1188 passed**(api・worker再ビルド後)・**残存・孤立行すべて0件**(test_schema掃除でM0以来の累積も解消・purge-match-sub実効性実証)・g2-gate --limit 2 --route both=exit 0(4ペア成功・partial=true・≈$0.02)・lint再実行緑・basename一意・alembic head=0005不変
+  - 環境の既存欠陥(スコープ外・ユーザー報告済み): compose.yaml workerにLATCH_DATABASE_URL不在でコンテナworker稼働不能(test-ciはin-process workerのため影響なし・対処方針はユーザー判断待ち)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
