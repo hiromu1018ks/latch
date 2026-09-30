@@ -77,6 +77,10 @@ services:
     # Worker 1(10 第1節)
     command: python -m latch.worker
     environment:
+      # apiと同一のコンテナ内接続先(2026-09-30ユーザー指示で修正——
+      # これまでDB/Redisのenvがなくsettings既定の127.0.0.1宛になり接続不能だった)
+      LATCH_DATABASE_URL: postgresql+asyncpg://latch:latch@db:5432/latch
+      LATCH_REDIS_URL: redis://redis:6379/0
       LATCH_PUBSUB_EMULATOR_HOST: pubsub:8085
     depends_on:
       db:
