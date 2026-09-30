@@ -9,6 +9,8 @@ subject prefix teardown・Redis prefix掃除・FakeClock)。
 import asyncio
 import copy
 import json
+import math
+import random
 import sys
 import uuid as uuid_mod
 from datetime import timedelta
@@ -34,14 +36,17 @@ BASE_HOURS = 120
 SUBJECT_PREFIX = "m2ws8k-"
 
 
-def _vec(*components: float) -> str:
-    vals = [0.0] * 768
-    for i, c in enumerate(components):
-        vals[i] = c
-    return "[" + ",".join(repr(v) for v in vals) + "]"
+def _unique_vec() -> str:
+    """テスト毎に一意な768次元ランダム単位ベクトル(pgvector文字列)。
 
-
-E1 = _vec(1.0)  # 全員同一ベクトル(同点→intent_id昇順の決定性)
+    pgvectorのHNSW indexは削除行の死エントリが残るため、全テストが同一
+    ベクトルを使うと先行テストの死エントリが後続テストのK_v=50近似探索の
+    予算を食い潰す。各テストの先頭で1回呼びテスト内では同一ベクトルを
+    使い回す(全員同一=同点→intent_id昇順の決定性はテスト内で維持)。
+    """
+    components = [random.random() for _ in range(768)]
+    norm = math.sqrt(sum(c * c for c in components)) or 1.0
+    return "[" + ",".join(repr(c / norm) for c in components) + "]"
 
 
 def _high_prob_envelope() -> dict:
@@ -199,7 +204,7 @@ def _payload(structured: dict) -> dict:
     }
 
 
-async def _intent(api_client, db_engine, headers, structured) -> dict:
+async def _intent(api_client, db_engine, headers, structured, vec) -> dict:
     resp = await api_client.post(
         "/v1/intents", headers=headers, json=_payload(structured)
     )
@@ -211,7 +216,7 @@ async def _intent(api_client, db_engine, headers, structured) -> dict:
                 "UPDATE intents SET embedding = CAST(:vec AS vector),"
                 " embedding_model = 'fixture' WHERE id = CAST(:iid AS uuid)"
             ),
-            {"vec": E1, "iid": intent["id"]},
+            {"vec": vec, "iid": intent["id"]},
         )
     return intent
 
@@ -290,7 +295,8 @@ async def test_1_k_limits_all_layers(
     +除外要因6(時間交差なし3+ペア予算300円3)=計118 Intent。全員同一時間帯・
     同一ベクトル(同点→intent_id昇順)。検証: ①layer1_pass_count>100
     ②pairs≤50=同点intent_id昇順上位50 ③topkc≤20 ④Jev≤8・1対1最低4回
-    ⑤`group pool built pool_size=`≤15 ⑥latchesがD-08上限内(起点≤3)
+    ⑤`group pool built pool_size=`≤15 ⑥latchesのproposed/partial_acceptが
+    D-08上限内(同時3件/Intent・candidateは06 v0.4により上限外)
     ⑦除外ペア非生成 ⑧決定性(同一入力2回実行で同一結果)。
     """
     import logging
@@ -299,16 +305,17 @@ async def test_1_k_limits_all_layers(
     import latch.worker.matching.group_engine as ge_mod
 
     clock = _clock()
+    vec = _unique_vec()  # テスト内全員同一(同点→intent_id昇順)・テスト間は一意
     start = _future(BASE_HOURS)
     h0 = await _user(api_client, field)
     origin_struct = _structured(start=start)
     origin_struct["participants"] = {"min": 2, "max": 4}
     origin_struct["budget"] = {"max": 5000}
-    origin = await _intent(api_client, db_engine, h0, origin_struct)
+    origin = await _intent(api_client, db_engine, h0, origin_struct, vec)
     pure_ids: list[str] = []  # Layer1純通過組101(min=2/max=2・budget5000)
     for _ in range(101):
         h = await _user(api_client, field)
-        t = await _intent(api_client, db_engine, h, _structured(start=start))
+        t = await _intent(api_client, db_engine, h, _structured(start=start), vec)
         pure_ids.append(t["id"])
     group_ids: list[str] = []  # min=3/max=4混入10(Pool用・Layer1では不通過)
     for _ in range(10):
@@ -316,7 +323,7 @@ async def test_1_k_limits_all_layers(
         s = _structured(start=start)
         s["participants"] = {"min": 3, "max": 4}
         s["budget"] = {"max": 5000}
-        t = await _intent(api_client, db_engine, h, s)
+        t = await _intent(api_client, db_engine, h, s, vec)
         group_ids.append(t["id"])
     excluded: dict[str, str] = {}  # 除外要因6(3=時間交差なし・3=予算300)
     for _ in range(3):
@@ -324,14 +331,14 @@ async def test_1_k_limits_all_layers(
         # +43h=163h<168h(+7日expires_at上限内)かつ基準120hとのΔ=43h>3h
         # (flex)で時間非交差は維持(+72hは上限超過で422になる)
         t = await _intent(
-            api_client, db_engine, h, _structured(start=_future(BASE_HOURS + 43))
+            api_client, db_engine, h, _structured(start=_future(BASE_HOURS + 43)), vec
         )
         excluded[t["id"]] = "time"
     for _ in range(3):
         h = await _user(api_client, field)
         s = _structured(start=start)
         s["budget"] = {"max": 300}
-        t = await _intent(api_client, db_engine, h, s)
+        t = await _intent(api_client, db_engine, h, s, vec)
         excluded[t["id"]] = "budget"
 
     guard, store = _stores(redis_client, redis_sweep, clock)
@@ -380,9 +387,12 @@ async def test_1_k_limits_all_layers(
     for m in pool_logs:
         size = int(m.split("pool_size=")[1].split()[0])
         assert size <= 15
-    # ⑥latchesがD-08上限内(同時3件/Intent — noul0.95で全評価が閾値超)
+    # ⑥latchesの同時進行上限(D-08)はproposed数の上限 — candidateのままの
+    # 存在通知には適用しない(06 v0.4)。proposed/partial_acceptのみ<=3を
+    # 検証(candidate行は上限外のため数えない)
     origin_latches = await _latches_of(db_engine, origin["id"])
-    assert len(origin_latches) <= 3
+    proposed = [r for r in origin_latches if r[1] in ("proposed", "partial_accept")]
+    assert len(proposed) <= 3
     # ⑦除外ペア非生成(#9のE2E側)
     for ex_id in excluded:
         assert await _pair_of(db_engine, origin["id"], ex_id) is None
@@ -504,19 +514,24 @@ async def _snapshot(db_engine, origin_id: str):
 
 
 async def test_2_duplicate_event_no_double_candidates(
-    api_client, db_engine, worker_env
+    api_client, db_engine, worker_env, field
 ):
     """冪等性(10 §4.7・引用#8・G2条件③): 同一Event2回投入でmatch_candidates
-    が二重生成しない(独立簡易配置: 起点U0+相手15・同一時間帯)。"""
-    prefix_subject = f"{SUBJECT_PREFIX}{uuid_mod.uuid4().hex[:8]}-"
-    ha = await _user(api_client, prefix_subject)
-    a = await _intent(api_client, db_engine, ha, _structured())
+    が二重生成しない(独立簡易配置: 起点U0+相手15・同一時間帯)。
+
+    before取得はWorkerの非同期チェーン(L1〜3→Group→Jev→Latch)がまだ進行
+    中だとsettle後にevaluated化・行追加が起きafter!=beforeになるため、
+    候補行集合が安定(1秒間隔で2回連続同一)してから比較する。teardownは
+    field fixture(assert失敗時も必ず走る)。"""
+    vec = _unique_vec()
+    ha = await _user(api_client, field)
+    a = await _intent(api_client, db_engine, ha, _structured(), vec)
     for _ in range(15):  # 相手15(dense相当・全員同一時間帯)
-        h = await _user(api_client, prefix_subject)
-        await _intent(api_client, db_engine, h, _structured())
-    # Workerにcreated Eventを処理させる(embedding→L1〜3まで走る)
-    await _wait_candidate_count(db_engine, a["id"], expected_ge=1)
-    before = await _candidate_rows(db_engine, a["id"])
+        h = await _user(api_client, field)
+        await _intent(api_client, db_engine, h, _structured(), vec)
+    # Workerにcreated Eventを処理させる(embedding→L1〜3まで走る)のち
+    # 非同期チェーン完了まで行集合の安定を待つ
+    before = await _stable_candidate_rows(db_engine, a["id"])
     assert len(before) >= 1
     # 同一3点組ペイロードを2回投入(Stage1のUNIQUEで2回目以降はduplicate)
     payload = json.dumps(
@@ -527,7 +542,22 @@ async def test_2_duplicate_event_no_double_candidates(
     await asyncio.sleep(2.0)  # Workerの処理settle
     after = await _candidate_rows(db_engine, a["id"])
     assert after == before  # 行数・内容とも不変(二重生成なし)
-    await _teardown_prefix(db_engine, prefix_subject)  # 独自prefixのteardown
+
+
+async def _stable_candidate_rows(db_engine, origin_id, *, tries=10):
+    """候補行集合が安定するまで1秒間隔で取得(2回連続同一で安定とみなす)。
+
+    status(pending→evaluated)の変化も行差分として拾うため、Jev・Latchまで
+    含めた非同期チェーンの完了をこの待ちで担保する。
+    """
+    prev = await _candidate_rows(db_engine, origin_id)
+    for _ in range(tries):
+        await asyncio.sleep(1.0)
+        cur = await _candidate_rows(db_engine, origin_id)
+        if cur == prev and cur:
+            return cur
+        prev = cur
+    pytest.fail(f"candidate rows not stabilized: {origin_id}")
 
 
 async def _wait_candidate_count(db_engine, origin_id, *, expected_ge, timeout=20.0):
@@ -556,20 +586,23 @@ async def _candidate_rows(db_engine, origin_id):
         ).all()
 
 
-async def test_3_intent_update_drops_stale_pair(api_client, db_engine, worker_env):
+async def test_3_intent_update_drops_stale_pair(
+    api_client, db_engine, worker_env, field
+):
     """02#7更新E2E(design §2.5-A): 2 Intent→候補生成→PATCH(時間帯を交差
     しない値へ)→debounce窓解放(FakeClock)→再評価で旧ペアが新評価世代で
-    再生成されない=消失。"""
-    prefix_subject = f"{SUBJECT_PREFIX}{uuid_mod.uuid4().hex[:8]}-"
-    ha = await _user(api_client, prefix_subject)
-    a = await _intent(api_client, db_engine, ha, _structured())
-    hb = await _user(api_client, prefix_subject)
-    b = await _intent(api_client, db_engine, hb, _structured())
+    再生成されない=消失。teardownはfield fixture(assert失敗時も必ず走る)。"""
+    vec = _unique_vec()
+    ha = await _user(api_client, field)
+    a = await _intent(api_client, db_engine, ha, _structured(), vec)
+    hb = await _user(api_client, field)
+    b = await _intent(api_client, db_engine, hb, _structured(), vec)
     await _wait_candidate_count(db_engine, a["id"], expected_ge=1)
     row = await _pair_of(db_engine, a["id"], b["id"])
     assert row is not None  # PATCH前: 候補生成の記録(02#6も兼ねる)
-    # PATCH: Bの時間帯を交差しない値へ(+72時間)
-    new_payload = _payload(_structured(start=_future(BASE_HOURS + 72)))
+    # PATCH: Bの時間帯を交差しない値へ(+43時間=163h<168hの+7日上限内・
+    # 基準120hとのΔ=43h>3h flexで非交差維持。+72hは8日で上限超過422)
+    new_payload = _payload(_structured(start=_future(BASE_HOURS + 43)))
     new_payload["raw_text"] = "別の日の別の時間帯で"
     resp = await api_client.patch(
         f"/v1/intents/{b['id']}",
@@ -631,7 +664,6 @@ async def test_3_intent_update_drops_stale_pair(api_client, db_engine, worker_en
             )
         ).scalar_one()
     assert pending == 0
-    await _teardown_prefix(db_engine, prefix_subject)
 
 
 async def _wait_processed_version(db_engine, intent_id, version, timeout=15.0):
@@ -661,15 +693,16 @@ async def test_4_bucket_reeval_generates_candidates(
     置いた2 Intent→FakeClockでBucket境界を経過→run_onceで抽出→候補生成。
     _SELECT_BUCKET_TARGETS側の明示試験(test_10はcatch-up側)。"""
     clock = _clock()
+    vec = _unique_vec()
     # 未来Bucket: 現在の30分Bucketの2つ先(境界経過の余地を持たせる)。
     # time_startが未来ならexpires_at(作成時の+7日上限内)は十分遠方で
     # catch-up対象外になる
     bucket_ahead = clock.now() + timedelta(minutes=45)
     start = bucket_ahead.isoformat()
     ha = await _user(api_client, field)
-    a = await _intent(api_client, db_engine, ha, _structured(start=start))
+    a = await _intent(api_client, db_engine, ha, _structured(start=start), vec)
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured(start=start))
+    b = await _intent(api_client, db_engine, hb, _structured(start=start), vec)
     calls: list[str] = []
 
     async def pipeline(intent_id):

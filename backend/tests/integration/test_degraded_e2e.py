@@ -11,6 +11,8 @@ ci環境=スタブLLMで決定的(10 §1)。
 
 import asyncio
 import copy
+import math
+import random
 import sys
 import uuid as uuid_mod
 from datetime import timedelta
@@ -40,14 +42,18 @@ BASE_HOURS = 120
 SUBJECT_PREFIX = "m2ws8-"
 
 
-def _vec(*components: float) -> str:
-    vals = [0.0] * 768
-    for i, c in enumerate(components):
-        vals[i] = c
-    return "[" + ",".join(repr(v) for v in vals) + "]"
+def _unique_vec() -> str:
+    """テスト毎に一意な768次元ランダム単位ベクトル(pgvector文字列)。
 
-
-E1 = _vec(1.0)
+    pgvectorのHNSW indexは削除行の死エントリが残るため、全テストが同一
+    ベクトルを使うと先行テストの死エントリが後続テストのK_v=50近似探索の
+    予算を食い潰し生き行を見逃す(run 4のtest_3失敗原因)。各テストの先頭で
+    1回呼び、テスト内では同一ベクトルを使い回す(テスト内sim=1.0維持・
+    テスト間は直交近傍で死エントリの干渉を構造的に排除)。
+    """
+    components = [random.random() for _ in range(768)]
+    norm = math.sqrt(sum(c * c for c in components)) or 1.0
+    return "[" + ",".join(repr(c / norm) for c in components) + "]"
 
 
 def _high_prob_envelope() -> dict:
@@ -202,7 +208,7 @@ def _payload(structured: dict) -> dict:
     }
 
 
-async def _intent(api_client, db_engine, headers, structured) -> dict:
+async def _intent(api_client, db_engine, headers, structured, vec) -> dict:
     resp = await api_client.post(
         "/v1/intents", headers=headers, json=_payload(structured)
     )
@@ -214,7 +220,7 @@ async def _intent(api_client, db_engine, headers, structured) -> dict:
                 "UPDATE intents SET embedding = CAST(:vec AS vector),"
                 " embedding_model = 'fixture' WHERE id = CAST(:iid AS uuid)"
             ),
-            {"vec": E1, "iid": intent["id"]},
+            {"vec": vec, "iid": intent["id"]},
         )
     return intent
 
@@ -322,11 +328,12 @@ async def test_1_rate_limit_switches_to_fallback(
     from latch.llm.records import LOGGER_NAME
 
     clock = _clock()
+    vec = _unique_vec()
     start = _future(BASE_HOURS)
     ha = await _user(api_client, field)
-    a = await _intent(api_client, db_engine, ha, _structured(start=start))
+    a = await _intent(api_client, db_engine, ha, _structured(start=start), vec)
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured(start=start))
+    b = await _intent(api_client, db_engine, hb, _structured(start=start), vec)
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
     first = _FlakyFirst(fail_calls=10**9, exc=LLMRateLimitError("429"))
@@ -354,11 +361,12 @@ async def test_2_dual_failure_skips_and_zero_proposals(
 ):
     """双障害(引用#6-2・3): skipped(llm_failure)・jev_result NULL・提案ゼロ。"""
     clock = _clock()
+    vec = _unique_vec()
     start = _future(BASE_HOURS)
     ha = await _user(api_client, field)
-    a = await _intent(api_client, db_engine, ha, _structured(start=start))
+    a = await _intent(api_client, db_engine, ha, _structured(start=start), vec)
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured(start=start))
+    b = await _intent(api_client, db_engine, hb, _structured(start=start), vec)
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
     gateway = _breaker_gateway(
@@ -389,9 +397,10 @@ async def test_3_breaker_opens_on_error_rate(
     こと(jev_result.provider=fallback_llm)。
     """
     clock = _clock()
+    vec = _unique_vec()
     start = _future(BASE_HOURS)
     ha = await _user(api_client, field)
-    a = await _intent(api_client, db_engine, ha, _structured(start=start))
+    a = await _intent(api_client, db_engine, ha, _structured(start=start), vec)
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
     first = _FlakyFirst(fail_calls=10**9, exc=LLMRateLimitError("429"))
@@ -517,11 +526,12 @@ async def test_7_recovery_reevaluates_skipped(
     同一起点の再handle(「障害回復後のMatch Event」相当)でRESELECT_ALWAYSが
     skipped行を再選択→evaluated・提案発生(高確率応答でL≥0.80)。"""
     clock = _clock()
+    vec = _unique_vec()
     start = _future(BASE_HOURS)
     ha = await _user(api_client, field)
-    a = await _intent(api_client, db_engine, ha, _structured(start=start))
+    a = await _intent(api_client, db_engine, ha, _structured(start=start), vec)
     hb = await _user(api_client, field)
-    b = await _intent(api_client, db_engine, hb, _structured(start=start))
+    b = await _intent(api_client, db_engine, hb, _structured(start=start), vec)
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
     # 第一候補=常時429・フォールバック=最初の1回だけtimeout→以後回復(高確率応答)
@@ -572,10 +582,11 @@ async def test_8_worker_e2e_with_faulty_first(
         cost_store=store,
     )
     async with worker_env_factory(db_engine, jev=jev_worker) as _:
+        vec = _unique_vec()
         ha = await _user(api_client, field)
-        a = await _intent(api_client, db_engine, ha, _structured())
+        a = await _intent(api_client, db_engine, ha, _structured(), vec)
         hb = await _user(api_client, field)
-        await _intent(api_client, db_engine, hb, _structured())
+        await _intent(api_client, db_engine, hb, _structured(), vec)
         await _wait_processed(db_engine, a["id"])
         await _wait_latch(db_engine, a["id"])
         async with db_engine.connect() as conn:

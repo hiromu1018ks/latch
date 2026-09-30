@@ -166,3 +166,34 @@ cf3193a feat: circuit breakerの状態機(llm/breaker.py)とunit試験12件
    成立しないため(design §2.7・検証手順4の前提回復)。
    検証: `make lint`グリーン・`make test` 1016 passed・test_schema.py
    25件収集・実行はスーパーバイザー検証時(integration実行禁止のため)。
+
+## 補足3(run 4残17失敗の修正第3バッチ — 2026-09-30・supervisor診断による)
+
+degraded 1/2/4〜8は第2バッチで全通過。残りの修正(integration再実行は
+スーパーバイザー側):
+
+1. **HNSW死エントリ汚染の発見とテスト毎ベクトル分離(両ファイル・最重要)**:
+   全テストが同一ベクトルE1を使い、teardownで削除された行がpgvector HNSW
+   indexに死エントリとして残るため、先行テストの死E1が後続テストのK_v=50
+   近似探索の予算を食い潰し生き行を見逃す(run 4のtest_3は先行2テストの死
+   E1で(a,b)ペア取得が空=rows空/pending多数)。対処=E1を廃止し
+   `_unique_vec()`(768次元ランダム単位ベクトル)を各テストの先頭で1回呼び
+   テスト内で使い回す(テスト内は同一=sim1.0・同点intent_id昇順の決定性維持・
+   テスト間は直交近傍で死エントリの干渉を構造的に排除)。`_intent`はvec引数を
+   必須化。
+2. **k2の安定待ち+teardown切替**: (a)手動prefix+inline teardownはassert失敗時
+   に実行されず16ユーザー漏洩→field fixtureへ切替(assert失敗時も必ず走る)。
+   (b)before snapshot取得時にWorkerの非同期チェーン(L1〜3→Group→Jev→Latch)
+   が進行中だとsettle後にevaluated化・行追加が起きafter!=before→before取得を
+   `_stable_candidate_rows`(1秒間隔・2回連続同一集合で安定)へ置換。
+3. **k3の+72h再発とteardown切替**: PATCH先の`_future(BASE_HOURS+72)`=192h=8日
+   で+7日上限422(test_1修正と同種の見落とし)→`_future(BASE_HOURS+43)`(163h<
+   168h・Δ43h>3hで非交差維持)へ。手動prefix teardown→field fixtureへ切替
+   (漏洩防止)。
+4. **k1⑥のD-08読み直し**: 「同時進行上限(同時3件)はproposed数の上限である
+   ため、candidateのままの存在通知には適用しない」(06 v0.4)。全latches数の
+   `<=3`から、proposed/partial_acceptのみを数えて`<=3`を検証する形へ修正
+   (candidate行は上限外のためカウントしない)。
+5. 検証: `make lint`グリーン・`make test` 1016 passed・integration 2ファイル
+   12件収集・差分は上記2ファイルのみ。cheapjudge/jev/latchengine系の失敗は
+   k2/k3漏洩+E1死エントリの干渉のみのため個別対応なし(本修正で根源解消)。
