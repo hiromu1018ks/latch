@@ -401,10 +401,13 @@ async def test_1_k_limits_all_layers(
     snap1 = await _snapshot(db_engine, origin["id"])
     order1 = list(gateway.judge_order)
     async with db_engine.begin() as conn:
+        # notificationsにlatch_id列はなくpayload->>'latch_id'(JSONB)に格納される
+        # (ws-6設計§2.6)。uuidの正規形文字列で突き合わせる
         await conn.execute(
             text(
-                "DELETE FROM notifications WHERE latch_id IN"
-                " (SELECT id FROM latches WHERE CAST(:o AS uuid) = ANY(intent_ids))"
+                "DELETE FROM notifications WHERE payload->>'latch_id' IN"
+                " (SELECT id::text FROM latches"
+                " WHERE CAST(:o AS uuid) = ANY(intent_ids))"
             ),
             {"o": origin["id"]},
         )
@@ -517,12 +520,13 @@ async def test_2_duplicate_event_no_double_candidates(
     api_client, db_engine, worker_env, field
 ):
     """冪等性(10 §4.7・引用#8・G2条件③): 同一Event2回投入でmatch_candidates
-    が二重生成しない(独立簡易配置: 起点U0+相手15・同一時間帯)。
+     が二重生成しない(独立簡易配置: 起点U0+相手15・同一時間帯)。
 
-    before取得はWorkerの非同期チェーン(L1〜3→Group→Jev→Latch)がまだ進行
-    中だとsettle後にevaluated化・行追加が起きafter!=beforeになるため、
-    候補行集合が安定(1秒間隔で2回連続同一)してから比較する。teardownは
-    field fixture(assert失敗時も必ず走る)。"""
+     検証対象は「行の二重生成なし」=ペア集合(重複込み)の不変(10 §4.7の文言
+     「match_candidatesが二重生成しない」)。status(pending→evaluated)はJev評価の
+     進行で正当に遷移するため比較対象に含めない。生成がまだ進行中の比較を避ける
+    ため、ペア集合が安定(1秒間隔で2回連続同一)してから重複を投入する。
+     teardownはfield fixture(assert失敗時も必ず走る)。"""
     vec = _unique_vec()
     ha = await _user(api_client, field)
     a = await _intent(api_client, db_engine, ha, _structured(), vec)
@@ -530,8 +534,8 @@ async def test_2_duplicate_event_no_double_candidates(
         h = await _user(api_client, field)
         await _intent(api_client, db_engine, h, _structured(), vec)
     # Workerにcreated Eventを処理させる(embedding→L1〜3まで走る)のち
-    # 非同期チェーン完了まで行集合の安定を待つ
-    before = await _stable_candidate_rows(db_engine, a["id"])
+    # ペア集合の安定を待つ(status遷移は待ち対象外)
+    before = await _stable_candidate_pairs(db_engine, a["id"])
     assert len(before) >= 1
     # 同一3点組ペイロードを2回投入(Stage1のUNIQUEで2回目以降はduplicate)
     payload = json.dumps(
@@ -540,20 +544,32 @@ async def test_2_duplicate_event_no_double_candidates(
     await worker_env.bus.publish_raw(payload)
     await worker_env.bus.publish_raw(payload)
     await asyncio.sleep(2.0)  # Workerの処理settle
-    after = await _candidate_rows(db_engine, a["id"])
-    assert after == before  # 行数・内容とも不変(二重生成なし)
+    after = await _candidate_pairs(db_engine, a["id"])
+    assert after == before  # ペア集合と行数が不変(二重生成なし)
 
 
-async def _stable_candidate_rows(db_engine, origin_id, *, tries=10):
-    """候補行集合が安定するまで1秒間隔で取得(2回連続同一で安定とみなす)。
+async def _candidate_pairs(db_engine, origin_id) -> list[tuple[str, str]]:
+    """候補のペア集合(重複込み・昇順)。二重生成はここで重複として現れる。"""
+    async with db_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    "SELECT intent_a_id, intent_b_id FROM match_candidates"
+                    " WHERE intent_a_id = CAST(:o AS uuid)"
+                    " OR intent_b_id = CAST(:o AS uuid)"
+                ),
+                {"o": origin_id},
+            )
+        ).all()
+    return sorted((str(r[0]), str(r[1])) for r in rows)
 
-    status(pending→evaluated)の変化も行差分として拾うため、Jev・Latchまで
-    含めた非同期チェーンの完了をこの待ちで担保する。
-    """
-    prev = await _candidate_rows(db_engine, origin_id)
+
+async def _stable_candidate_pairs(db_engine, origin_id, *, tries=10):
+    """ペア集合が安定するまで1秒間隔で取得(2回連続同一で安定とみなす)。"""
+    prev = await _candidate_pairs(db_engine, origin_id)
     for _ in range(tries):
         await asyncio.sleep(1.0)
-        cur = await _candidate_rows(db_engine, origin_id)
+        cur = await _candidate_pairs(db_engine, origin_id)
         if cur == prev and cur:
             return cur
         prev = cur
@@ -675,9 +691,9 @@ async def _wait_processed_version(db_engine, intent_id, version, timeout=15.0):
                     text(
                         "SELECT status FROM match_events"
                         " WHERE source_intent_id = CAST(:i AS uuid)"
-                        " AND version = :v"
+                        " AND payload->>'version' = :v"
                     ),
-                    {"i": intent_id, "v": version},
+                    {"i": intent_id, "v": str(version)},
                 )
             ).first()
         if row is not None and row[0] == "processed":

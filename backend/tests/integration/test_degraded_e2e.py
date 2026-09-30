@@ -401,6 +401,10 @@ async def test_3_breaker_opens_on_error_rate(
     start = _future(BASE_HOURS)
     ha = await _user(api_client, field)
     a = await _intent(api_client, db_engine, ha, _structured(start=start), vec)
+    # 相手b(同一時間帯・同一ベクトル)。不在だと候補が空になり(c)の検証が
+    # 成立しない(run 5で発見)——test_1と同じ構成
+    hb = await _user(api_client, field)
+    await _intent(api_client, db_engine, hb, _structured(start=start), vec)
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
     first = _FlakyFirst(fail_calls=10**9, exc=LLMRateLimitError("429"))
