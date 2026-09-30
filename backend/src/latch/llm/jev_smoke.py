@@ -4,8 +4,10 @@
 する。SendRecordも通常どおり出力される(Gateway経由 — 08 §3)。実行には
 .env の LATCH_LLM_MODE=real・LATCH_GEMINI_API_KEY・LATCH_TYPESAFE_API_KEY・
 LATCH_ANTHROPIC_API_KEY が必要(make jev-smoke が uv run --env-file ../.env 経由)。
-FALLBACK=1 でフォールバックLLM(Anthropic Sonnet 5)の直接呼び出しに切り替える
-(第一候補の障害を再現せず、フォールバック経路単体の応答確認用)。
+FALLBACK=1 でフォールバックLLM(Anthropic Sonnet 5)のみの呼び出しに切り替える
+(第一候補の障害を再現せず、フォールバック経路単体の応答確認用。
+ws-8からcall_jev_fallback公開IF経由 — 送信記録1件が出る)。
+noul応答のJSON形状の最終確認(design §5-7)もここで行う。
 noul応答のJSON形状の最終確認(design §5-7)もここで行う。
 """
 
@@ -21,7 +23,6 @@ from latch.llm.jev import (
     JEV_MODEL,
     JevTextInput,
     build_jev_text,
-    validate_and_normalize,
 )
 from latch.settings import Settings
 
@@ -81,9 +82,11 @@ async def main() -> int:
     text_a = build_jev_text(A, label="Intent A")
     text_b = build_jev_text(B, label="Intent B")
     if os.environ.get("FALLBACK") == "1":
-        envelope = await gateway._jev_fallback.judge(text_a, text_b)
-        provider, model = "fallback_llm(直接)", envelope.get("model")
-        result = validate_and_normalize(envelope)
+        judgment = await gateway.call_jev_fallback(
+            intent_a=text_a, intent_b=text_b, intent_ids=["jev-smoke-a", "jev-smoke-b"]
+        )
+        provider = "fallback_llm(直接)"
+        model, result = judgment.model, judgment.result
     else:
         judgment = await gateway.judge_pair(
             intent_a=text_a, intent_b=text_b, intent_ids=["jev-smoke-a", "jev-smoke-b"]

@@ -146,7 +146,7 @@ class LLMGateway:
         """Jev呼び出し1回(fallback=TrueはフォールバックLLM側)。
 
         circuit breaker(ws-8)の注入ポイントは第一候補側(fallback=False)。
-        本単位では実装しない(design §2.10)。
+        judge_pairとcall_jev_first/call_jev_fallbackの両方から使う共通経路。
         """
         provider = self._jev_fallback if fallback else self._jev
         return await self._call(
@@ -156,6 +156,43 @@ class LLMGateway:
             intent_ids=intent_ids,
             user_id=None,
             invoke=lambda: provider.judge(intent_a, intent_b),
+        )
+
+    async def call_jev_first(
+        self, *, intent_a: str, intent_b: str, intent_ids: list[str]
+    ) -> JevJudgment:
+        """第一候補(TypeSafe Jev)の直接呼び出し(公開IF・ws-8 design §2.8)。
+
+        g2gate評価とjev_smokeが使う。breakerを参照しない(評価は経路品質の
+        実測が目的 — 承認事項6)。judge_pairの第一候補側からも再利用する
+        (二重実装なし)。送信記録・timeoutは_call経由でjudge_pairと同一。
+        """
+        envelope = await self._jev_call(intent_a, intent_b, intent_ids, fallback=False)
+        try:
+            result = validate_and_normalize(envelope)
+        except JevOutputInvalidError as exc:
+            raise JevOutputInvalidError(str(exc), provider="typesafe_jev") from exc
+        return JevJudgment(
+            provider="typesafe_jev",
+            model=_envelope_model(envelope),
+            result=result,
+            usage=envelope.get("usage") if isinstance(envelope, dict) else None,
+        )
+
+    async def call_jev_fallback(
+        self, *, intent_a: str, intent_b: str, intent_ids: list[str]
+    ) -> JevJudgment:
+        """フォールバックLLMの直接呼び出し(公開IF・design §2.8)。"""
+        envelope = await self._jev_call(intent_a, intent_b, intent_ids, fallback=True)
+        try:
+            result = validate_and_normalize(envelope)
+        except JevOutputInvalidError as exc:
+            raise JevOutputInvalidError(str(exc), provider="fallback_llm") from exc
+        return JevJudgment(
+            provider="fallback_llm",
+            model=None,
+            result=result,
+            usage=envelope.get("usage") if isinstance(envelope, dict) else None,
         )
 
     async def _call(

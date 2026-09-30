@@ -183,3 +183,52 @@ def test_jev_fallback_defaults_to_first_candidate():
     stub = StubLLM()
     gw = LLMGateway(clock=FakeClock(NOW), parser=stub, embedding=stub, jev=stub)
     assert gw._jev_fallback is gw._jev
+
+
+# -- 公開直呼びIF call_jev_first/call_jev_fallback(ws-8 design §2.8・§9-5) --
+
+
+async def test_call_jev_first_returns_judgment_with_usage(caplog):
+    """公開直呼びIF(第一候補): provider/model/usageをJevJudgmentへ載せる。"""
+    gw = _gateway(StubLLM(), _RecordingStub())
+    judgment = await gw.call_jev_first(
+        intent_a=IA, intent_b=IB, intent_ids=["i-a", "i-b"]
+    )
+    assert judgment.provider == "typesafe_jev"
+    assert judgment.model == "jev-1.13.0"
+    assert judgment.usage == {"input_tokens": 0, "output_tokens": 0}
+    assert judgment.result["would_a_accept_b"] == 0.5
+
+
+async def test_call_jev_fallback_returns_judgment():
+    """公開直呼びIF(フォールバック): provider=fallback_llm・model=None。"""
+    gw = _gateway(StubLLM(), _RecordingStub())
+    judgment = await gw.call_jev_fallback(
+        intent_a=IA, intent_b=IB, intent_ids=["i-a", "i-b"]
+    )
+    assert judgment.provider == "fallback_llm"
+    assert judgment.model is None
+    assert judgment.result["would_b_accept_a"] == 0.5
+
+
+async def test_call_jev_first_does_not_switch_on_rate_limit():
+    """直呼びIFは切替しない(第一候補の例外はそのまま伝播・測定の分離)。"""
+    first = _ThrowingJev(LLMRateLimitError("429"))
+    gw = _gateway(first, _RecordingStub())
+    with pytest.raises(LLMRateLimitError):
+        await gw.call_jev_first(intent_a=IA, intent_b=IB, intent_ids=["i-a", "i-b"])
+
+
+async def test_call_jev_first_invalid_output_propagates_with_provider():
+    """出力検証失敗はprovider="typesafe_jev"付きで伝播(judge_pairと同一経路)。"""
+
+    class _Invalid(JevProvider):
+        name = "invalid"
+
+        async def judge(self, intent_a: str, intent_b: str) -> dict:
+            return {"model": "jev-1.13.0", "answers": {}, "usage": {}}
+
+    gw = _gateway(_Invalid(), _RecordingStub())
+    with pytest.raises(JevOutputInvalidError) as ei:
+        await gw.call_jev_first(intent_a=IA, intent_b=IB, intent_ids=["i-a", "i-b"])
+    assert ei.value.provider == "typesafe_jev"
