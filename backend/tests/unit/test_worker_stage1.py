@@ -14,6 +14,7 @@ import pytest
 from latch.core.clock import FakeClock
 from latch.events import IncomingEvent
 from latch.settings import Settings
+from latch.worker import stage1 as stage1_mod
 from latch.worker.stage1 import (
     BACKOFF_SEC,
     PayloadInvalid,
@@ -74,7 +75,7 @@ S1_NOW = datetime(2026, 9, 28, 12, 0, 0, tzinfo=UTC)
 
 
 class FakeResult:
-    """SQLAlchemy CursorResult風(タプル行・first()・rowcount)。"""
+    """SQLAlchemy CursorResult風(タプル行・first()・fetchall()・rowcount)。"""
 
     def __init__(self, row=None, rowcount=0):
         self._row = row
@@ -82,6 +83,9 @@ class FakeResult:
 
     def first(self):
         return self._row
+
+    def fetchall(self):
+        return [self._row] if self._row else []
 
 
 class ScriptedConn:
@@ -337,6 +341,8 @@ async def test_process_deleted_closes_candidates():
             FakeResult((1,)),
             FakeResult(None, 0),  # 候補UPDATE(0件でも正常 — design §2.5)
             FakeResult(None, 0),  # group_candidatesUPDATE(ws-7・0件でも正常)
+            FakeResult((), 0),  # latches(開いている)SELECT(M3 ws-1・0行)
+            FakeResult((), 0),  # latches(matched)SELECT(M3 ws-1・0行)
             FakeResult(None, 1),  # processed
         ]
     )
@@ -365,6 +371,8 @@ async def test_process_deleted_closes_group_candidates():
             FakeResult((1,)),
             FakeResult(None, 0),  # match_candidates UPDATE
             FakeResult(None, 0),  # group_candidates UPDATE(本試験の主対象)
+            FakeResult((), 0),  # latches(開いている)SELECT(M3 ws-1)
+            FakeResult((), 0),  # latches(matched)SELECT(M3 ws-1)
             FakeResult(None, 1),  # processed
         ]
     )
@@ -569,3 +577,58 @@ async def test_matching_hook_not_called_for_other_types():
         _event("created", IID, 1), ("created", IID, 1), ROW_ID
     )
     assert calls == []
+
+
+# -- M3 ws-1: 削除Eventのlatchesクローズ+matched解散・復帰(design §2.7) --
+
+LID = uuid.uuid4()
+LID2 = uuid.uuid4()
+REST_ID = uuid.uuid4()
+MATCHED_IDS = [IID, REST_ID]
+
+
+async def test_close_latches_on_delete_cancels_open_latches():
+    """開いている3状態(candidate/proposed/partial_accept)→cancelled+events。"""
+    conn = ScriptedConn(
+        [
+            FakeResult((LID, "proposed"), 1),  # 開いているSELECT FOR UPDATE(1行)
+            FakeResult((LID,), 1),  # cancel UPDATE
+            FakeResult(None, 1),  # event INSERT
+            FakeResult((), 0),  # matched SELECT(0行)
+        ]
+    )
+    await stage1_mod.close_latches_on_delete(conn, IID, S1_NOW)
+    select_sql = str(conn.calls[0][0])
+    assert "status IN ('candidate', 'proposed', 'partial_accept')" in select_sql
+    assert "CAST(:intent_id AS uuid) = ANY(intent_ids)" in select_sql
+    assert "FOR UPDATE" in select_sql
+    cancel_sql = str(conn.calls[1][0])
+    assert "SET status = 'cancelled'" in cancel_sql
+    event_params = conn.calls[2][1]
+    assert event_params["from_status"] == "proposed"
+    assert event_params["to_status"] == "cancelled"
+    assert event_params["user_id"] is None  # システム起因=引用#12
+
+
+async def test_close_latches_on_delete_dissolves_matched_and_restores():
+    """matched行→cancelled+events+残Intent復帰(expires_atでexpired/active分岐)。"""
+    conn = ScriptedConn(
+        [
+            FakeResult((), 0),  # 開いているSELECT(0行)
+            FakeResult((LID2, MATCHED_IDS), 1),  # matched SELECT FOR UPDATE(1行)
+            FakeResult((LID2,), 1),  # cancel UPDATE
+            FakeResult(None, 1),  # event INSERT
+            FakeResult((REST_ID, "active"), 1),  # 復帰UPDATE
+        ]
+    )
+    await stage1_mod.close_latches_on_delete(conn, IID, S1_NOW)
+    restore_sql = str(conn.calls[4][0])
+    assert "CASE WHEN expires_at <= CAST(:now AS timestamptz)" in restore_sql
+    assert "THEN 'expired'" in restore_sql
+    assert "ELSE 'active'" in restore_sql
+    assert "status = 'matched'" in restore_sql
+    # 復帰対象は削除Intentを除く残る参加Intentのみ(引用#9・#20)
+    assert conn.calls[4][1]["ids"] == [REST_ID]
+    # matched解散イベント(from=matched・user_id=None)
+    assert conn.calls[3][1]["from_status"] == "matched"
+    assert conn.calls[3][1]["to_status"] == "cancelled"
