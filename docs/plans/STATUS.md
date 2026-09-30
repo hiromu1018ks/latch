@@ -6,11 +6,11 @@
 
 ## 現在
 
-- フェーズ: **M2実装完了・G2ゲート判定待ち**(2026-09-30 ws-1〜ws-8すべてマージ。マージ後main test-ci 1188 passed)
+- フェーズ: **M2完了・G2承認済み**(2026-09-30 ゲート承認。M3計画フェーズへ)
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **G2ゲート判定の承認依頼**(判定資料は下記「G2判定資料」节。ユーザーの確定待ち=合格基準の数値確定+G2時確認事項①〜④の承認)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)**
+- 次の着手: **M3単位表の作成とGoサイン待ち**(12 M3から単位分割・roadmap改訂〔閾値0.60・Haikuフォールバック〕を反映。実装着手はユーザーの明示Go後)**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)**
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -280,6 +280,7 @@
 ## ゲート承認
 
 - G0: **承認済み**(2026-09-27 ユーザー承認。暫定エリア・送信記録=構造化ログ・test-ci後のgeo再取り込みの各supervisor判断を含む承認)。**M1以降の実装は同時にユーザー指示で一時停止**
+- G2: **承認済み**(2026-09-30 ユーザー承認。5条件=①02#5〜#12 ciグリーン〔1188 passed〕②K上限裏付け③冪等性④縮退⑤日本語評価〔Jevのみ実施・委任によりスーパーバイザー判定で合格: Precision@0.60=0.79/0.74・AUC=0.747/0.751・n=39/42・ECE/Brierも参考基準クリア〕。G2時確認事項①〜④の18件の解釈を含む承認。提議閾値0.60改版・フォールバックHaiku 4.5変更・合格基準v0.2確定〔委任〕を含む)
 - G1: **承認済み**(2026-09-28 ユーザー承認。4条件=①02#1〜#3 ci緑〔マージ後main test-ci 627 passed〕②Parser構造化ゲート合格〔g1-result-20260928-210042: category 100%/time.start 93.75%/location 100%/participants 84.4%/budget 100%〕③alcoholゲート合格〔recall 100%・precision 100%〕④両ゲート再実行harness稼働〔make g1-gate〕。**02#4は(a)代替検証の注記どおり期限経過後のexpired遷移はM3-3実装時にG3で確認**。規則7改訂07 v0.6〔FN=A-034対応・当日うちに両ゲート再実行で合格〕を含む。実測は実プロバイダHaiku 4.5・プロンプトSHAで改訂版を確認済み)
 
 ## 並行トラック(開発外・人間領域)
