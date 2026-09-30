@@ -284,6 +284,7 @@
 
 - M3開始 / 2026-09-30ユーザーGoサイン+単位表承認(ws-1〜ws-9・実行waveは単位表参照)。FCM資材(人間領域)と02#13〜#23実施環境は「G3判定の待ち事項」へ分離
 - ws-1 / 設計 54f22b7(supervisor承認: design §5の8件=①Calibration作成はrejected/matched時のみ〔07 §6「回答確定時」の直接読み〕 ②回答UPDATEのWHEREへ参加Intent検査NOT EXISTS追加〔06 §6確定値への厳格化・05 §5のLATCH_CLOSED「参加Intent変化」の実装〕 ③成立はpaused参加Intentを含む ④segment=layer3文字bigram再利用・soft_constraintsは降格文言を含む ⑤1対1評価行特定=score一致3段階・全段失敗はレコード不作成+構造化ログ ⑥グループprediction=minペア準用 ⑦stage1削除Event処理へlatchesクローズ+解散復帰追加〔06 §1「保留無効化」の未実装追随〕 ⑧group_engine昇格UPDATEへgroup_candidate_id列追加〔ws-7引継ぎ確定〕。引用確定値28件とコード接続資産はスーパーバイザーがdocs・実コードと突合済み。②のうちpaused成立とsegment計算時点は「G3時確認事項」へ記録)/ 2026-09-30
+- ws-1 / 計画 c7c3d18(4,528行・Task 1〜12・SQL/コード全文記載。機械チェック合格: basename一意〔既存106+新規5・スーパーバイザー再実行で空を確認〕・ピン試験追随访問〔group_engine列追加は既存期待値なし・layer3は_bigrams削除せず・stage1はFakeResult機械的追従〕・DB干渉対抗策〔m3ws1-プレフィックス+FK順teardown・now+5日系BASE_HOURS=120分離〕。Review Focus 5点にデッドロック回避のORDER BY id〔§9-1〕と期限切れ試験のDB値操作〔§9-2〕を含む。**supervisor修正: Task 8のtest_latches_routes.pyが§0/§4/完了条件5の計数から漏れていた内部矛盾を整合(新規5ファイル・計21ファイル)**)/ 2026-09-30実装着手
 
 ## G2判定資料(2026-09-30・承認済み)
 
