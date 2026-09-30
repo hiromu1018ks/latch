@@ -204,7 +204,7 @@ _SELECT_LATCHES_PAGE = text("""
       AND EXISTS (SELECT 1 FROM intents i
                   WHERE i.id = ANY(l.intent_ids)
                     AND i.user_id = CAST(:me AS uuid))
-      AND (:tt IS NULL OR
+      AND (CAST(:tt AS timestamptz) IS NULL OR
            (SELECT max(i.time_start) FROM intents i
             WHERE i.id = ANY(l.intent_ids)) > CAST(:tt AS timestamptz)
            OR ((SELECT max(i.time_start) FROM intents i

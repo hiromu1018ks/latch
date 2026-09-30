@@ -233,6 +233,8 @@ async def _pair_eval(
         "model": "jev-1.13.0",
     }
     now = SystemClock().now()
+    # 実物パイプライン(candidates.pyのnormalize_pair)と同一のa<b正規化・UPSERT
+    lo_id, hi_id = sorted((a_id, b_id))
     async with db_engine.begin() as conn:
         await conn.execute(
             text("""
@@ -243,10 +245,15 @@ async def _pair_eval(
                 VALUES (CAST(:a AS uuid), CAST(:b AS uuid), 1, 1,
                         0.9, 0.9, CAST(:jev AS jsonb), :ls, 'evaluated',
                         CAST(:now AS timestamptz), CAST(:now AS timestamptz))
+                ON CONFLICT (intent_a_id, intent_b_id, intent_a_version,
+                             intent_b_version) DO UPDATE
+                SET jev_result = EXCLUDED.jev_result,
+                    latch_score = EXCLUDED.latch_score,
+                    status = 'evaluated', updated_at = EXCLUDED.updated_at
             """),
             {
-                "a": uuid_mod.UUID(a_id),
-                "b": uuid_mod.UUID(b_id),
+                "a": uuid_mod.UUID(lo_id),
+                "b": uuid_mod.UUID(hi_id),
                 "jev": json.dumps(jev, ensure_ascii=False),
                 "ls": latch_score,
                 "now": now,
@@ -488,7 +495,8 @@ async def test_9_group_of_three(api_client, db_engine, field):
     assert r1.status_code == 200
     body = r1.json()["latch"]
     assert body["status"] == "partial_accept"
-    assert body["remaining_responses"] == 1  # あと1人(人数のみ・引用#22)
+    # remaining=len(intent_ids)−yes数=3-1(§9-10・人数のみ引用#22)
+    assert body["remaining_responses"] == 2
     await _respond(api_client, hs[1], latch, "yes")  # 2人yesでも未成立
     assert (await _latch_row(db_engine, latch))["status"] == "partial_accept"
     r3 = await _respond(api_client, hs[2], latch, "yes")
@@ -818,13 +826,21 @@ async def test_17_deletion_closes_and_restores(api_client, db_engine, field):
     assert (await _latch_row(db_engine, latch_open))["status"] == "cancelled"
     assert ("proposed", "cancelled", None) in await _events(db_engine, latch_open)
     # (b) matched解散+残Intent復帰(active側)
-    i3 = await _intent(api_client, h1, start=_future(BASE_HOURS + 60))
-    i4 = await _intent(api_client, h2, start=_future(BASE_HOURS + 60))
+    # Intent作成のtime.start上限は7日(168h)。BASE_HOURS=120のため
+    # 追加オフセットは+48hまでしか置けない(試験13/14と同窓)
+    i3 = await _intent(api_client, h1, start=_future(BASE_HOURS + 40))
+    i4 = await _intent(api_client, h2, start=_future(BASE_HOURS + 40))
     latch_m = await _latch(db_engine, [i3["id"], i4["id"]])
     await _respond(api_client, h1, latch_m, "yes")
     await _respond(api_client, h2, latch_m, "yes")  # matched
-    del2 = await api_client.delete(f"/v1/intents/{i3['id']}", headers=h1)
-    assert del2.status_code == 204
+    # matched IntentはDELETE APIで削除不可(allowed_from=draft/active/pausedの
+    # M1実装)のため、削除Event相当の状態をDBで整えてから関数を直接呼ぶ(§9-6の
+    # 「実HTTP DELETEの後」は(b)(c)では実行不可 — 報告書記録)
+    async with db_engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE intents SET status = 'cancelled' WHERE id = CAST(:i AS uuid)"),
+            {"i": i3["id"]},
+        )
     async with db_engine.begin() as conn:
         await stage1_mod.close_latches_on_delete(
             conn, uuid_mod.UUID(i3["id"]), SystemClock().now()
@@ -840,8 +856,8 @@ async def test_17_deletion_closes_and_restores(api_client, db_engine, field):
         ).scalar_one()
     assert restored == "active"  # 残Intent復帰(expires_at未経過・引用#9)
     # (c) expires_at経過側はexpired復帰
-    i5 = await _intent(api_client, h1, start=_future(BASE_HOURS + 72))
-    i6 = await _intent(api_client, h2, start=_future(BASE_HOURS + 72))
+    i5 = await _intent(api_client, h1, start=_future(BASE_HOURS + 44))
+    i6 = await _intent(api_client, h2, start=_future(BASE_HOURS + 44))
     latch_e = await _latch(db_engine, [i5["id"], i6["id"]])
     await _respond(api_client, h1, latch_e, "yes")
     await _respond(api_client, h2, latch_e, "yes")  # matched
@@ -853,8 +869,12 @@ async def test_17_deletion_closes_and_restores(api_client, db_engine, field):
             ),
             {"d": SystemClock().now() - timedelta(hours=1), "i": i6["id"]},
         )
-    del3 = await api_client.delete(f"/v1/intents/{i5['id']}", headers=h1)
-    assert del3.status_code == 204
+    # matched削除不可のため(b)と同様にDBで状態を整えてから直接呼ぶ
+    async with db_engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE intents SET status = 'cancelled' WHERE id = CAST(:i AS uuid)"),
+            {"i": i5["id"]},
+        )
     async with db_engine.begin() as conn:
         await stage1_mod.close_latches_on_delete(
             conn, uuid_mod.UUID(i5["id"]), SystemClock().now()

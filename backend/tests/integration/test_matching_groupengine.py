@@ -1237,6 +1237,9 @@ async def test_promotion_overwrites_group_candidate_id(
         }
         for x in range(4):
             for y in range(x + 1, 4):
+                # 実物パイプライン(candidates.py normalize_pair)と同一の
+                # a<b正規化・UPSERT(workerが同キー行を書いていても通す)
+                lo_id, hi_id = sorted((ids[x], ids[y]))
                 await conn.execute(
                     text("""
                         INSERT INTO match_candidates
@@ -1248,10 +1251,15 @@ async def test_promotion_overwrites_group_candidate_id(
                                 0.9, CAST(:jev AS jsonb), 'evaluated',
                                 CAST(:now AS timestamptz),
                                 CAST(:now AS timestamptz))
+                        ON CONFLICT (intent_a_id, intent_b_id,
+                                     intent_a_version, intent_b_version)
+                        DO UPDATE SET jev_result = EXCLUDED.jev_result,
+                            status = 'evaluated',
+                            updated_at = EXCLUDED.updated_at
                     """),
                     {
-                        "a": uuid_mod.UUID(ids[x]),
-                        "b": uuid_mod.UUID(ids[y]),
+                        "a": uuid_mod.UUID(lo_id),
+                        "b": uuid_mod.UUID(hi_id),
                         "jev": json_mod.dumps(jev),
                         "now": now,
                     },
