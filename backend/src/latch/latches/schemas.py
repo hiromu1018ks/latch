@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 ResponseValue = Literal["yes", "no", "defer"]
 
@@ -22,7 +22,11 @@ class LatchSummaryOut(BaseModel):
 
     responses配列は持たない(他者の回答種別を応答へ出さない — 引用#22)。
     my_responseは自分の回答のみ・remaining_responsesは人数のみ。
+    from_attributes: serviceが返す行オブジェクト(dataclass/namespace)から
+    の直接構築を許可する(unit試験のスタブ注入のため)。
     """
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     status: str
