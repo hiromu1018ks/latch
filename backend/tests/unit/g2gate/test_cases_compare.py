@@ -4,6 +4,7 @@
 """
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +16,15 @@ from latch.g2gate.cases import (
     G2_BASE_CURRENT_DATETIME,
     load_goldset,
 )
+from latch.g2gate.compare import (
+    THRESHOLDS,
+    auc_separation,
+    band_of,
+    brier_score,
+    compute_metrics,
+    expected_calibration_error,
+)
+from latch.llm.jev import JevJudgment
 
 BASE = {
     "meta": {
@@ -166,3 +176,124 @@ def test_base_current_datetime_pin():
     assert G2_BASE_CURRENT_DATETIME == datetime.fromisoformat(
         "2026-10-01T11:30:00+09:00"
     )
+
+
+# -- compare(手計算既知値・design §4.1) --
+
+
+@dataclass(frozen=True)
+class _Outcome:  # runner.PairOutcomeと同じ形(duck-typing)
+    pair_id: str
+    route: str
+    judgment: JevJudgment | None
+    error: str | None
+
+    @property
+    def mutual_score(self) -> float | None:
+        if self.judgment is None:
+            return None
+        r = self.judgment.result
+        return min(r["would_a_accept_b"], r["would_b_accept_a"])
+
+
+def _judgment(would_a: float, would_b: float) -> JevJudgment:
+    result = {
+        "would_a_accept_b": would_a,
+        "would_b_accept_a": would_b,
+        "jev_5axis": {
+            k: {"value": 0.5, "confidence": None}
+            for k in ("purpose_fit", "mood_fit", "timing_fit", "social_fit")
+        }
+        | {"latent_yes": {"value": 0.5, "confidence": None}},
+    }
+    return JevJudgment(provider="typesafe_jev", model="jev-1.13.0", result=result)
+
+
+def _goldset_with_gold(gold: dict[str, bool]):
+    """compute_metrics試験用の最小goldset(expectedのみ使用)。"""
+    from latch.g2gate.cases import Goldset, PairExpected
+
+    expected = {}
+    for pair_id, g in gold.items():
+        exp = PairExpected(
+            gold_mutual=g,
+            would_a_accept_b={"label": "accept", "band": "high"},
+            would_b_accept_a={"label": "accept", "band": "high"},
+            purpose_fit=4,
+            mood_fit=4,
+            timing_fit=4,
+            social_fit=4,
+            latent_yes={"label": None, "band": "mid"},
+        )
+        expected[pair_id] = exp
+    return Goldset(pairs=[], inputs={}, expected=expected, yaml_sha256="x", meta=None)
+
+
+def test_thresholds_pin():
+    assert THRESHOLDS == (0.70, 0.80, 0.90)  # 09 §4.2・D-01
+
+
+def test_band_of_boundaries():
+    """band境界: low<0.35 / 0.35≤mid<0.65 / high≥0.65(goldset-plan §5)。"""
+    assert band_of(0.349) == "low"
+    assert band_of(0.35) == "mid"
+    assert band_of(0.649) == "mid"
+    assert band_of(0.65) == "high"
+    assert band_of(1.0) == "high"
+
+
+def test_precision_recall_known_values():
+    """P/R手計算: L=[0.9(T),0.85(T),0.4(F)]・閾値0.80→提案2件・TP2・FP0。"""
+    m = compute_metrics(
+        [
+            _Outcome("p1", "first", _judgment(0.95, 0.9), None),
+            _Outcome("p2", "first", _judgment(0.9, 0.85), None),
+            _Outcome("p3", "first", _judgment(0.5, 0.4), None),
+        ],
+        _goldset_with_gold({"p1": True, "p2": True, "p3": False}),
+    )
+    t80 = m["thresholds"]["0.8"]
+    assert t80["precision"] == 1.0
+    assert t80["recall"] == 1.0
+    t70 = m["thresholds"]["0.7"]
+    assert t70["precision"] == 1.0
+    t90 = m["thresholds"]["0.9"]
+    # 閾値0.90: 提案={0.95, 0.9}(0.9は0.90>=0.90で提案)→ p1,p2 が提案
+    assert t90["precision"] == 1.0
+
+
+def test_ece_known_value():
+    """ECE手計算: pred 0.9(gold T)と0.1(gold F)→ 各bin |0.9-1.0|=0.1・|0.1-0.0|=0.1
+    → 加重平均 0.5*(0.1+0.1)=0.1。"""
+    ece = expected_calibration_error([0.9, 0.1], [True, False])
+    assert ece == pytest.approx(0.1)
+
+
+def test_brier_known_value():
+    """Brier手計算: (0.9-1)^2+(0.1-0)^2=0.02 → 平均0.01。"""
+    assert brier_score([0.9, 0.1], [True, False]) == pytest.approx(0.01)
+
+
+def test_auc_perfect_reversal_and_tie():
+    """分離度: 完全分離=1.0・完全逆転=0.0・完全タイ=0.5(Mann-Whitney U)。"""
+    assert auc_separation([0.9, 0.8], [0.3, 0.2]) == 1.0
+    assert auc_separation([0.2, 0.3], [0.8, 0.9]) == 0.0
+    assert auc_separation([0.5, 0.5], [0.5, 0.5]) == 0.5
+    # 部分タイ: pos=[0.9,0.5] neg=[0.5,0.1] → 勝3(0.9>0.5,0.9>0.1,0.5>0.1)
+    # +タイ0.5(0.5=0.5) → U=(3+0.5)/4=0.875
+    assert auc_separation([0.9, 0.5], [0.5, 0.1]) == pytest.approx(0.875)
+
+
+def test_compute_metrics_counts_failures_and_diagnostics():
+    """失敗ペアは指標分母から除外せず失敗数で報告(design §2.8)。"""
+    outcomes = [
+        _Outcome("p1", "first", _judgment(0.95, 0.9), None),
+        _Outcome("p2", "first", None, "LLMRateLimitError"),
+    ]
+    m = compute_metrics(outcomes, _goldset_with_gold({"p1": True, "p2": True}))
+    assert m["pair_count"] == 2
+    assert m["success_count"] == 1
+    assert m["failure_count"] == 1
+    assert m["failures"] == {"LLMRateLimitError": 1}
+    # diagnostics: fit軸の±1一致率(期待4・実測0.5*4=2.0 → |2-4|=2>1 → 不一致)
+    assert m["diagnostics"]["fit_within_1_rate"]["purpose_fit"] == 0.0
