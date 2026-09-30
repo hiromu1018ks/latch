@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **G2ゲート判定の準備**。残るは人間領域: ①日本語評価の実行(520ペア両経路≈$4.75・再実行込み上限$15。**実行前にスーパーバイザーが金額を報告してから**)②合格基準草案(スーパーバイザー草案→オーナー最終決定)③G2時確認事項①〜④の承認(score正規化・Layer 5解釈5件・ws-7解釈9件・ws-8解釈3件=下記)④TypeSafe契約詳細の確認記録(任意)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)**
+- 次の着手: **G2ゲート判定の承認依頼**(判定資料は下記「G2判定資料」节。ユーザーの確定待ち=合格基準の数値確定+G2時確認事項①〜④の承認)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)**
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
 ## M0 作業単位
@@ -238,7 +238,26 @@
   - スーパーバイザー独立検証: worktree 1016 unit passed・**test-ci run 7=1188 passed一発のち、マージ後main test-ci 1188 passed**(api・worker再ビルド後)・**残存・孤立行すべて0件**(test_schema掃除でM0以来の累積も解消・purge-match-sub実効性実証)・g2-gate --limit 2 --route both=exit 0(4ペア成功・partial=true・≈$0.02)・lint再実行緑・basename一意・alembic head=0005不変
   - 環境の既存欠陥(スコープ外・ユーザー報告済み): compose.yaml workerにLATCH_DATABASE_URL不在でコンテナworker稼働不能(test-ciはin-process workerのため影響なし・対処方針はユーザー判断待ち)
 
+- **G2改版(2026-09-30ユーザー裁定)** / 改版 c132cd4・コード追随マージ 8da6423 / docs/reviews/g2-threshold-fallback-revision.md / 2026-09-30
+  - 背景のJev評価実測: 520ペア・失敗0・296秒・**実コスト$0.03**。閾値0.80では提案1件(recall 0.5%)・MutualScore最大0.81。AUC 0.7475・ECE 0.0905・Brier 0.2096(証拠 g2-jev-result-20260930-134810.yaml)
+  - ユーザー裁定: ①提案閾値0.80→**0.60**(Jev第一候補のまま)②フォールバックSonnet 5→**Haiku 4.5**(コスト方針「マネタイズできない」・全適用範囲)
+  - 改版範囲: 01/04/05/06/07/09/11/12・T1 v0.3(Haikuフォールバック全件継続$900/月・上限$2,700と検算)
+  - コード追随ミニ単位: LATCH_THRESHOLD=0.60・**match_levelのmedium境界0.80を提案閾値から分離**(0.80一致の偶然に依存していた)・フォールバックモデルclaude-haiku-4-5・g2gate測定閾値0.50/0.60/0.70・ピン追随。マージ後main test-ci 1188 passed
+  - 合格基準書 v0.2(eefdf34): 必須=①Precision@0.60≥0.60②AUC≥0.70③**提案数n≥30**(v0.1の退化合格抜け穴へ新設)。オーナー確定欄つき
 - 学習資産追従: ws-8分 6896d52(第16章「呼ぶのをやめる判断: circuit breakerと続く障害への備え」新設+既存4ファイル更新。演習は実行出力つき・agent4がmake test 1016を再実行確認。g2-gate手順書は実API検証不可のためG2実行時に作成見送り・usage limitで1度中断→再開指示で完了)
+
+## G2判定資料(2026-09-30時点・ユーザー承認待ち)
+
+- **①02#5〜#12**: ci環境でグリーン(解釈④=ci実施/staging再実行はM4-3。マージ後main test-ci 1188 passed・改版後も1188 passed)
+- **②K上限裏付け**: ws-8 K上限E2E(118 Intent・全層同時・決定性2回実行)グリーン
+- **③冪等性**: 同一Event2回投入でペア集合不変のE2Eグリーン
+- **④縮退**: circuit breaker開放→半開・切替・skipped保留・復旧再評価のE2Eグリーン(フォールバックはスタブでモデル非依存=Haiku変更の影響なし)
+- **⑤日本語評価(Jevのみ実施・ユーザー指示)**: 2回実行いずれも520ペア全成功・失敗0(1回目296秒/2回目323秒・各$0.03)。**基準書v0.2の必須3項目とも合格**:
+  - 1回目(134810): Precision@0.60=0.795・AUC=0.7475・n@0.60=39
+  - 2回目(144518・測定閾値改版後の正式証拠): **Precision@0.60=0.738・AUC=0.7509・n@0.60=31**
+  - 注記: モデル確率のrun間変動あり(precision 0.74〜0.80・n 31〜39)。必須3の下限30に対し2回目は余裕が小さい
+- **G2時確認事項①〜④**(18件の解釈記録)の承認を含む
+- ユーザー確定待ち: 合格基準の数値(基準書§6)→ゲート承認
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
