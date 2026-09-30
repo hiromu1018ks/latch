@@ -54,6 +54,11 @@
 1. **FCM実送信の前提資材**(Firebaseプロジェクト・サーバー認証情報・Web Push用VAPID鍵) — 実装はスタブで進行可(LLM Gatewayスタブと同型)。実機送信確認の頃までにユーザー準備(2026-09-30 supervisor判断でM3着手の阻害外と置く・要確認)
 2. **02#13〜#23の実施環境(ci/staging)** — G2解釈④と同型の判断をG3時にユーザー確認
 
+## G3時確認事項(実装解釈の累積・ゲート承認時にまとめて確認)
+
+1. ws-1: **paused参加Intentを含む成立**(05 §6遷移表のmatched行は「active→matched」表記だがcancelled/expired行は「active・paused」のため、提示後にpauseされた提案も回答可能と読む。design §5-3)
+2. ws-1: **segmentフラグの計算時点=回答確定時の現行Intent文言**(09 §2.3「提案化時に判定し記録」を判定規則の定義と読み、レコード作成は07 §6の回答確定時。提案〜回答間にIntent更新がある場合のみ評価行〔バージョン固定〕とsegment〔現行文言〕の時点がずれうる。design §5-4)
+
 ## M2 作業単位
 
 | 単位 | 内容 | 出典(12) | 依存 | 状態 |
@@ -278,6 +283,7 @@
 ### M3(2026-09-30〜)
 
 - M3開始 / 2026-09-30ユーザーGoサイン+単位表承認(ws-1〜ws-9・実行waveは単位表参照)。FCM資材(人間領域)と02#13〜#23実施環境は「G3判定の待ち事項」へ分離
+- ws-1 / 設計 54f22b7(supervisor承認: design §5の8件=①Calibration作成はrejected/matched時のみ〔07 §6「回答確定時」の直接読み〕 ②回答UPDATEのWHEREへ参加Intent検査NOT EXISTS追加〔06 §6確定値への厳格化・05 §5のLATCH_CLOSED「参加Intent変化」の実装〕 ③成立はpaused参加Intentを含む ④segment=layer3文字bigram再利用・soft_constraintsは降格文言を含む ⑤1対1評価行特定=score一致3段階・全段失敗はレコード不作成+構造化ログ ⑥グループprediction=minペア準用 ⑦stage1削除Event処理へlatchesクローズ+解散復帰追加〔06 §1「保留無効化」の未実装追随〕 ⑧group_engine昇格UPDATEへgroup_candidate_id列追加〔ws-7引継ぎ確定〕。引用確定値28件とコード接続資産はスーパーバイザーがdocs・実コードと突合済み。②のうちpaused成立とsegment計算時点は「G3時確認事項」へ記録)/ 2026-09-30
 
 ## G2判定資料(2026-09-30・承認済み)
 
