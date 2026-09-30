@@ -411,6 +411,16 @@ async def test_1_k_limits_all_layers(
             ),
             {"o": origin["id"]},
         )
+        # latchesはlatch_status_eventsからFK参照されるため先に削除
+        # (field teardownと同順序)
+        await conn.execute(
+            text(
+                "DELETE FROM latch_status_events WHERE latch_id IN"
+                " (SELECT id FROM latches"
+                " WHERE CAST(:o AS uuid) = ANY(intent_ids))"
+            ),
+            {"o": origin["id"]},
+        )
         await conn.execute(
             text("DELETE FROM latches WHERE CAST(:o AS uuid) = ANY(intent_ids)"),
             {"o": origin["id"]},
