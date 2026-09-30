@@ -3,11 +3,12 @@
 import copy
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from latch.core.clock import FakeClock
+from latch.llm.breaker import CircuitBreaker
 from latch.llm.errors import (
     JevOutputInvalidError,
     LLMConnectionError,
@@ -232,3 +233,134 @@ async def test_call_jev_first_invalid_output_propagates_with_provider():
     with pytest.raises(JevOutputInvalidError) as ei:
         await gw.call_jev_first(intent_a=IA, intent_b=IB, intent_ids=["i-a", "i-b"])
     assert ei.value.provider == "typesafe_jev"
+
+
+# -- circuit breaker連携(ws-8 design §2.2・Review Focus 2〜5) --
+
+
+def _breaker_gateway(first, fallback, *, breaker):
+    clock = FakeClock(NOW)
+    return LLMGateway(
+        clock=clock,
+        parser=StubLLM(),
+        embedding=StubLLM(),
+        jev=first,
+        jev_fallback=fallback,
+        breaker=breaker,
+    )
+
+
+async def test_breaker_open_skips_first_candidate():
+    """開放中は第一候補を呼ばずフォールバックへ(Review Focus 2)。"""
+    first = _RecordingStub()  # 正常応答の計数スタブ
+    first.name = "first"
+    breaker = CircuitBreaker(clock=FakeClock(NOW))
+    breaker.record(error=True, latency_s=0.1)
+    breaker.record(error=True, latency_s=0.1)  # 2失敗/2呼=100%→open
+    assert breaker.state == "open"
+    gw = _breaker_gateway(first, _RecordingStub(), breaker=breaker)
+    judgment = await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    assert judgment.provider == "fallback_llm"
+    assert first.calls == 0  # 第一候補は1回も呼ばれていない
+
+
+async def test_breaker_none_keeps_existing_behavior():
+    """breaker=None(既定)は従動作(第一候補成功でtypesafe_jev)。"""
+    gw = _gateway(StubLLM(), _RecordingStub())  # breaker未渡し
+    judgment = await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    assert judgment.provider == "typesafe_jev"
+
+
+async def test_judge_pair_records_errors_and_opens():
+    """judge_pairの第一候補失敗がbreakerへ計上され2回で開放する。"""
+    first = _ThrowingJev(LLMRateLimitError("429"))
+    clock = FakeClock(NOW)
+    breaker = CircuitBreaker(clock=clock)
+    gw = _breaker_gateway(first, _RecordingStub(), breaker=breaker)
+    for _ in range(2):
+        judgment = await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+        assert judgment.provider == "fallback_llm"
+    assert breaker.state == "open"
+    assert breaker.samples() == ((True, 0.0), (True, 0.0))  # FakeClockで実測0秒
+
+
+async def test_timeout_latency_replaced_with_timeout_s():
+    """timeout呼び出しはレイテンシ=Timeouts.jev_sで記録(Review Focus 3)。"""
+    from latch.llm.gateway import Timeouts
+
+    clock = FakeClock(NOW)
+    breaker = CircuitBreaker(clock=clock)
+    first = StubLLM(delay_jev_ms=200)  # 実遅延(asyncio.timeoutで打ち切り)
+    gw = LLMGateway(
+        clock=clock,
+        parser=StubLLM(),
+        embedding=StubLLM(),
+        jev=first,
+        jev_fallback=_RecordingStub(),
+        timeouts=Timeouts(jev_s=0.05),
+        breaker=breaker,
+    )
+    judgment = await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    assert judgment.provider == "fallback_llm"
+    assert breaker.samples() == ((True, 0.05),)  # 実測でなくtimeout_s
+
+
+async def test_invalid_output_counts_as_success_in_breaker():
+    """JevOutputInvalidErrorは呼び出し成功扱い(Review Focus 4)。"""
+
+    class _InvalidOut(JevProvider):
+        name = "invalid"
+
+        async def judge(self, intent_a: str, intent_b: str) -> dict:
+            return {"model": "jev-1.13.0", "answers": {}, "usage": {}}
+
+    clock = FakeClock(NOW)
+    breaker = CircuitBreaker(clock=clock)
+    gw = _breaker_gateway(_InvalidOut(), _RecordingStub(), breaker=breaker)
+    with pytest.raises(JevOutputInvalidError):
+        await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    assert breaker.samples() == ((False, 0.0),)  # error=False(成功扱い)
+
+
+async def test_fallback_failure_does_not_touch_breaker():
+    """フォールバック失敗でbreaker状態は変わらない(design §2.2・Review Focus 5)。
+
+    第一候補429(切替発生)→フォールバックtimeout(双障害)で検証: 計上は
+    第一候補の失敗1件のみ(N=1<min_samplesのため開放もしない)。
+    """
+    clock = FakeClock(NOW)
+    breaker = CircuitBreaker(clock=clock)
+    first = _ThrowingJev(LLMRateLimitError("429"))
+    fb = _ThrowingJev(LLMTimeoutError("fb timeout"))
+    gw = _breaker_gateway(first, fb, breaker=breaker)
+    with pytest.raises(LLMTimeoutError):
+        await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    assert breaker.samples() == ((True, 0.0),)  # フォールバック失敗は計上されない
+    assert breaker.state == "closed"
+
+
+async def test_half_open_round_trip_through_judge_pair():
+    """開放→60秒→半開で第一候補を1回だけ試験し成功なら閉じる(design §2.4試験4)。"""
+    clock = FakeClock(NOW)
+    breaker = CircuitBreaker(clock=clock)
+    failing = StubLLM(fail_jev_exc="ratelimit")
+    healthy = StubLLM()
+    gw = _breaker_gateway(failing, _RecordingStub(), breaker=breaker)
+    await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    await gw.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    assert breaker.state == "open"
+    clock.advance(timedelta(seconds=60))
+    # 半開の試験リクエストは第一候補へ(gateway差し替え: healthyへ)
+    gw2 = LLMGateway(
+        clock=clock,
+        parser=StubLLM(),
+        embedding=StubLLM(),
+        jev=healthy,
+        jev_fallback=_RecordingStub(),
+        breaker=breaker,
+    )
+    judgment = await gw2.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    assert judgment.provider == "typesafe_jev"
+    assert breaker.state == "closed"
+    judgment2 = await gw2.judge_pair(intent_a=IA, intent_b=IB, intent_ids=["a", "b"])
+    assert judgment2.provider == "typesafe_jev"  # closed後は第一候補へ復帰
