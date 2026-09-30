@@ -204,7 +204,7 @@ at-least-once配信の「送り直し」は、こうしてWorkerの故障の補�
 変換が、あとで「毒ペイロード」(処理できない壊れた知らせ。9.6)の仕分けの入り口に
 なります。
 
-変換が済んだら、第1段処理 `Stage1.intake`(stage1.py:139)の最初の関門、
+変換が済んだら、第1段処理 `Stage1.intake`(stage1.py:195)の最初の関門、
 **行の確保**です。ここは、この単位で最も読み応えのある工夫なのでゆっくり読みます。
 
 思い出してください。API経由でpublishされた知らせには、outboxがINSERTしたpending行が
@@ -212,7 +212,7 @@ at-least-once配信の「送り直し」は、こうしてWorkerの故障の補�
 テストが郵便局へ直接publishするので、DBには行がありません。同じ知らせなのに、
 行がある場合とない場合がある。この違いを1つの経路にまとめるため、Workerは
 受信したら**まず自分で行を用意しに行く**ことにしました
-(`stage1.py:60` の `_INSERT_EVENT`)。
+(`stage1.py:62` の `_INSERT_EVENT`)。
 
 ```python
 _INSERT_EVENT = text("""
@@ -232,7 +232,7 @@ _INSERT_EVENT = text("""
 
 - 挿入に成功し、idが返ってきた → 行はなかった(テスト直投入)。この行を処理する
 - 挿入が諦められた(idが返らない)→ 既に行がある。UNIQUE索引と同じ条件で
-  `SELECT ... FOR UPDATE` して既存の行を確保する(`stage1.py:69` の `_SELECT_CLAIM`)
+  `SELECT ... FOR UPDATE` して既存の行を確保する(`stage1.py:71` の `_SELECT_CLAIM`)
 
 FOR UPDATE(第6章6.5で「読みながら行に鍵をかける」と学んだSQL)がここでも出てくる
 理由は、複数の受信が同じ知らせを同時に処理しようとするからです。鍵をかけられた側は
@@ -351,7 +351,7 @@ version検査と、UNIQUE索引(第6章)です。最適化が外れて遅くな�
 ## 9.5 知らせの鮮度を3つに分ける: version検査
 
 debounceの窓が開いたら(または待たない種別ならすぐ)、処理の本体に入ります。
-中心は `stage1.py:249` の `_process_once` で、トランザクション1本の中に
+中心は `stage1.py:305` の `_process_once` で、トランザクション1本の中に
 判定の階段が並びます。引用します(見通しのため一部を省略)。
 
 ```python
@@ -452,7 +452,7 @@ cancelledになったIntentへの知らせが、郵便局の中で少し遅れ�
 ちなみに「読めない」知らせには、対応するpending行がそもそも作れないことがあります。
 3点組が組めないため、UNIQUE索引の鍵がないからです。そこでStage1は、読めなかった
 生データをそのままpayloadに詰めた隔離行を新しくINSERTします
-(`stage1.py:328` の `_quarantine_direct`)。このとき `source_intent_id` が不明なら
+(`stage1.py:391` の `_quarantine_direct`)。このとき `source_intent_id` が不明なら
 値ゼロのUUID(nil UUID)を入れておきます。UNIQUE索引はNULL(不在)の重複を妨げない
 ので、壊れたメッセージが何通来ても、それぞれ別の行として隔離できます——
 毒ペイロードを1つ残らず記録するためには、重複排除が効かないほうがむしろ都合がいい、
@@ -462,7 +462,7 @@ cancelledになったIntentへの知らせが、郵便局の中で少し遅れ�
 
 一時的な失敗は誰にでも起こります。DBが一瞬混んでいて読み取りがタイムアウトする。
 version乖離が読み直しても解けない。そういう失敗の対処が `process` の再試行ループです
-(`stage1.py:170`)。
+(`stage1.py:234`)。
 
 ```python
         for attempt in range(self._retry_max + 1):
@@ -478,7 +478,7 @@ version乖離が読み直しても解けない。そういう失敗の対処が 
         return "quarantined"
 ```
 
-`BACKOFF_SEC` は `(1.0, 2.0, 4.0, 8.0, 16.0)`(`stage1.py:47`)。失敗するたびに
+`BACKOFF_SEC` は `(1.0, 2.0, 4.0, 8.0, 16.0)`(`stage1.py:49`)。失敗するたびに
 待ち時間を倍々にしていく、この工夫を **バックオフ**(back off=後ずさり)と呼びます。
 相手が混んでいるときに間髪入れず再試行すると、混みの原因に自分で追い打ちを
 かけることになるので、少しずつ待つ間隔を広げます。初回+再試行で最大6回の試行ののち、
@@ -497,7 +497,7 @@ version検査を通った知らせへの実際の処理(引用の `...` の部�
 思いのほか薄い中身です。`deleted` なら、そのIntentを含む候補(match_candidates。
 候補生成は次の単位以降)を `closed` にするUPDATEを1本。`created` と `updated` なら、
 **Embedding要求フック**という呼び出し位置だけが予約されていて、実体は次の単位
-(ws-2)が埋めます(`stage1.py:279` から。`embedding_hook=None` なら何も起きない)。
+(ws-2)が埋めます(`stage1.py:339` から。`embedding_hook=None` なら何も起きない)。
 Embeddingとは、Intentの文章を「意味の近さ」で比べるための数値の列(ベクトル)へ
 変換する処理で、第1章1.7でpgvectorとセットに予告したものです。この章で経路が
 開通したことで、その変換をいつ・どの知らせに対して始めるかという「呼ぶ位置」を
@@ -562,7 +562,7 @@ UUIDは、uuid.UUIDの**サブクラス**です。サブクラスはそのまま
 期待しているコンストラクタがAttributeErrorを投げます。unitテストのスタブconnは
 文字列を返すように作られていたので、この差が見えませんでした。修正は、
 UUIDならそのまま・それ以外なら文字列から組む、という1つの関数に集約です
-(`stage1.py:51` の `_coerce_uuid`)。同じ欠陥の系譜がM0 ws-3・M1 ws-1にもあり、
+(`stage1.py:53` の `_coerce_uuid`)。同じ欠陥の系譜がM0 ws-3・M1 ws-1にもあり、
 そのたびに同じ対策(値をそのまま通す関数)が置かれています。
 
 ここまでの読者なら、この2件の共通点を自分で言えるはずです。**スタブは
@@ -588,9 +588,10 @@ pytestの終了後・workerの復帰前に、常設worker用subscriptionを削�
 2. `uv run pytest tests/unit/test_worker_debounce.py -v` を実行し、試験名を
    縦に読む。この節で学んだ規則(未知versionだけ延長・再受信は延長しない・
    intentごとの独立)が、それぞれ試験になっていることを確認する
-3. `uv run pytest tests/unit/test_worker_stage1.py -v` を実行する。件数(26件)を
+3. `uv run pytest tests/unit/test_worker_stage1.py -v` を実行する。件数(28件)を
    確かめ、試験名から「version三分岐・行なし破棄・毒ペイロード隔離・再試行5回」の
-   どこが試されているか読み分けてノートに書く
+   どこが試されているか読み分けてノートに書く(2026-09-30のM3 ws-1で、削除時に
+   latchesを閉じる試験2件が加わりました。第17章17.5で読みます)
 4. `rg -n "discard_reason|failure_reason" backend/src/latch/worker/stage1.py` で
    理由コードの書き込み箇所を全部数える。9.6の表の5行と付き合わせる
 5. `git log --oneline -- backend/src/latch/events/` でこのパッケージの生い立ちを
