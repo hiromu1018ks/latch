@@ -285,6 +285,14 @@
 - M3開始 / 2026-09-30ユーザーGoサイン+単位表承認(ws-1〜ws-9・実行waveは単位表参照)。FCM資材(人間領域)と02#13〜#23実施環境は「G3判定の待ち事項」へ分離
 - ws-1 / 設計 54f22b7(supervisor承認: design §5の8件=①Calibration作成はrejected/matched時のみ〔07 §6「回答確定時」の直接読み〕 ②回答UPDATEのWHEREへ参加Intent検査NOT EXISTS追加〔06 §6確定値への厳格化・05 §5のLATCH_CLOSED「参加Intent変化」の実装〕 ③成立はpaused参加Intentを含む ④segment=layer3文字bigram再利用・soft_constraintsは降格文言を含む ⑤1対1評価行特定=score一致3段階・全段失敗はレコード不作成+構造化ログ ⑥グループprediction=minペア準用 ⑦stage1削除Event処理へlatchesクローズ+解散復帰追加〔06 §1「保留無効化」の未実装追随〕 ⑧group_engine昇格UPDATEへgroup_candidate_id列追加〔ws-7引継ぎ確定〕。引用確定値28件とコード接続資産はスーパーバイザーがdocs・実コードと突合済み。②のうちpaused成立とsegment計算時点は「G3時確認事項」へ記録)/ 2026-09-30
 - ws-1 / 計画 c7c3d18(4,528行・Task 1〜12・SQL/コード全文記載。機械チェック合格: basename一意〔既存106+新規5・スーパーバイザー再実行で空を確認〕・ピン試験追随访問〔group_engine列追加は既存期待値なし・layer3は_bigrams削除せず・stage1はFakeResult機械的追従〕・DB干渉対抗策〔m3ws1-プレフィックス+FK順teardown・now+5日系BASE_HOURS=120分離〕。Review Focus 5点にデッドロック回避のORDER BY id〔§9-1〕と期限切れ試験のDB値操作〔§9-2〕を含む。**supervisor修正: Task 8のtest_latches_routes.pyが§0/§4/完了条件5の計数から漏れていた内部矛盾を整合(新規5ファイル・計21ファイル)**)/ 2026-09-30実装着手
+- ws-1 / マージ 54e40d5(実装はae5141eまで・14コミット)/ docs/plans/M3/ws-1-report.md / 2026-09-30
+  - agent3実装(1h37m・12コミット)。test-ci 3ランの修正サイクル(初回7失敗=api旧イメージ+fixture向き→2回目4失敗→3回目1253 passed)。報告書の逸脱記録は誠実(§9-3のCAST句・試験fixtureのa<b正規化・matched削除経路のDB値操作置換など)
+  - supervisor承認(計画外追記1件): test_rate_limit_wiring.pyへ新ルート3行(全v1ルートのapi_rate_limitedピンへの機械的追従・M1 ws-5前例と同型)
+  - スーパーバイザー独立検証で2件を検出・解決(いずれもws-1実装コードの欠陥ではない):
+    (1) **test_k_limits_e2e test_4の日次時限爆弾(M2 ws-8由来のテスト設計欠陥)**: 期限null補完が「今夜JST23:30/翌日12:00/翌日23:30/now+72h」の最寄りへスナップするため、**21:30〜23:30 JST帯の実行では**now+45分startのfixture期限がnow+2h以内(今夜23:30)になりa/bがcatch-up対象化してrun_once()!=0で失敗。supervisor検証(21:44 JST)のみ赤・agent3実行(≤21:25 JST)は窓外で緑。明示expires_at追加(ae5141e)で解消・**失敗窓内(22:11 JST)の単体実行で合格確認**。原因特定はrunner選択SQLの直接実行+pytest -l のローカル変数(calls=fixture自身のid)で実施
+    (2) **agent3デバッグ行残存(m3ws1dbg-*)+M2由来users蓄積420件**: 報告書「残存0件」主張はm3ws1-%照合でも不正確だった(自己申告を信じない原則の実証例)。FK順完全削除で全テーブル0件化
+  - 検証最終値: worktree test-ci 1253 passed(修正後独立実行)・**マージ後main test-ci 1253 passed**(api再ビルド後・lint緑)・basename一意・alembic head=0005不変・依存追加なし・geo実データ復旧(make geo-import)
+  - 観察(既知・スコープ外): test-ci 1回あたりm2ws1-/m2ws2-系users約12件がteardownから漏れ蓄積する(M2由来・今回420件掃除。ws-9かM4での恒久対策候補)
 
 ## G2判定資料(2026-09-30・承認済み)
 
