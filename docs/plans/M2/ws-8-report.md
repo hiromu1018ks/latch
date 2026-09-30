@@ -118,3 +118,30 @@ cf3193a feat: circuit breakerの状態機(llm/breaker.py)とunit試験12件
 9. **test_degraded_e2e.py/test_k_limits_e2e.pyのlint対応**: 計画書コードから
    未使用import(LLMConnectionError・LLMOverloadedError)を除去・E501行長2箇所を
    分割。試験のロジック・期待値は無変更。
+
+## 補足2(スーパーバイザー検証test-ci 20失敗+2エラーの修正 — 2026-09-30)
+
+スーパーバイザーのtest-ci診断に基づく修正(integration再実行はスーパーバイザー
+側・unit/収集で検証)。DB干渁のみの失敗(test_1/7・k_limits 2/3・既存ws-4/5/6)
+には未対応(漏洩行はスーパーバイザーが掃除済み):
+
+1. **teardownのFK欠落(カスケードの根本原因・両ファイル)**: latches提案時に
+   latch_status_events行が書かれfk_latch_status_events_latchでFK違反→teardown
+   エラー→行漏洩→他試験へのDB干渉。field fixture teardown(test_degraded_e2e)
+   と_teardown_prefix(test_k_limits_e2e・fieldから呼ばれる)へlatches削除の前に
+   latch_status_events削除を挿入。順序=match_candidates→latch_status_events→
+   latches→group_candidates→match_events→intents→users。
+2. **test_3・test_5のAttributeError**: first=StubLLM(fail_jev_exc=...)は
+   judge_calls属性を持たないため計数assertでAttributeError。常時失敗+計数の
+   _FlakyFirst(fail_calls=10**9, exc=LLMRateLimitError("429")/
+   LLMOverloadedError("529"))へ置換(LLMOverloadedErrorをimportへ復帰)。
+3. **test_6のoff-by-one**: timeout_at={18,19}では18呼び出し目がフォールバック
+   切替となり冒頭のrange(18)のprovider=='typesafe_jev'assertが失敗。
+   timeout_at={19,20}へ変更(呼び出し1〜18=第一候補成功・19・20=timeout・
+   N=20でp95位置=6.0→開放・エラー率2/20=10%でp95単独条件の分離は維持)。
+4. **k_limits test_1の除外時間組422**: 時間交差なし3名のstart=
+   _future(BASE_HOURS+72)=192h=8日で+7日(expires_at)上限に抵触し422。
+   _future(BASE_HOURS+43)(=163h<168h・基準120hとのΔ=43h>3h flexで非交差維持)
+   へ変更。
+5. 検証: `make lint`グリーン・`make test` 1016 passed・`pytest --collect-only`
+   integration 2ファイル12件収集・差分は上記2ファイルのみ。

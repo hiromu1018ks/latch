@@ -93,6 +93,15 @@ async def _teardown_prefix(db_engine, prefix: str) -> None:
         )
         await conn.execute(
             text(
+                "DELETE FROM latch_status_events WHERE latch_id IN"
+                " (SELECT id FROM latches WHERE intent_ids && (SELECT array_agg(id)"
+                " FROM intents WHERE user_id IN"
+                " (SELECT id FROM users WHERE auth_subject LIKE :p))::uuid[])"
+            ),
+            p,
+        )
+        await conn.execute(
+            text(
                 "DELETE FROM latches WHERE intent_ids && (SELECT array_agg(id)"
                 " FROM intents WHERE user_id IN"
                 " (SELECT id FROM users WHERE auth_subject LIKE :p))::uuid[]"
@@ -303,8 +312,10 @@ async def test_1_k_limits_all_layers(
     excluded: dict[str, str] = {}  # 除外要因6(3=時間交差なし・3=予算300)
     for _ in range(3):
         h = await _user(api_client, field)
+        # +43h=163h<168h(+7日expires_at上限内)かつ基準120hとのΔ=43h>3h
+        # (flex)で時間非交差は維持(+72hは上限超過で422になる)
         t = await _intent(
-            api_client, db_engine, h, _structured(start=_future(BASE_HOURS + 72))
+            api_client, db_engine, h, _structured(start=_future(BASE_HOURS + 43))
         )
         excluded[t["id"]] = "time"
     for _ in range(3):

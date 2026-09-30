@@ -22,6 +22,7 @@ from latch.core.clock import FakeClock, SystemClock
 from latch.geo.service import GeoService
 from latch.llm.breaker import CircuitBreaker
 from latch.llm.errors import (
+    LLMOverloadedError,
     LLMRateLimitError,
     LLMTimeoutError,
 )
@@ -90,6 +91,15 @@ async def field(db_engine):
                 " OR intent_b_id IN"
                 " (SELECT id FROM intents WHERE user_id IN"
                 "  (SELECT id FROM users WHERE auth_subject LIKE :p))"
+            ),
+            p,
+        )
+        await conn.execute(
+            text(
+                "DELETE FROM latch_status_events WHERE latch_id IN"
+                " (SELECT id FROM latches WHERE intent_ids && (SELECT array_agg(id)"
+                " FROM intents WHERE user_id IN"
+                " (SELECT id FROM users WHERE auth_subject LIKE :p))::uuid[])"
             ),
             p,
         )
@@ -310,7 +320,7 @@ async def test_1_rate_limit_switches_to_fallback(
     b = await _intent(api_client, db_engine, hb, _structured(start=start))
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
-    first = StubLLM(fail_jev_exc="ratelimit")
+    first = _FlakyFirst(fail_calls=10**9, exc=LLMRateLimitError("429"))
     fb = _CountingStub()
     gateway = _breaker_gateway(clock, first, fb)
     guard, store = _stores(redis_client, redis_sweep, clock)
@@ -449,7 +459,7 @@ async def test_5_half_open_failure_reopens_and_round_trips(
 ):
     """半開・失敗で開放戻し(引用#1「往復は何度でも」): 2往復を実証。"""
     clock = _clock()
-    first = StubLLM(fail_jev_exc="overloaded")  # 常時529失敗
+    first = _FlakyFirst(fail_calls=10**9, exc=LLMOverloadedError("529"))  # 常時失敗
     fb = _CountingStub()
     breaker = CircuitBreaker(clock=clock)
     gateway = _breaker_gateway(clock, first, fb, breaker=breaker)
@@ -475,7 +485,7 @@ async def test_6_p95_condition_opens_alone(api_client, db_engine, field):
     →エラー率10%≤50%・p95位置=timeout→開放。timeout呼び出しのレイテンシは
     打ち切り時点のtimeout_s(6秒)として母集団に入る(design §2.4試験6)。"""
     clock = _clock()
-    first = _TimeoutPatternStub(timeout_at={18, 19})
+    first = _TimeoutPatternStub(timeout_at={19, 20})
     fb = _CountingStub()
     breaker = CircuitBreaker(clock=clock)
     gateway = _breaker_gateway(clock, first, fb, breaker=breaker)
