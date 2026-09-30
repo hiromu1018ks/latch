@@ -135,13 +135,16 @@ _SELECT_PENDING_GROUPS = text("""
       AND CAST(:origin AS uuid) = ANY(g.intent_ids)
 """)
 
-# 集合内ペア行(全ペア揃い判定とMutualScore計算の材料)
+# 集合内ペア行(全ペア揃い判定とMutualScore計算の材料。
+# 同ペア複数バージョン行の新行優先をORDER BYで確定(ws-8 design §2.9(a)・
+# 挙動不変の決定性明文化))
 _SELECT_GROUP_PAIRS = text("""
     SELECT id, intent_a_id, intent_b_id, intent_a_version, intent_b_version,
            jev_result
     FROM match_candidates
     WHERE intent_a_id = ANY(CAST(:ids AS uuid[]))
       AND intent_b_id = ANY(CAST(:ids AS uuid[]))
+    ORDER BY intent_a_id, intent_b_id, updated_at DESC
 """)
 
 # 世代リセット(design §2.5手順1・引用#10: 新評価世代はprevを持たない)
