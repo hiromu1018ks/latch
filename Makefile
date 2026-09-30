@@ -25,7 +25,7 @@ test-ci: ## ci環境試験(worker停止→unit+integration→subscription掃除�
 	docker compose up -d --wait
 	docker compose stop worker
 	cd backend && uv run --group geo pytest; rc=$$?; \
-	uv run python -m latch.events purge-match-sub; docker compose start worker; exit $$rc
+	LATCH_PUBSUB_EMULATOR_HOST=127.0.0.1:8085 uv run python -m latch.events purge-match-sub; docker compose start worker; exit $$rc
 
 migrate: ## DBマイグレーションをheadまで適用(明示実行。API/Workerの起動時自動実行はしない)
 	cd backend && uv run alembic upgrade head
