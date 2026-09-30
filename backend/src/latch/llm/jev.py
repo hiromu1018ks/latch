@@ -236,6 +236,7 @@ class JevJudgment:
     provider: str  # "typesafe_jev" | "fallback_llm"
     model: str | None  # 第一候補時の応答バージョンID・フォールバック時はNone
     result: dict  # validate_and_normalize の出力(jev_resultのresult部)
+    usage: dict | None = None  # envelopeのusage(g2gateの集計用・Layer 4は使わない)
 
 
 __all__ = [

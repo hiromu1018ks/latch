@@ -17,6 +17,7 @@ from typing import Any
 from latch.core.clock import Clock
 from latch.llm.anthropic import AnthropicParserProvider
 from latch.llm.anthropic_jev import AnthropicJevFallbackProvider
+from latch.llm.breaker import CircuitBreaker
 from latch.llm.errors import (
     JevOutputInvalidError,
     LLMConnectionError,
@@ -52,6 +53,14 @@ class Timeouts:
     jev_s: float = TIMEOUT_JEV_S
 
 
+class _FirstCandidateSkippedOpen(LLMError):
+    """breaker開放中の第一候補スキップ(design §2.2)。
+
+    既存の切替except節へ合流させるためLLMErrorを継承する内部例外。
+    呼んでいないため送信記録もbreaker計上も発生しない(正しい)。
+    """
+
+
 class LLMGateway:
     """3系統の外部LLM呼び出しの単一共通経路(C4)。送信記録とtimeoutをここで持つ。"""
 
@@ -64,6 +73,7 @@ class LLMGateway:
         jev: JevProvider,
         jev_fallback: JevProvider | None = None,
         timeouts: Timeouts | None = None,
+        breaker: CircuitBreaker | None = None,
     ) -> None:
         self._clock = clock
         self._parser = parser
@@ -73,6 +83,9 @@ class LLMGateway:
         # 無変更で通すための既定。real構成ではbuild_worker_gatewayが明示渡し)
         self._jev_fallback = jev_fallback if jev_fallback is not None else jev
         self._timeouts = timeouts if timeouts is not None else Timeouts()
+        # breaker=None(既定)は従動作(APIプロセス・既存試験互換・design §2.2)。
+        # build_worker_gatewayの両構成がCircuitBreakerを渡す
+        self._breaker = breaker
 
     async def parse_intent(
         self, *, text: str, current_date: date, user_id: str | None = None
@@ -111,34 +124,51 @@ class LLMGateway:
         JevOutputInvalidError(出力検証失敗=実装不整合)は切替せず伝播する。
         切替時は各呼び出しが既存_callを通るため送信記録2件。フォールバック失敗
         (双障害)はそのまま伝播(D-15の縮退はLayer 4が記録に変換する)。
+        circuit breaker(ws-8・06 D-15 FR-10): breaker注入時、第一候補側で
+        allow/recordする。開放中は第一候補を呼ばず(_FirstCandidateSkippedOpen
+        で切替へ合流)フォールバックで継続。JevOutputInvalidErrorは呼び出し
+        成功扱いで計上(design §2.2)。フォールバック側はbreakerに計上しない。
         """
         try:
-            envelope = await self._jev_call(
-                intent_a, intent_b, intent_ids, fallback=False
-            )
+            if self._breaker is None:
+                return await self.call_jev_first(
+                    intent_a=intent_a, intent_b=intent_b, intent_ids=intent_ids
+                )
+            if not self._breaker.allow(self._clock.now()):
+                raise _FirstCandidateSkippedOpen()
+            t0 = self._clock.now()
             try:
-                result = validate_and_normalize(envelope)
-            except JevOutputInvalidError as exc:
-                # 検証対象の経路を例外へ載せて再送出(§9-4 — Layer 4の内訳計上用)
-                raise JevOutputInvalidError(str(exc), provider="typesafe_jev") from exc
-            return JevJudgment(
-                provider="typesafe_jev",
-                model=_envelope_model(envelope),
-                result=result,
+                judgment = await self.call_jev_first(
+                    intent_a=intent_a, intent_b=intent_b, intent_ids=intent_ids
+                )
+            except LLMError as exc:
+                # timeout(asyncio.timeout打ち切り)は実レイテンシ計測不能のため
+                # 打ち切り時点のtimeout_sを記録(design §2.2・承認事項1)。
+                # JevOutputInvalidErrorは応答が得られている呼び出し成功扱い。
+                invalid_output = isinstance(exc, JevOutputInvalidError)
+                if isinstance(exc, LLMTimeoutError):
+                    latency_s = self._timeouts.jev_s
+                else:
+                    latency_s = (self._clock.now() - t0).total_seconds()
+                self._breaker.record(error=not invalid_output, latency_s=latency_s)
+                raise
+            self._breaker.record(
+                error=False,
+                latency_s=(self._clock.now() - t0).total_seconds(),
             )
+            return judgment
         except (
             LLMTimeoutError,
             LLMRateLimitError,
             LLMOverloadedError,
             LLMConnectionError,
+            _FirstCandidateSkippedOpen,
         ):
-            pass  # 07 §4の切替条件4種。LLMProviderError・JevOutputInvalidErrorは伝播
-        envelope = await self._jev_call(intent_a, intent_b, intent_ids, fallback=True)
-        try:
-            result = validate_and_normalize(envelope)
-        except JevOutputInvalidError as exc:
-            raise JevOutputInvalidError(str(exc), provider="fallback_llm") from exc
-        return JevJudgment(provider="fallback_llm", model=None, result=result)
+            pass  # 07 §4の切替条件4種+開放中スキップ。LLMProviderError・
+            # JevOutputInvalidErrorは伝播
+        return await self.call_jev_fallback(
+            intent_a=intent_a, intent_b=intent_b, intent_ids=intent_ids
+        )
 
     async def _jev_call(
         self, intent_a: str, intent_b: str, intent_ids: list[str], *, fallback: bool
@@ -146,7 +176,7 @@ class LLMGateway:
         """Jev呼び出し1回(fallback=TrueはフォールバックLLM側)。
 
         circuit breaker(ws-8)の注入ポイントは第一候補側(fallback=False)。
-        本単位では実装しない(design §2.10)。
+        judge_pairとcall_jev_first/call_jev_fallbackの両方から使う共通経路。
         """
         provider = self._jev_fallback if fallback else self._jev
         return await self._call(
@@ -156,6 +186,43 @@ class LLMGateway:
             intent_ids=intent_ids,
             user_id=None,
             invoke=lambda: provider.judge(intent_a, intent_b),
+        )
+
+    async def call_jev_first(
+        self, *, intent_a: str, intent_b: str, intent_ids: list[str]
+    ) -> JevJudgment:
+        """第一候補(TypeSafe Jev)の直接呼び出し(公開IF・ws-8 design §2.8)。
+
+        g2gate評価とjev_smokeが使う。breakerを参照しない(評価は経路品質の
+        実測が目的 — 承認事項6)。judge_pairの第一候補側からも再利用する
+        (二重実装なし)。送信記録・timeoutは_call経由でjudge_pairと同一。
+        """
+        envelope = await self._jev_call(intent_a, intent_b, intent_ids, fallback=False)
+        try:
+            result = validate_and_normalize(envelope)
+        except JevOutputInvalidError as exc:
+            raise JevOutputInvalidError(str(exc), provider="typesafe_jev") from exc
+        return JevJudgment(
+            provider="typesafe_jev",
+            model=_envelope_model(envelope),
+            result=result,
+            usage=envelope.get("usage") if isinstance(envelope, dict) else None,
+        )
+
+    async def call_jev_fallback(
+        self, *, intent_a: str, intent_b: str, intent_ids: list[str]
+    ) -> JevJudgment:
+        """フォールバックLLMの直接呼び出し(公開IF・design §2.8)。"""
+        envelope = await self._jev_call(intent_a, intent_b, intent_ids, fallback=True)
+        try:
+            result = validate_and_normalize(envelope)
+        except JevOutputInvalidError as exc:
+            raise JevOutputInvalidError(str(exc), provider="fallback_llm") from exc
+        return JevJudgment(
+            provider="fallback_llm",
+            model=None,
+            result=result,
+            usage=envelope.get("usage") if isinstance(envelope, dict) else None,
         )
 
     async def _call(
@@ -282,7 +349,8 @@ def build_worker_gateway(clock: Clock, settings: Settings) -> LLMGateway:
     TypeSafeJevProvider・フォールバック=AnthropicJevFallbackProvider
     (llm_anthropic_api_keyはparserと共用)。parser系統はstub継続
     (APIプロセスのbuild_llm_gateway契約は無変更)。鍵の欠落はfail-fast
-    (静かにスタブへ落ちない)。
+    (静かにスタブへ落ちない)。両構成ともCircuitBreaker付き
+    (ws-8・ci常設worker・jev-smokeが自動的にbreaker有効)。
     """
     stub = StubLLM(
         delay_parser_ms=settings.llm_stub_delay_parser_ms,
@@ -291,7 +359,12 @@ def build_worker_gateway(clock: Clock, settings: Settings) -> LLMGateway:
     )
     if settings.llm_mode == "stub":
         return LLMGateway(
-            clock=clock, parser=stub, embedding=stub, jev=stub, jev_fallback=stub
+            clock=clock,
+            parser=stub,
+            embedding=stub,
+            jev=stub,
+            jev_fallback=stub,
+            breaker=CircuitBreaker(clock=clock),
         )
     if settings.llm_mode == "real":
         if not settings.llm_gemini_api_key:
@@ -321,5 +394,6 @@ def build_worker_gateway(clock: Clock, settings: Settings) -> LLMGateway:
             embedding=embedding,
             jev=jev,
             jev_fallback=jev_fallback,
+            breaker=CircuitBreaker(clock=clock),
         )
     raise ValueError(f"unknown llm_mode: {settings.llm_mode!r} ('stub' or 'real')")

@@ -1,0 +1,103 @@
+note: 部分実行(--limit)=証拠外。G2判定には520全件実行のレポートを使うこと
+meta:
+  trial_id: g2-20260930-122004
+  executed_at: '2026-09-30T03:20:04.068859+00:00'
+  route: both
+  partial: true
+  limit: 2
+  pair_count: 4
+  goldset:
+    file: g2-jev-goldset.yaml
+    sha256: c4ef0abb475310d46b13d7ff1a3cc365134b9773478f185027acf0de4b101809
+  jev_questions_sha256: 10a3d7d71dd4e282b611540be72df70f39cb2b7023bf0803a4e13d35a754fb67
+  usage_totals:
+    first:
+      input_tokens: 2875
+      output_tokens: 234
+    fallback:
+      input_tokens: 2275
+      output_tokens: 163
+  reference:
+    note: 参考値(合否判定はG2実施前にオーナーが確定 — 09 §4)
+    precision_at: 0.8
+    precision_min: 0.6
+routes:
+  first:
+    pair_count: 2
+    success_count: 2
+    failure_count: 0
+    failures: {}
+    thresholds:
+      '0.7':
+        precision: null
+        recall: 0.0
+      '0.8':
+        precision: null
+        recall: 0.0
+      '0.9':
+        precision: null
+        recall: 0.0
+    ece: 0.385
+    brier: 0.14825
+    auc: null
+    diagnostics:
+      would_a_band_match_rate: 0.0
+      would_b_band_match_rate: 0.0
+      latent_band_match_rate: 1.0
+      fit_within_1_rate:
+        purpose_fit: 1.0
+        mood_fit: 0.5
+        timing_fit: 1.0
+        social_fit: 0.0
+  fallback:
+    pair_count: 2
+    success_count: 2
+    failure_count: 0
+    failures: {}
+    thresholds:
+      '0.7':
+        precision: 1.0
+        recall: 1.0
+      '0.8':
+        precision: null
+        recall: 0.0
+      '0.9':
+        precision: null
+        recall: 0.0
+    ece: 0.30000000000000004
+    brier: 0.09000000000000002
+    auc: null
+    diagnostics:
+      would_a_band_match_rate: 1.0
+      would_b_band_match_rate: 1.0
+      latent_band_match_rate: 0.5
+      fit_within_1_rate:
+        purpose_fit: 1.0
+        mood_fit: 1.0
+        timing_fit: 1.0
+        social_fit: 1.0
+per_pair:
+- id: GP-001
+  route: first
+  error: null
+  would_a_accept_b: 0.63
+  would_b_accept_a: 0.61
+  mutual_score: 0.61
+- id: GP-002
+  route: first
+  error: null
+  would_a_accept_b: 0.62
+  would_b_accept_a: 0.64
+  mutual_score: 0.62
+- id: GP-001
+  route: fallback
+  error: null
+  would_a_accept_b: 0.75
+  would_b_accept_a: 0.7
+  mutual_score: 0.7
+- id: GP-002
+  route: fallback
+  error: null
+  would_a_accept_b: 0.8
+  would_b_accept_a: 0.7
+  mutual_score: 0.7

@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -21,10 +21,11 @@ lint: ## ruff(format検査+lint)
 test: ## unit試験(毎コミットの規律)
 	cd backend && uv run pytest -m "not integration"
 
-test-ci: ## ci環境試験(worker停止→unit+integration→worker復帰。--group geoでosmium込み)
+test-ci: ## ci環境試験(worker停止→unit+integration→subscription掃除→worker復帰。--group geoでosmium込み)
 	docker compose up -d --wait
 	docker compose stop worker
-	cd backend && uv run --group geo pytest; rc=$$?; docker compose start worker; exit $$rc
+	cd backend && uv run --group geo pytest; rc=$$?; \
+	LATCH_PUBSUB_EMULATOR_HOST=127.0.0.1:8085 uv run python -m latch.events purge-match-sub; docker compose start worker; exit $$rc
 
 migrate: ## DBマイグレーションをheadまで適用(明示実行。API/Workerの起動時自動実行はしない)
 	cd backend && uv run alembic upgrade head
@@ -50,3 +51,6 @@ embed-smoke: ## Embedding実APIスモーク(1呼び出し・.envにLATCH_LLM_MOD
 
 jev-smoke: ## Jev実APIスモーク(1呼び出し・課金。.envにLATCH_LLM_MODE=real+3鍵必須。FALLBACK=1でフォールバック直接)
 	cd backend && uv run --env-file ../.env python -m latch.llm.jev_smoke
+
+g2-gate: ## G2日本語評価harness(実API・課金。.envにLATCH_LLM_MODE=real+3鍵必須。引数は make g2-gate ARGS="--limit 2 --route both" — makeは--以降の転送をしないため)
+	cd backend && uv run --env-file ../.env python -m latch.g2gate $(ARGS)

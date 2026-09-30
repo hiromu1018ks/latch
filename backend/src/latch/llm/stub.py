@@ -11,7 +11,13 @@ import copy
 import hashlib
 from datetime import date
 
-from latch.llm.errors import LLMProviderError
+from latch.llm.errors import (
+    LLMConnectionError,
+    LLMOverloadedError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+)
 from latch.llm.providers import (
     EMBEDDING_DIMENSIONS,
     EmbeddingProvider,
@@ -79,6 +85,7 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
         fail_parser: bool = False,
         fail_embedding: bool = False,
         fail_jev: bool = False,
+        fail_jev_exc: str | None = None,
     ) -> None:
         self.name = "stub"
         # 防御的コピー: 消費者が応答を書き換えてもデフォルト応答(モジュール定数)や
@@ -100,6 +107,9 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
         self._fail_parser = fail_parser
         self._fail_embedding = fail_embedding
         self._fail_jev = fail_jev
+        # 07 §4切替条件の例外種別指定(ws-8 design §2.3)。
+        # None | "ratelimit" | "overloaded" | "timeout" | "connection"
+        self._fail_jev_exc = fail_jev_exc
 
     def _delay_ms(self, system: str) -> int:
         """系統→遅延ms。p50/p95分布版(M4)への差し替えはこの1関数で完結する。"""
@@ -132,6 +142,20 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
 
     async def judge(self, intent_a: str, intent_b: str) -> dict:
         await self._apply_delay("jev")
+        if self._fail_jev_exc is not None:
+            # fail_jev_excがfail_jevより優先(種別指定時はそちらを使う)
+            if self._fail_jev_exc == "ratelimit":
+                raise LLMRateLimitError("stub: fail_jev_exc=ratelimit")
+            if self._fail_jev_exc == "overloaded":
+                raise LLMOverloadedError("stub: fail_jev_exc=overloaded")
+            if self._fail_jev_exc == "timeout":
+                raise LLMTimeoutError("stub: fail_jev_exc=timeout")
+            if self._fail_jev_exc == "connection":
+                raise LLMConnectionError("stub: fail_jev_exc=connection")
+            raise ValueError(
+                f"fail_jev_excの不明な値: {self._fail_jev_exc!r}"
+                "(ratelimit/overloaded/timeout/connection)"
+            )
         if self._fail_jev:
             raise LLMProviderError("stub: fail_jev=True")
         return copy.deepcopy(self._jev_response)

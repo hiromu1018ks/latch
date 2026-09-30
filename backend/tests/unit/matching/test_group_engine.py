@@ -903,3 +903,11 @@ async def test_finalize_d06_order_robust_to_reversed_input(monkeypatch):
     )
     await _engine().finalize(_uid(1))
     assert [g for g in log["mark_proposed"]] == [_uid(9000), _uid(9001)]
+
+
+def test_select_group_pairs_orders_for_determinism():
+    """同ペア複数行の選択順をORDER BYで確定(ws-7 Minor(a)・ws-8 design §2.9)。"""
+    from latch.worker.matching.group_engine import _SELECT_GROUP_PAIRS
+
+    sql = str(_SELECT_GROUP_PAIRS)
+    assert "ORDER BY intent_a_id, intent_b_id, updated_at DESC" in sql

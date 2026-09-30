@@ -5,7 +5,14 @@ from time import perf_counter  # 実時間計測はテストコードのみ(desi
 
 import pytest
 
-from latch.llm.errors import LLMError, LLMProviderError
+from latch.llm.errors import (
+    LLMConnectionError,
+    LLMError,
+    LLMOverloadedError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+)
 from latch.llm.providers import (
     EMBEDDING_DIMENSIONS,
     EmbeddingProvider,
@@ -216,3 +223,34 @@ def test_switch_exceptions_are_llm_error_subclasses():
         JevOutputInvalidError,
     ):
         assert issubclass(exc, LLMError)
+
+
+# -- fail_jev_exc(ws-8 design §2.3・07 §4切替条件の例外種別注入) --
+
+
+async def test_stub_fail_jev_exc_exception_map():
+    """fail_jev_excの4種が07 §4切替条件の例外種別へ対応(ws-8 design §2.3)。"""
+    cases = [
+        ("ratelimit", LLMRateLimitError),
+        ("overloaded", LLMOverloadedError),
+        ("timeout", LLMTimeoutError),
+        ("connection", LLMConnectionError),
+    ]
+    for value, exc_type in cases:
+        stub = StubLLM(fail_jev_exc=value)
+        with pytest.raises(exc_type):
+            await stub.judge("A", "B")
+
+
+async def test_stub_fail_jev_exc_takes_precedence_over_fail_jev():
+    """fail_jev_exc指定時は種別例外が優先(fail_jev=Trueは下位互換のまま)。"""
+    stub = StubLLM(fail_jev=True, fail_jev_exc="ratelimit")
+    with pytest.raises(LLMRateLimitError):
+        await stub.judge("A", "B")
+
+
+async def test_stub_fail_jev_exc_none_by_default():
+    """既定None(既存構成への影響なし)。"""
+    stub = StubLLM()
+    env = await stub.judge("A", "B")
+    assert env["model"] == "jev-1.13.0"
