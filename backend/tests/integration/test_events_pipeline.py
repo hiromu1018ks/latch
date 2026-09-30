@@ -17,22 +17,12 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import text
 
-from latch.core.clock import FakeClock, SystemClock
+from latch.core.clock import SystemClock
 
 pytestmark = pytest.mark.integration
 
 # テストプロセスからはport映射経由(コンテナ内はpubsub:8085 — compose.yaml)
 os.environ.setdefault("LATCH_PUBSUB_EMULATOR_HOST", "127.0.0.1:8085")
-
-# env設定後にimport(PubsubEventBus構築がPUBSUB_EMULATOR_HOSTを読むため)
-from latch.events import PubsubEventBus  # noqa: E402
-from latch.settings import Settings  # noqa: E402
-from latch.worker.main import Worker  # noqa: E402
-
-
-async def _instant(_seconds: float) -> None:
-    """バックオフ待機の即時化(再試行回数はログで担保 — §2グローバル制約)。"""
-    return None
 
 
 # -- 共通ヘルパ(test_intents_crud_api.py と同じ流儀)--
@@ -147,49 +137,8 @@ async def _wait_invalid_event_logs(caplog, minimum: int, timeout: float = 10.0) 
     )
 
 
-# -- fixture: 試験専用subscription + テストプロセス内Worker --
-
-
-class _WorkerEnv:
-    def __init__(self, bus, clock, worker, task):
-        self.bus = bus
-        self.clock = clock
-        self.worker = worker
-        self.task = task
-
-
-@pytest.fixture
-async def worker_env(db_engine):
-    sub_name = f"match-events-test-{uuid_mod.uuid4().hex[:8]}"
-    settings = Settings()
-    bus = PubsubEventBus(settings, subscription=sub_name)
-    for _ in range(40):  # エミュレータ起動待ち(最大20秒)
-        try:
-            await bus.ensure()
-            break
-        except Exception:
-            await asyncio.sleep(0.5)
-    else:
-        pytest.fail("pubsub emulator not reachable at 127.0.0.1:8085")
-    clock = FakeClock(SystemClock().now())
-    worker = Worker(
-        clock=clock, settings=settings, bus=bus, engine=db_engine, sleep=_instant
-    )
-    task = asyncio.create_task(worker.run())
-    await asyncio.sleep(0.1)  # subscribe開始を待つ
-    try:
-        yield _WorkerEnv(bus=bus, clock=clock, worker=worker, task=task)
-    finally:
-        worker.request_shutdown()
-        try:
-            await asyncio.wait_for(task, timeout=5.0)
-        except TimeoutError:
-            task.cancel()
-        # 残余メッセージを次試験へ残さない。**closeの前に**削除する
-        # (close後のgRPCチャネルはクローズ済みで "Cannot invoke RPC on
-        # closed channel" になる — スーパーバイザー検証で検出)
-        bus.delete_subscription()
-        await bus.close()
+# worker_env fixtureはconftest.pyへ移設(ws-8・make_worker_envへのfactory化。
+# 既存8試験は引数名のみで無変更)
 
 
 @pytest.fixture
