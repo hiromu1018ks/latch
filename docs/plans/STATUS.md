@@ -9,7 +9,7 @@
 - フェーズ: **M2実装完了・G2ゲート判定待ち**(2026-09-30 ws-1〜ws-8すべてマージ。マージ後main test-ci 1188 passed)
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
-- 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-7分すべて同期済み(ws-8分はagent4待ち)
+- 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
 - 次の着手: **G2ゲート判定の準備**。残るは人間領域: ①日本語評価の実行(520ペア両経路≈$4.75・再実行込み上限$15。**実行前にスーパーバイザーが金額を報告してから**)②合格基準草案(スーパーバイザー草案→オーナー最終決定)③G2時確認事項①〜④の承認(score正規化・Layer 5解釈5件・ws-7解釈9件・ws-8解釈3件=下記)④TypeSafe契約詳細の確認記録(任意)。**外部SDK(TypeSafe Jev・フォールバックLLM)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**G2時確認事項: ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)**
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -237,6 +237,8 @@
   - agent3実装(36分・13コミット)+検証7ランの修正サイクル(test-ci初回20失敗+2エラー→1188 passedまで)。**テスト設計・環境の欠陥を大量に検出・修正**(報告書補足2〜4に全記録): ①Makefile purgeのエミュレータenv欠落(fe22042・supervisor直接修正)②teardownのlatch_status_events/notifications FK欠落(2段階で判明・0b622d6+b779821)③**test_schema.pyのM0由来残行汚染**(固定TS孤立行+payload={}のrelay毒eventを毎run累積——61b0de3の掃除teardownで恒久解消・api relay26万行ループの正体)④**HNSW死エントリ汚染**(全テスト同一ベクトルE1の削除行が近似探索予算を食う→テスト毎一意ベクトル5ed3c41)⑤k2/k3手動teardownのassert失敗時スキップ→field fixture化⑥k1⑧掃除のFK順序(e1e92bb)⑦test_3相手Intent欠落・k1⑧のnotifications.latch_id不在列・k3のversion不在列・k2比較のペア集合化(6eb1b78)⑧g2-gateのmake引数転送欠陥(853f92f・**`make --`転送なしの事故で520全件実行が開始され約9分で停止——実行前金額報告の条件を一時破った。沈没コストあり・報告書に正直記録**)
   - スーパーバイザー独立検証: worktree 1016 unit passed・**test-ci run 7=1188 passed一発のち、マージ後main test-ci 1188 passed**(api・worker再ビルド後)・**残存・孤立行すべて0件**(test_schema掃除でM0以来の累積も解消・purge-match-sub実効性実証)・g2-gate --limit 2 --route both=exit 0(4ペア成功・partial=true・≈$0.02)・lint再実行緑・basename一意・alembic head=0005不変
   - 環境の既存欠陥(スコープ外・ユーザー報告済み): compose.yaml workerにLATCH_DATABASE_URL不在でコンテナworker稼働不能(test-ciはin-process workerのため影響なし・対処方針はユーザー判断待ち)
+
+- 学習資産追従: ws-8分 6896d52(第16章「呼ぶのをやめる判断: circuit breakerと続く障害への備え」新設+既存4ファイル更新。演習は実行出力つき・agent4がmake test 1016を再実行確認。g2-gate手順書は実API検証不可のためG2実行時に作成見送り・usage limitで1度中断→再開指示で完了)
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
