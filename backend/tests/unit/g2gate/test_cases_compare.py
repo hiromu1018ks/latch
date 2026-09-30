@@ -24,6 +24,7 @@ from latch.g2gate.compare import (
     compute_metrics,
     expected_calibration_error,
 )
+from latch.g2gate.report import build_report, write_report
 from latch.llm.jev import JevJudgment
 
 BASE = {
@@ -297,3 +298,102 @@ def test_compute_metrics_counts_failures_and_diagnostics():
     assert m["failures"] == {"LLMRateLimitError": 1}
     # diagnostics: fit軸の±1一致率(期待4・実測0.5*4=2.0 → |2-4|=2>1 → 不一致)
     assert m["diagnostics"]["fit_within_1_rate"]["purpose_fit"] == 0.0
+
+
+# -- report/__main__/runner(design §4.1・§2.8) --
+
+
+def test_build_report_partial_flag_and_note():
+    """--limit時はpartial=true・レポート先頭に「部分実行=証拠外」(design §2.8)。"""
+    report = build_report(
+        executed_at=datetime(2026, 10, 1, 11, 30, tzinfo=JST),
+        route="both",
+        goldset_file="g2-jev-goldset.yaml",
+        goldset_sha256="sha",
+        questions_sha="qsha",
+        metrics_by_route={"first": {}, "fallback": {}},
+        outcomes=[],
+        usage_totals={"first": {"input_tokens": 10}, "fallback": {}},
+        limit=2,
+    )
+    first_key = next(iter(report))
+    assert first_key == "note"
+    assert "部分実行" in report["note"]
+    assert report["meta"]["partial"] is True
+    assert report["meta"]["pair_count"] == 0
+
+
+def test_build_report_full_run_has_no_note():
+    report = build_report(
+        executed_at=datetime(2026, 10, 1, 11, 30, tzinfo=JST),
+        route="first",
+        goldset_file="g2-jev-goldset.yaml",
+        goldset_sha256="sha",
+        questions_sha="qsha",
+        metrics_by_route={"first": {}},
+        outcomes=[],
+        usage_totals={"first": {}},
+        limit=None,
+    )
+    assert "note" not in report
+    assert report["meta"]["partial"] is False
+
+
+def test_write_report_basename(tmp_path):
+    executed = datetime(2026, 10, 1, 20, 30, tzinfo=JST)
+    path = write_report(
+        {"meta": {"partial": True}}, out_dir=tmp_path, executed_at=executed
+    )
+    assert path.name == "g2-jev-result-20261001-203000.yaml"
+    assert path.exists()
+
+
+def test_main_rejects_stub_mode(monkeypatch, capsys):
+    """起動検証: stubのまま実測したと錯覚させない(g1gateと同一規律)。"""
+    monkeypatch.setenv("LATCH_LLM_MODE", "stub")
+    from latch.g2gate.__main__ import main
+
+    assert main([]) == 2
+    assert "real" in capsys.readouterr().err
+
+
+def test_main_rejects_missing_typesafe_key(monkeypatch, capsys):
+    monkeypatch.setenv("LATCH_LLM_MODE", "real")
+    monkeypatch.setenv("LATCH_ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("LATCH_GEMINI_API_KEY", "x")
+    monkeypatch.delenv("LATCH_TYPESAFE_API_KEY", raising=False)
+    from latch.g2gate.__main__ import main
+
+    assert main([]) == 2
+    assert "TYPESAFE" in capsys.readouterr().err
+
+
+def test_run_routes_uses_public_if_and_counts_failures(monkeypatch, tmp_path):
+    """run_routesはcall_jev_first/fallback直呼び・失敗は記録して継続。"""
+    import asyncio
+
+    from latch.g2gate.runner import run_routes
+    from latch.llm.errors import LLMRateLimitError
+
+    class _Gateway:
+        def __init__(self):
+            self.first_calls = 0
+            self.fallback_calls = 0
+
+        async def call_jev_first(self, *, intent_a, intent_b, intent_ids):
+            self.first_calls += 1
+            if self.first_calls == 1:
+                raise LLMRateLimitError("429")
+            return _judgment(0.9, 0.9)
+
+        async def call_jev_fallback(self, *, intent_a, intent_b, intent_ids):
+            self.fallback_calls += 1
+            return _judgment(0.8, 0.8)
+
+    goldset = load_goldset(_write_goldset(tmp_path))
+    outcomes = asyncio.run(run_routes(_Gateway(), goldset, route="both"))
+    assert len(outcomes) == 2  # 合成goldsetは1ペア×両経路
+    assert [o.route for o in outcomes] == ["first", "fallback"]
+    assert outcomes[0].error == "LLMRateLimitError"
+    assert outcomes[0].mutual_score is None
+    assert outcomes[1].mutual_score == 0.8
