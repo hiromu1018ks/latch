@@ -8,12 +8,14 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import uuid
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from latch.core.clock import Clock
+from latch.core.clock import JST, Clock
 from latch.latches import calibration, store
 from latch.latches.errors import (
     AlreadyAnsweredError,
@@ -23,8 +25,9 @@ from latch.latches.errors import (
     LatchesError,
     LatchExpiredError,
     LatchNotFoundError,
+    LatchValidationError,
 )
-from latch.latches.schemas import LatchSummaryOut
+from latch.latches.schemas import LatchDetailOut, LatchSummaryOut, ParticipantOut
 
 logger = logging.getLogger("latch.latches")
 
@@ -134,6 +137,88 @@ class LatchesService:
         except Exception as exc:
             raise _wrap_unexpected(exc) from exc
 
+    # -- 一覧・詳細(design §2.8) --
+
+    async def list(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> tuple[list[LatchSummaryOut], str | None]:
+        try:
+            async with self._engine.connect() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                before = decode_cursor(cursor) if cursor else None
+                rows = await store.select_latches_page(
+                    conn, me=user_id, before=before, limit=limit + 1
+                )
+            items = [_summary_from_page(r, user_id) for r in rows[:limit]]
+            next_cursor = None
+            if len(rows) > limit:
+                last = rows[limit - 1]
+                next_cursor = encode_cursor(last.target_time, last.created_at, last.id)
+            return items, next_cursor
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
+    async def get(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+    ) -> LatchDetailOut:
+        try:
+            async with self._engine.connect() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    raise ForbiddenError("not a participant")
+                summary = _summary_from_page(_page_view_of(row), user_id)
+                if row.status not in ("matched", "completed"):
+                    return LatchDetailOut(**summary.model_dump())
+                participants = await store.fetch_participants(conn, row.intent_ids)
+                geo_rows = await store.fetch_intents_geo(conn, row.intent_ids)
+            # connを閉じた後でgeo呼び出し(GeoServiceは別接続を開く)
+            detail_extra: dict = {}
+            if geo_rows:
+                target = max(g.time_start for g in geo_rows)
+                detail_extra["time_summary"] = target.astimezone(JST).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                if self._geo is not None:
+                    lon = sum(g.lon for g in geo_rows) / len(geo_rows)
+                    lat = sum(g.lat for g in geo_rows) / len(geo_rows)
+                    detail_extra["area_name"] = await self._geo.reverse_geocode(
+                        lon, lat
+                    )
+            detail_extra["participants"] = [
+                ParticipantOut(
+                    user_id=p.user_id,
+                    display_name=p.display_name,
+                    profile=p.profile,
+                )
+                for p in participants
+            ]
+            return LatchDetailOut(**summary.model_dump(), **detail_extra)
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
     @staticmethod
     def _raise_closed_or_expired(row, now) -> None:
         """手順2c/5の409分類(期限切れが上・design §2.2)。"""
@@ -238,3 +323,83 @@ def _summary(
         my_response=my_response,
         remaining_responses=remaining,
     )
+
+
+def encode_cursor(
+    target_time: datetime, created_at: datetime, latch_id: uuid.UUID
+) -> str:
+    """キーセットcursor 3キー(design §2.8): base64url("ISO|ISO|uuid")。
+
+    ソート順(target_time ASC, created_at DESC, id ASC)をタプル比較で表現する。
+    intentsのencode_cursorパターンの拡張。
+    """
+    raw = f"{target_time.isoformat()}|{created_at.isoformat()}|{latch_id}"
+    return base64.urlsafe_b64encode(raw.encode()).rstrip(b"=").decode()
+
+
+def decode_cursor(cursor: str) -> tuple[datetime, datetime, uuid.UUID]:
+    """cursor復元。形式不正は422 VALIDATION_ERROR(intentsと同型)。"""
+    padded = cursor + "=" * (-len(cursor) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        tt, ct, lid = raw.split("|")
+        return datetime.fromisoformat(tt), datetime.fromisoformat(ct), uuid.UUID(lid)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise LatchValidationError("invalid cursor") from exc
+
+
+def _yes_count(responses: list[dict]) -> int:
+    return sum(1 for r in responses if r.get("response") == RESPONSE_YES)
+
+
+def _my_response(responses: list[dict], user_id: uuid.UUID) -> str | None:
+    for r in responses:
+        if r.get("user_id") == str(user_id):
+            return r.get("response")
+    return None
+
+
+def _summary_from_page(row, user_id: uuid.UUID) -> LatchSummaryOut:
+    """一覧・詳細行→応答要素(responses配列は出さない・引用#22)。"""
+    total = len(row.intent_ids)
+    if row.status in ("matched", "completed"):
+        remaining = 0
+    else:
+        remaining = total - _yes_count(row.responses)
+    return LatchSummaryOut(
+        id=row.id,
+        status=row.status,
+        response_deadline=row.response_deadline,
+        expires_at=row.expires_at,
+        created_at=row.created_at,
+        completed_at=row.completed_at,
+        proposal=row.proposal,
+        is_group=row.group_candidate_id is not None,
+        my_response=_my_response(row.responses, user_id),
+        remaining_responses=remaining,
+    )
+
+
+def _page_view_of(row):
+    """LatchRow→_summary_from_page互換のビュー(completed_atを持たせる)。"""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        id=row.id,
+        status=row.status,
+        intent_ids=row.intent_ids,
+        responses=row.responses,
+        response_deadline=row.response_deadline,
+        expires_at=row.expires_at,
+        created_at=row.created_at,
+        completed_at=None,
+        proposal=row.proposal,
+        group_candidate_id=row.group_candidate_id,
+    )
+
+
+def make_latches_service(*, clock: Clock, engine: AsyncEngine) -> LatchesService:
+    """main.py lifespan用の構築(GeoServiceはengineから作る)。"""
+    from latch.geo.service import GeoService
+
+    return LatchesService(clock=clock, engine=engine, geo=GeoService(engine))

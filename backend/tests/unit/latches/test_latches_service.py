@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from latch.core.clock import FakeClock
+from latch.core.clock import JST, FakeClock
 from latch.latches.errors import (
     AlreadyAnsweredError,
     DependencyUnavailableError,
@@ -27,7 +27,12 @@ from latch.latches.schemas import (
     ParticipantOut,
     ResponseRequest,
 )
-from latch.latches.service import LatchesService, compute_new_status
+from latch.latches.service import (
+    LatchesService,
+    compute_new_status,
+    decode_cursor,
+    encode_cursor,
+)
 
 NOW = datetime(2026, 9, 30, 12, 0, 0, tzinfo=UTC)
 
@@ -521,3 +526,129 @@ async def test_respond_calibration_missing_row_logs_and_succeeds(monkeypatch):
         response="no",
     )
     assert out.status == "rejected"  # 回答は成功
+
+
+# -- Task 7: 一覧・詳細(cursor・解放情報) --
+
+
+async def test_cursor_roundtrip_and_invalid():
+    """cursorは3キー(target_time|created_at|id)のbase64url・不正は422(§9-3)。"""
+    tt = NOW + timedelta(days=5)
+    lid = uuid.uuid4()
+    token = encode_cursor(tt, NOW, lid)
+    assert decode_cursor(token) == (tt, NOW, lid)
+    with pytest.raises(LatchValidationError):
+        decode_cursor("%%%invalid%%%")
+    with pytest.raises(LatchValidationError):
+        decode_cursor("aGVsbG8=")  # "hello"(区切りなし)
+
+
+async def test_list_builds_items_and_next_cursor(monkeypatch):
+    """一覧: limit+1件取得→next_cursor生成・summary変換(my_response・remaining)。"""
+    from latch.latches import store as store_mod
+
+    page_rows = []
+    for i in range(3):  # limit=2+1件
+        page_rows.append(
+            SimpleNamespace(
+                id=uuid.uuid4(),
+                status="proposed" if i < 2 else "partial_accept",
+                intent_ids=[I1, I2],
+                responses=([{"user_id": str(ME), "response": "yes"}] if i == 0 else []),
+                response_deadline=NOW + timedelta(hours=1),
+                expires_at=NOW + timedelta(days=5),
+                proposal={"headcount": 2, "match_level": "medium"},
+                created_at=NOW - timedelta(minutes=i),
+                completed_at=None,
+                group_candidate_id=None,
+                target_time=NOW + timedelta(days=5, minutes=i),
+            )
+        )
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latches_page", _ret(page_rows))
+    items, next_cursor = await _svc(ScriptedEngine([])).list(
+        auth_provider="google", auth_subject="s", limit=2
+    )
+    assert len(items) == 2
+    assert items[0].my_response == "yes"
+    assert items[0].remaining_responses == 1
+    assert items[1].my_response is None
+    assert next_cursor is not None  # 3件>limit=2
+    # 最終ページ(limit=2で2件のみ)はnext_cursor=None
+    monkeypatch.setattr(store_mod, "select_latches_page", _ret(page_rows[:2]))
+    items2, next_cursor2 = await _svc(ScriptedEngine([])).list(
+        auth_provider="google", auth_subject="s", limit=2
+    )
+    assert len(items2) == 2 and next_cursor2 is None
+
+
+async def test_list_unregistered_404(monkeypatch):
+    from latch.latches import store as store_mod
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(None))
+    with pytest.raises(LatchNotFoundError):
+        await _svc(ScriptedEngine([])).list(auth_provider="google", auth_subject="s")
+
+
+async def test_get_detail_release_only_after_match(monkeypatch):
+    """詳細: proposedはparticipants等なし・matchedは解放情報(引用#16・#21)。"""
+    from latch.latches import store as store_mod
+
+    participant = SimpleNamespace(
+        intent_id=I1,
+        user_id=ME,
+        display_name="テスト郎",
+        profile={"bio": "よろしく"},
+    )
+    geo = SimpleNamespace(
+        intent_id=I1,
+        time_start=NOW + timedelta(days=5),
+        lon=130.6,
+        lat=31.6,
+    )
+
+    class _Geo:
+        async def reverse_geocode(self, lon, lat):
+            return "鹿児島市天文館"
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    monkeypatch.setattr(store_mod, "fetch_participants", _ret([participant]))
+    monkeypatch.setattr(store_mod, "fetch_intents_geo", _ret([geo, geo]))
+
+    svc = LatchesService(clock=FakeClock(NOW), engine=ScriptedEngine([]), geo=_Geo())
+
+    proposed_row = _latch_row()
+    monkeypatch.setattr(store_mod, "select_latch", _ret(proposed_row))
+    detail = await svc.get(
+        auth_provider="google", auth_subject="s", latch_id=proposed_row.id
+    )
+    assert detail.participants is None
+    assert detail.time_summary is None
+    assert detail.area_name is None
+
+    matched_row = _latch_row(status="matched")
+    monkeypatch.setattr(store_mod, "select_latch", _ret(matched_row))
+    detail = await svc.get(
+        auth_provider="google", auth_subject="s", latch_id=matched_row.id
+    )
+    assert detail.participants is not None
+    assert detail.participants[0].display_name == "テスト郎"
+    assert detail.participants[0].profile == {"bio": "よろしく"}
+    # time_summaryは対象開始時刻(max(time_start))のJST書式「YYYY-MM-DD HH:MM」
+    assert detail.time_summary == (
+        (NOW + timedelta(days=5)).astimezone(JST).strftime("%Y-%m-%d %H:%M")
+    )
+    assert detail.area_name == "鹿児島市天文館"
+
+
+async def test_get_forbidden_for_non_participant(monkeypatch):
+    from latch.latches import store as store_mod
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch", _ret(_latch_row()))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(None))
+    with pytest.raises(ForbiddenError):
+        await _svc(ScriptedEngine([])).get(
+            auth_provider="google", auth_subject="s", latch_id=uuid.uuid4()
+        )
