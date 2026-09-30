@@ -52,5 +52,5 @@ embed-smoke: ## Embedding実APIスモーク(1呼び出し・.envにLATCH_LLM_MOD
 jev-smoke: ## Jev実APIスモーク(1呼び出し・課金。.envにLATCH_LLM_MODE=real+3鍵必須。FALLBACK=1でフォールバック直接)
 	cd backend && uv run --env-file ../.env python -m latch.llm.jev_smoke
 
-g2-gate: ## G2日本語評価harness(実API・課金。.envにLATCH_LLM_MODE=real+3鍵必須。--limit/--routeは -- で渡す)
-	cd backend && uv run --env-file ../.env python -m latch.g2gate
+g2-gate: ## G2日本語評価harness(実API・課金。.envにLATCH_LLM_MODE=real+3鍵必須。引数は make g2-gate ARGS="--limit 2 --route both" — makeは--以降の転送をしないため)
+	cd backend && uv run --env-file ../.env python -m latch.g2gate $(ARGS)
