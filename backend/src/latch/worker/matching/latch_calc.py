@@ -13,7 +13,9 @@ from latch.worker.matching.layer4 import (  # noqa: F401 — 再export・試験�
     jst_day_start,
 )
 
-LATCH_THRESHOLD = 0.80  # 06 §6「L >= 0.80」(D-01)
+# 06 §6「L >= 0.60」(D-01・v0.6)。0.80→0.60の変更根拠はG2日本語評価実測
+# (docs/reviews/g2-threshold-fallback-revision.md・2026-09-30改版)
+LATCH_THRESHOLD = 0.60
 LATCH_C = 1.0  # 01 §14・C初期値(Calibration調整点・コード定数)
 D07_DELTA = 0.05  # 06 §10(スコア変化判定)
 D08_DAILY_LIMIT = 6  # 03 D-08(1ユーザー日次)
@@ -46,11 +48,18 @@ def response_deadline(
     return min(inner, min_expires_at)
 
 
+MATCH_LEVEL_MEDIUM_MIN = (
+    0.80  # 05 §2: high>=0.90 / medium>=0.80 / low=提案閾値以上0.80未満
+)
+# v0.6注記: medium境界の0.80は表示用の区切りであり提案閾値(LATCH_THRESHOLD)と独立。
+# 閾値0.80だった当時は偶然一致していたため分離した(2026-09-30改版)
+
+
 def match_level(score: float) -> str:
     """一致度区分(05 §2)。high/medium/low — 下端は運用閾値に連動し未定義区間なし。"""
     if score >= MATCH_LEVEL_HIGH_MIN:
         return "high"
-    if score >= LATCH_THRESHOLD:
+    if score >= MATCH_LEVEL_MEDIUM_MIN:
         return "medium"
     return "low"
 

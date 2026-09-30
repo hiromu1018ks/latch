@@ -231,7 +231,7 @@ def _goldset_with_gold(gold: dict[str, bool]):
 
 
 def test_thresholds_pin():
-    assert THRESHOLDS == (0.70, 0.80, 0.90)  # 09 §4.2・D-01
+    assert THRESHOLDS == (0.50, 0.60, 0.70)  # 09 §4.2・D-01(v0.6)
 
 
 def test_band_of_boundaries():
@@ -244,7 +244,7 @@ def test_band_of_boundaries():
 
 
 def test_precision_recall_known_values():
-    """P/R手計算: L=[0.9(T),0.85(T),0.4(F)]・閾値0.80→提案2件・TP2・FP0。"""
+    """P/R手計算: L=[0.9(T),0.85(T),0.4(F)]・閾値0.60→提案2件・TP2・FP0(v0.6閾値)。"""
     m = compute_metrics(
         [
             _Outcome("p1", "first", _judgment(0.95, 0.9), None),
@@ -253,14 +253,14 @@ def test_precision_recall_known_values():
         ],
         _goldset_with_gold({"p1": True, "p2": True, "p3": False}),
     )
-    t80 = m["thresholds"]["0.8"]
-    assert t80["precision"] == 1.0
-    assert t80["recall"] == 1.0
+    t60 = m["thresholds"]["0.6"]
+    assert t60["precision"] == 1.0
+    assert t60["recall"] == 1.0
+    t50 = m["thresholds"]["0.5"]
+    assert t50["precision"] == 1.0
     t70 = m["thresholds"]["0.7"]
+    # 閾値0.70: 提案={0.95, 0.9}→ p1,p2 が提案(0.85は0.70>=0.70で提案対象)
     assert t70["precision"] == 1.0
-    t90 = m["thresholds"]["0.9"]
-    # 閾値0.90: 提案={0.95, 0.9}(0.9は0.90>=0.90で提案)→ p1,p2 が提案
-    assert t90["precision"] == 1.0
 
 
 def test_ece_known_value():

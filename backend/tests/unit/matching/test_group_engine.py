@@ -733,31 +733,31 @@ async def test_finalize_aggregate_and_latch_in_same_tx(monkeypatch):
     assert log["mark_proposed"] == [_uid(9000)]
 
 
-async def test_finalize_threshold_boundary_080(monkeypatch):
-    """mutualsのmin=0.80ちょうど→提案(score >= LATCH_THRESHOLDは等号付き)。"""
+async def test_finalize_threshold_boundary_060(monkeypatch):
+    """mutualsのmin=0.60ちょうど→提案(score >= LATCH_THRESHOLDは等号付き・v0.6閾値)。"""
     log, _ = _patch_finalize(
         monkeypatch,
         org=_origin(1),
         groups=[_pending_group(_IDS3)],
         pair_rows=[
-            _pair_row(1, 2, wa=0.80, wb=0.9),
+            _pair_row(1, 2, wa=0.60, wb=0.9),
             _pair_row(1, 3, wa=0.9, wb=0.9),
             _pair_row(2, 3, wa=0.9, wb=0.9),
         ],
     )
     await _engine().finalize(_uid(1))
-    assert log["update_aggregate"][0][1] == 0.80
+    assert log["update_aggregate"][0][1] == 0.60  # min=0.60ちょうど(v0.6閾値)
     assert log["insert_latch"]  # 提案化
 
 
 async def test_finalize_below_threshold_keeps_candidate(monkeypatch):
-    """score<0.80→_UPDATE_AGGREGATEのみ・latches INSERTなし(candidateのまま)。"""
+    """score<0.60→_UPDATE_AGGREGATEのみ・INSERTなし(candidateのまま・v0.6閾値)。"""
     log, _ = _patch_finalize(
         monkeypatch,
         org=_origin(1),
         groups=[_pending_group(_IDS3)],
         pair_rows=[
-            _pair_row(1, 2, wa=0.79, wb=0.9),
+            _pair_row(1, 2, wa=0.59, wb=0.9),
             _pair_row(1, 3, wa=0.9, wb=0.9),
             _pair_row(2, 3, wa=0.9, wb=0.9),
         ],

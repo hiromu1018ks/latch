@@ -71,7 +71,9 @@ async def test_create_args_pin():
         "Intent A:\n[hard] category: drinking", "Intent B:\n[hard] category: meal"
     )
     (call,) = client.messages.calls
-    assert call["model"] == ANTHROPIC_JEV_FALLBACK_MODEL == "claude-sonnet-5"
+    assert (
+        call["model"] == ANTHROPIC_JEV_FALLBACK_MODEL == "claude-haiku-4-5"
+    )  # v0.6改版
     assert call["system"] == FALLBACK_SYSTEM_PROMPT
     assert call["messages"] == [
         {

@@ -27,7 +27,7 @@ DEFER_AT = NOW - timedelta(minutes=10)
 
 
 def test_constants_pin_docs_values():
-    assert LATCH_THRESHOLD == 0.80  # 06 §6(D-01)
+    assert LATCH_THRESHOLD == 0.60  # 06 §6(D-01・v0.6)
     assert LATCH_C == 1.0  # 01 §14・C初期値
     assert D07_DELTA == 0.05  # 06 §10
     assert D08_DAILY_LIMIT == 6  # 03 D-08
