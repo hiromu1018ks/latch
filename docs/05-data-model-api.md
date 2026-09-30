@@ -186,7 +186,7 @@ intents.structured_dataは、Hard Constraintとして独立カラム化した項
 | category_primary | string | intents.category_primary(集合内で共通、06 Layer 1の完全一致条件) |
 | category_secondary | string \| null | 参加Intentのstructured_data.category_secondary(第2節)。03第4節「焼肉」の表示は非nullの場合のみ。集合内で複数のsecondaryがある場合、集合の種(Intent)の値を採る |
 | budget | object \| null | ペア予算(参加Intentのbudget_maxの最小値、06第2節)。`{"max": 5000}`。全体がNULLならnull(「制約なし」の表示は03の規定に従う) |
-| match_level | string | 一致度の区切り表示(03第5節)。`high`(0.90以上)/ `medium`(0.80以上0.90未満)/ `low`(提案閾値以上0.80未満)。下端は運用中の提案閾値に連動する(09 D-01のA/B処置群0.70で提案された場合もlowに区分され、未定義区間を生じさせない)。内部スコア生値は格納しない |
+| match_level | string | 一致度の区切り表示(03第5節)。`high`(0.90以上)/ `medium`(0.80以上0.90未満)/ `low`(提案閾値以上0.80未満)。下端は運用中の提案閾値に連動する(09 D-01のA/B処置群0.50で提案された場合もlowに区分され、未定義区間を生じさせない・v0.6)。内部スコア生値は格納しない |
 
 calibration_records.proposal_snapshotはこのproposalと同形とする(09 D-09の収集対象と同一の内容を固定するため)。
 

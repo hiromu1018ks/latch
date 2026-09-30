@@ -1,9 +1,9 @@
 # LATCH Jev・LLM利用仕様書
 
-- 文書バージョン: v0.6
+- 文書バージョン: v0.7
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5・v0.6更新: 2026-09-28)
+- 作成日: 2026-09-27(v0.3〜v0.6更新: 同日〜2026-09-28。v0.7更新: 2026-09-30)
 - 前提文書: 01 要件定義書 v0.5 / 02 スコープ合意書 v0.3 / 03 UX仕様書 v0.4 / 04 システムアーキテクチャ設計書 v0.5 / 05 データモデル・API仕様書 v0.5 / 06 マッチングパイプライン設計書 v0.5
 - v0.6(2026-09-28): 規則7に場所の語の優先順位とノンアルコール明示を追記(G1実測FN=A-034対応・オーナー承認)
 - v0.5の変更点(TypeSafe Jev採用): Layer 4(Jev系統)の第一候補を、テキスト生成を行わないSystem Oneモデル「Jev」(TypeSafe AI・jev-1.13.0)とし、生成LLMを縮退・フォールバックとする(2026-09-28オーナー裁定・C案)。全変更箇所と出典はdocs/reviews/jev-systemone-revision.mdに記録。主要変更は次のとおり。
@@ -30,7 +30,7 @@
 |---|---|---|---|---|---|---|
 | Intent Parser | Anthropic Claude API・Haiku 4.5(T1 v0.2) | POST /v1/intents/parse(03第3節の確認フロー) | 同期(ユーザーが待つ) | 10秒(D-17) | なし(即フォールバックへ) | 1登録1回。件数は最も多いが単価は低い |
 | Embedding | Google Gemini API有料tier・gemini-embedding-001(T1 v0.2) | Intentのactive作成・active化(draft→active)・active更新後(イベント駆動、06 v0.5第9節の第2段トリガー。**draft状態では呼び出さない** — POSTでの下書き保存・draft中のPATCH更新とも、06 v0.5第9節) | 非同期 | 2秒 | なし(失敗はD-15のバックフィル経路で回収) | 1 Intent 1回+失敗時のバックフィル(06 D-15) |
-| Jev | **TypeSafe Jev・jev-1.13.0(System Oneモデル)**。フォールバックはAnthropic Claude API・Sonnet 5(第4節) | Layer 4(06、K_j=8回) | 非同期 | 6秒 | なし(429・529・timeoutはフォールバックLLMへ切替。出力検証失敗の再試行は廃止、第4節) | 第一候補は入力課金のみの低単価($0.042/MTok・出力無料)。フォールバックLLMは高単価。04 D-16の日次・月次上限で制御 |
+| Jev | **TypeSafe Jev・jev-1.13.0(System Oneモデル)**。フォールバックはAnthropic Claude API・Haiku 4.5(第4節・v0.7) | Layer 4(06、K_j=8回) | 非同期 | 6秒 | なし(429・529・timeoutはフォールバックLLMへ切替。出力検証失敗の再試行は廃止、第4節) | 第一候補は入力課金のみの低単価($0.042/MTok・出力無料)。フォールバックLLMは高単価。04 D-16の日次・月次上限で制御 |
 
 いずれもLLM Gateway(04)経由で呼び出し、送信先と送信データ種別を記録する(01第21節)。Jevの送信先はTypeSafe AI(api.typesafe.ai)であり、フォールバックLLMはAnthropic Claude APIである(第4節)。Jevの1実行回数は1候補(両方向を1呼び出しで判定)と数える(06第5節)。フォールバックLLMによる判定も同一の「1実行回数」に計上する(04 D-16)。
 
@@ -273,7 +273,7 @@ noulの値はそのまま[0,1]の確率としてMutualScoreへ入る。scoreの�
 | timeout 6秒 | 同上 |
 | フォールバックLLMの失敗(timeout・429・5xx・出力検証失敗) | 縮退へ(06 D-15: 候補はskippedで保留・circuit breakerの開放対象) |
 
-フォールバックLLMはAnthropic Claude API・Sonnet 5(T1 v0.2の推奨)とし、System One互換の決定形式 — 同じstate・同じ7質問に対するJSON(キーは同一、値はnoul→[0,1]の確率・score→[0,4]の値)をstructured outputで返させる。reasonを生成させない点・5軸の正規化・MutualScoreの計算は第一候補と同一であり、Layer 5以降はどちらで判定されたかに依存しない。jev_resultにはprovider("typesafe_jev" / "fallback_llm")を記録し、第一候補時は加えて応答のmodelフィールドを記録する。TypeSafeの公式ブログには、生成LLMを同じ決定API互換の出力へ制約する「System One LLM wrapper」の存在が言及されるが、本書は外部アダプタの採用を必須とせず、Gateway実装内で同等の出力形式を規定する(実装手段の選択は開発側に委ねる)。
+フォールバックLLMはAnthropic Claude API・Haiku 4.5(v0.7・2026-09-30オーナー裁定。T1 v0.3。Parserと同一モデルのため契約・API鍵を共用する)とし、System One互換の決定形式 — 同じstate・同じ7質問に対するJSON(キーは同一、値はnoul→[0,1]の確率・score→[0,4]の値)をstructured outputで返させる。reasonを生成させない点・5軸の正規化・MutualScoreの計算は第一候補と同一であり、Layer 5以降はどちらで判定されたかに依存しない。jev_resultにはprovider("typesafe_jev" / "fallback_llm")を記録し、第一候補時は加えて応答のmodelフィールドを記録する。TypeSafeの公式ブログには、生成LLMを同じ決定API互換の出力へ制約する「System One LLM wrapper」の存在が言及されるが、本書は外部アダプタの採用を必須とせず、Gateway実装内で同等の出力形式を規定する(実装手段の選択は開発側に委ねる)。
 
 circuit breaker(06 v0.5 D-15)の切替先は本フォールバックLLMであり、開放中は第一候補を呼ばずフォールバックLLMで判定を続ける。フォールバックLLM自体が継続障害のときのみskipped保留へ落ちる(§1)。
 

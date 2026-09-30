@@ -1,12 +1,12 @@
 # LATCH システムアーキテクチャ設計書
 
-- 文書バージョン: v0.5
+- 文書バージョン: v0.6
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28)
+- 作成日: 2026-09-27(v0.3〜v0.5更新: 同日〜2026-09-28。v0.6更新: 2026-09-30)
 - 前提文書: 01 LATCH 要件定義書 v0.5 / 02 スコープ・受け入れ条件合意書 v0.3 / 03 UX仕様書 v0.4
 - v0.5の変更点(TypeSafe Jev採用): 2026-09-28オーナー裁定(C案)を反映し、Layer 4(Jev系統)の第一候補をSystem Oneモデル「TypeSafe Jev」(jev-1.13.0)と確定した。生成LLM(Anthropic系)はフォールバックとする。全変更箇所と出典はdocs/reviews/jev-systemone-revision.mdに記録。主要変更は次のとおり。
-  - D-14: 機能基準にSystem Oneモデルの区分を追加し、Layer 4の採用記録(第一候補=TypeSafe Jev・フォールバック=Anthropic Sonnet 5)を追記した。採用根拠の詳細とコスト見通しはdocs/plans/T1-llm-provider-selection.md(v0.2)が担う
+  - D-14: 機能基準にSystem Oneモデルの区分を追加し、Layer 4の採用記録(第一候補=TypeSafe Jev・フォールバック=v0.5時点でAnthropic Sonnet 5→v0.6からAnthropic Haiku 4.5)を追記した。採用根拠の詳細とコスト見通しはdocs/plans/T1-llm-provider-selection.md(v0.2)が担う
   - 第3節: 技術スタック表の「LLM(Jev・Parser)」を「LLM(Jev)」と「LLM(Parser)」の2行に分け、Jev行に第一候補とフォールバックを明記
   - D-16: 回数上限は回数ベースで不変であることを明記したうえで、コスト前提の注記(第一候補の低単価・フォールバックの高単価)と、フォールバックLLM呼び出しの1実行回数への計上を追記
 - v0.4の変更点(prototype整合): クライアント構成の現状を明記した。フロントエンドの実装基準は`prototype/`(Vite + vanilla JSのWebプロトタイプ)であり、Webクライアントから着手する。モバイルアプリ(iOS / Android)・プッシュ通知・Sign in with Appleの要求(D-21)は後続段階の対象であり、本書の選定はこれを妨げない(第2節)
@@ -81,7 +81,7 @@ MVPの検証対象(01第4節の5仮説)を支えるのに十分で、かつ運�
 | Message Queue | Google Cloud Pub/Sub / Cloud Tasks / Redis Streams / Kafka | Google Cloud Pub/Sub | dead letter topicによる隔離が標準装備で01第16節の失敗処理を満たす。retry回数・最大保留時間はsubscriptionで宣言的に設定でき、Queue lagはCloud Monitoringで標準計測できる(01第20節)。exactly-onceでなくてもidempotency keyで冪等化する(01第16節)。MVP規模にKafkaは過剰 |
 | キャッシュ | Redis / Memcached | Redis | セッション失効リスト、ブロックリスト、友人関係(Hard Filterが高頻度参照)、Jev実行カウンタの4用途を1つで賄う |
 | 通知基盤 | FCM / APNs直接 / 通知SaaS | FCM統一(iOS/Android/Web Push) | 1つのSDKで全配信経路をカバー。APNs認証鍵をFCMに登録してiOSへ配信する。アプリ内通知は自前(DB保存) |
-| LLM(Jev) | System Oneモデル(TypeSafe Jev) / 生成LLM群 | **TypeSafe Jev(jev-1.13.0)第一候補+生成LLMフォールバック(Anthropic Claude API・Sonnet 5)**(D-14 v0.5採用記録) | Layer 4は入力がテキストのみで出力が確率と構造化値であり、生成能力を要求しないため、テキスト生成を行わず確率を返すSystem Oneモデルを第一候補にできる(v0.5)。実物のJevは公称70〜500ms・出力スキーマ保証・入力$0.042/MTok。429・529・timeout時はフォールバックLLMへ切替え、可用性はLLMフォールバック構成で担保する(06 D-15)。切替先の変更もGatewayで可能 |
+| LLM(Jev) | System Oneモデル(TypeSafe Jev) / 生成LLM群 | **TypeSafe Jev(jev-1.13.0)第一候補+生成LLMフォールバック(Anthropic Claude API・Haiku 4.5)**(D-14 v0.5採用・v0.6でモデル変更) | Layer 4は入力がテキストのみで出力が確率と構造化値であり、生成能力を要求しないため、テキスト生成を行わず確率を返すSystem Oneモデルを第一候補にできる(v0.5)。実物のJevは公称70〜500ms・出力スキーマ保証・入力$0.042/MTok。429・529・timeout時はフォールバックLLMへ切替え、可用性はLLMフォールバック構成で担保する(06 D-15)。切替先の変更もGatewayで可能 |
 | LLM(Parser) | 生成LLM群(Claude / GPT系 / その他) | Anthropic Claude API・Haiku 4.5(T1 v0.2推奨・契約条件の確認後に確定) | 日本語自然文300字のJSON構造化が要件。構造化出力と学習利用禁止が規約明文のAnthropicを第一候補とする(08 D-14の契約条件)。Gatewayで差し替え可能 |
 | LLM(Embedding) | 多言語対応埋め込みモデル群 | Google Gemini API有料tier・gemini-embedding-001(T1 v0.2推奨・同上) | 日本語Intentの意味的近接性(「焼肉」と「肉系なら何でも」)が検証の要のため、日本語埋め込み品質と768次元(05のvector(768))を選定条件に含める |
 | 計測基盤 | マネージドモニタリング(Cloud Monitoring / Cloud Watch等)+ ログ集計 | Cloud Monitoring + OTLPメトリクス | 01第20節の3群(パイプライン / Jev / 提案と行動)を単一基盤へ集約する。02第4節#5の検証(Vector Retrieval件数・レイテンシ観察)とD-16のalertがこの基盤に依存する |
@@ -100,7 +100,7 @@ MVPの検証対象(01第4節の5仮説)を支えるのに十分で、かつ運�
   4. 性能 — 初期LATCH判定p95 10秒(01第20節)の配分を満たす応答速度と、timeout・retryを含む安定性
   5. コスト — トークン単価とD-16の回数上限から月次コストが予測できること
   6. 可用性 — SLAの明示。複数プロバイダをGateway経由で併存させ、障害時の縮退(D-15、06)に備えられること
-- **v0.5追記(採用記録・オーナー裁定C案)**: Layer 4(Jev系統)の第一候補は**System Oneモデル「TypeSafe Jev」(jev-1.13.0)**、フォールバックは**生成LLM(Anthropic Claude API・Sonnet 5)**と確定する。採用の根拠は次のとおりである。
+- **v0.5追記(採用記録・オーナー裁定C案)**: Layer 4(Jev系統)の第一候補は**System Oneモデル「TypeSafe Jev」(jev-1.13.0)**、フォールバックは**生成LLM(Anthropic Claude API・v0.5時点でSonnet 5→v0.6からHaiku 4.5)**と確定する。v0.6変更の根拠はコスト方針(マネタイズ前の高単価モデル排除・T1 v0.3)とG2日本語評価実測(docs/reviews/g2-threshold-fallback-revision.md)。採用の根拠は次のとおりである。
   - 基準3(機能)の読み替え: Layer 4は入力が正規化テキスト・出力が確率と構造化値であり、テキスト生成能力を要求しない。テキスト生成を行わず確率を返すSystem Oneモデルはこの用途に合致し、Jevの公称スペック(70〜500ms・出力スキーマ保証・入力$0.042/MTok出力無料・較正済み確率)がD-16の回数上限と初期LATCH判定p95 10秒の層別予算(Jev ≤5秒)を余裕をもって満たす。詳細はT1 v0.2(選定資料)が担う
   - 基準1・2(学習禁止・データ取り扱い): TypeSafeは「Jev is not trained on customer requests or responses」を公式に明記し、MCAにも学習データセットへの非包含条項がある。契約面の評価と受容(米国所在・SLAなし)は08 v0.5 D-14に記録する
   - 基準6(可用性): TypeSafeには公開SLAがない。よってフォールバックLLM(Anthropic)を常時併存させ、429・529・timeout時に切替え(07 v0.5第4節)、継続障害はcircuit breakerで吸収する(06 D-15)。可用性はLLMフォールバック構成で担保する構成とする
@@ -176,7 +176,7 @@ Jev実行要求(Matching Worker)
 
 | ID | 本書での扱い | 残る作業と担当文書 |
 |---|---|---|
-| D-14 | 選定基準を確定(6基準、データ取り扱いで足切り)。v0.5でSystem Oneモデル区分とLayer 4採用記録(第一候補=TypeSafe Jev・フォールバック=Anthropic Sonnet 5)を追加 | Jev系統は確定済み。Parser・Embeddingの契約条件・告知同意は08 |
+| D-14 | 選定基準を確定(6基準、データ取り扱いで足切り)。v0.5でSystem Oneモデル区分とLayer 4採用記録(第一候補=TypeSafe Jev・フォールバック=Anthropic Sonnet 5)を追加。v0.6でフォールバックをHaiku 4.5へ変更 | Jev系統は確定済み。Parser・Embeddingの契約条件・告知同意は08 |
 | D-16 | 解消(日次30,000回・月次600,000回、80% alert。v0.3で月次リセット時点・再試行計上・源流レポート添付を追記。v0.5でフォールバックLLM計上への読み替えとコスト前提注記を追加) | 縮退運転の内容は06(D-15) |
 | D-21 | 確定(Google + Apple、IdPトークン検証+独自JWT) | — |
 

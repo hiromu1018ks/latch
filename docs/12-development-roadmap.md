@@ -1,8 +1,8 @@
 # LATCH 開発ロードマップ
 
-- 文書バージョン: v0.2
+- 文書バージョン: v0.3
 - ステータス: Draft
-- 作成日: 2026-09-27(v0.2更新: 2026-09-28)
+- 作成日: 2026-09-27(v0.2更新: 2026-09-28。v0.3更新: 2026-09-30)
 - v0.2の変更点(TypeSafe Jev採用): 07 v0.5(2026-09-28オーナー裁定・C案)に追従する。M2スコープ6のLayer 4を「第一候補=TypeSafe Jev(System Oneモデル)+フォールバックLLM」へ更新し、G2の完了条件へ日本語評価(TypeSafe Jevのゴールドセットでの較正・精度)を追加した。M2期間中にTypeSafeの契約詳細(ZDR・漏洩通知条項・Telemetry条項)の確認をT1トラックへ追加。全変更箇所と出典はdocs/reviews/jev-systemone-revision.md
 - 本書の位置づけ: 完成済みの仕様文書群(01〜11)を実際の開発工程に変換する。順序・完了条件・並行トラックを定め、各工程の完了判定はdocsの確定値(受け入れ条件・試験基準)を引用して行う。本書自体は新しい設計確定を行わない
 
@@ -12,7 +12,7 @@
 
 - 仕様は実装引き渡し可能な水準にある。未決事項D-01〜D-24はすべて「解消」または「手順確定」であり(01 第26節)、D-01・D-02の値は運用データ待ちで、クローズドベータ開始後に09の手順で確定する(開発着手の前提ではない)
 - フロントエンドの実装基準は `prototype/`(Vite 6.4.2 + vanilla JSの静的SPA)に固定される(00 運用ルール6・03 第10節)。プロトタイプに実装済みなのは単一画面「新しいIntent」(API未接続)。ホーム・提案詳細・成立済み詳細・お知らせ一覧・設定は未実装(03 第2節・第10節)
-- 技術スタックは04 第3節で確定済み: PostgreSQL(+PostGIS+pgvector) / Google Cloud Pub/Sub / Redis / FCM / Cloud Monitoring+OTLP / コンテナ+マネージド基盤。LLMプロバイダはv0.2でLayer 4(Jev)が確定 — 第一候補=TypeSafe Jev(System Oneモデル・jev-1.13.0)+フォールバックLLM=Anthropic Sonnet 5(2026-09-28オーナー裁定・C案、04 D-14・07 v0.5)。Parser・EmbeddingはT1 v0.2の推奨(Anthropic Haiku 4.5・Gemini gemini-embedding-001)を契約条件の確認後に確定する。Gatewayで差し替え可能な設計は不変
+- 技術スタックは04 第3節で確定済み: PostgreSQL(+PostGIS+pgvector) / Google Cloud Pub/Sub / Redis / FCM / Cloud Monitoring+OTLP / コンテナ+マネージド基盤。LLMプロバイダはv0.2でLayer 4(Jev)が確定 — 第一候補=TypeSafe Jev(System Oneモデル・jev-1.13.0)+フォールバックLLM=Anthropic Haiku 4.5(2026-09-28オーナー裁定C案でSonnet 5→2026-09-30コスト方針によりHaiku 4.5へ変更。04 D-14・07 v0.7)。Parser・EmbeddingはT1 v0.2の推奨(Anthropic Haiku 4.5・Gemini gemini-embedding-001)を契約条件の確認後に確定する。Gatewayで差し替え可能な設計は不変
 - クライアントはWebから着手し、モバイル(iOS/Android)は後続段階。Web段階ではWeb Push経路のみ作動(04 §2)
 
 ### 1.2 方針
@@ -33,7 +33,7 @@
 | C4 | LLM GatewayがParser/Embedding/Jevの単一共通経路。送信記録(01 第21節)とプロバイダ抽象化はここで実装 | 04 §2 |
 | C5 | 地物データのPostGIS取り込みがIntent active作成の前提(ジオコーディング不成立は422 GEOCODING_FAILEDで作成拒否)。MVP対象エリア分の初期取り込みが必要 | 04 §3・05 §5 |
 | C6 | Layer 1〜5はembedding_completedを起点にのみ走る。作成・更新Eventの処理はEmbedding要求キックまで | 06 §1・§9 |
-| C7 | Layer 1→2→3→4→5の逐次依存。Layer 4通過候補のみが閾値0.80と比較される | 06 §1・§8 |
+| C7 | Layer 1→2→3→4→5の逐次依存。Layer 4通過候補のみが閾値0.60(v0.3)と比較される | 06 §1・§8 |
 | C8 | Intent保存APIは同期LLM非依存(DB書き込み+Event発行に絞る)。同期LLMはparse APIのみ | 04 §7 |
 | C9 | 回答API・競合クローズ・expiry_sweeperは同一の直列化方式(FOR UPDATE+同一UPDATE条件) | 06 §6 |
 | C10 | latch_status_eventsは遷移トランザクションと同時挿入(Mutual Latch Rate集計と保留キュー再評価の観測点) | 05 §2・06 §10 |
@@ -93,8 +93,8 @@ M0 基盤 ─→ M1 Intentドメイン ─→ M2 マッチングパイプライ�
   3. Layer 1 Hard Filter(SQL+PostGIS、AI不使用。visibility不使用・年齢制限含む。06 §2)
   4. Layer 2 Candidate Retrieval(pgvector HNSW、K_v=50。06 §3)
   5. Layer 3 Cheap Judge(線形合成・決定的・APIコストゼロ、K_c=20。06 §4)
-  6. Layer 4 Jev(K_j=8回・1対1最低4回保証の配分規則・同一評価世代スキップ。**第一候補=TypeSafe Jev(System Oneモデル・jev-1.13.0)+フォールバックLLM(Anthropic Sonnet 5)切替。第一候補は出力スキーマを保証するため再試行は廃止し、429・529・timeoutでフォールバックLLMへ切替、フォールバック失敗は縮退へ。jev_resultへprovider・model(応答のバージョンID)を記録し、フォールバックLLMの呼び出しもD-16の1実行回数に計上する。06 §5・07 v0.5 §1・§4・04 §4 D-16 v0.5)**
-  7. Layer 5 LATCH Engine(L=H×MutualScore×C・閾値0.80・D-08上限検査・保留キュー・提示順・proposal生成(visibility分岐・格納禁止フィールド)・nearby_also・muted・再提案制御D-07。06 §6・§10)
+  6. Layer 4 Jev(K_j=8回・1対1最低4回保証の配分規則・同一評価世代スキップ。**第一候補=TypeSafe Jev(System Oneモデル・jev-1.13.0)+フォールバックLLM(Anthropic Haiku 4.5・v0.3)切替。第一候補は出力スキーマを保証するため再試行は廃止し、429・529・timeoutでフォールバックLLMへ切替、フォールバック失敗は縮退へ。jev_resultへprovider・model(応答のバージョンID)を記録し、フォールバックLLMの呼び出しもD-16の1実行回数に計上する。06 §5・07 v0.5 §1・§4・04 §4 D-16 v0.5)**
+  7. Layer 5 LATCH Engine(L=H×MutualScore×C・閾値0.60(v0.3)・D-08上限検査・保留キュー・提示順・proposal生成(visibility分岐・格納禁止フィールド)・nearby_also・muted・再提案制御D-07。06 §6・§10)
   8. グループマッチ(候補Pool上限15・貪欲法・集合全員YES成立・通知順序。集約規則 aggregate_score = H × min over ペア(MutualScore) × C。全ペア判定が揃わない集合は提案化せずgroup_candidates.status=candidateで保持し、未判定ペアを次の再評価のJev予算の最優先対象とする。06 §5・§7〜§8)
   9. コスト保護3層: 源流レート制限(M1で実装済み)/ Jev予算(1Intent日次40回・1ユーザー日次120回・頻度制限30分)/ D-16回数上限(日次30,000回・80%でalert+源流レポート(第一候補とフォールバック別の実行回数内訳を含む、v0.2)・月次600,000回。月次到達時は運用者へ通知し復帰予定(暦月初)を明示。04 §5・06 §5 v0.5)
   10. 縮退運転: 第一候補TypeSafe Jevの429・529・timeoutはフォールバックLLMへ切替し判定継続、フォールバックLLMの継続失敗のみJev未判定のskipped保留・circuit breaker(第一候補のエラー率50%超、またはp95レイテンシがtimeout(6秒)超過 — 測定窓1分で開放、開放中はフォールバックLLMで継続、開放60秒後に半開で第一候補へ再試験。06 D-15 v0.5)
@@ -181,7 +181,7 @@ M4の完了(G4)が11 Phase 0(内部α)の開始条件。11 第1節では7項目�
 | リスク | 対応 |
 |---|---|
 | LLMプロバイダがD-14基準を満たさない(T1停滞) | Layer 4は確定済み(2026-09-28裁定)。Parser・EmbeddingはGateway抽象化で実装を続行(M0〜M1はスタブで完了可能)。代替候補の複数確保(04 §3「複数プロバイダ併存」) |
-| **TypeSafe Jevの日本語精度が不合格(v0.2新設・09 v0.5第4節)** | フォールバックLLM(Anthropic Sonnet 5)へ第一候補を繰り上げる判断をオーナーに持ち帰る。実装はSystem One互換のanswers形式で統一済みのため、切替は経路設定の変更で済む(07 v0.5第4節) |
+| **TypeSafe Jevの日本語精度が不合格(v0.2新設・09 v0.5第4節)** | フォールバックLLM(Anthropic Haiku 4.5・v0.3)へ第一候補を繰り上げる判断をオーナーに持ち帰る。実装はSystem One互換のanswers形式で統一済みのため、切替は経路設定の変更で済む(07 v0.5第4節) |
 | 密度要件が初期エリアで満たせない | 11 第4節のコールドスタート対策(時間集中・オフラインイベント・駅周辺1〜2kmへの局所化)。エリア再選定はPhase 1の4週間上限後に検討(11 第1節) |
 | 初期LATCH判定 p95 10秒の超過 | 層別予算(Embedding ≤2秒/Layer 1〜3 ≤1秒/Jev ≤5秒/Layer 5+通知 ≤2秒)をトレースで分離し、超過区間を特定してから対処(10 第4.1節) |
 | 仕様矛盾の発見 | 番号の大きい文書(詳細側)を正とし、01への反映を確認(READMEの取り決め)。プロトタイプとの食い違いはprototype側を正とする(00 運用ルール6) |
