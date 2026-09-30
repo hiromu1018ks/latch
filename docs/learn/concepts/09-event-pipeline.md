@@ -572,7 +572,13 @@ UUIDならそのまま・それ以外なら文字列から組む、という1つ
 エミュレータ」です。compose常設のエミュレータと実DBに向けた
 `make test-ci`(test_events_pipeline.pyの8試験を含む)が、この経路の安全網です。
 なお test-ci の実行中は常設workerが一時停止されます(Makefileが停止と復帰を
-管理)。理由は面白いので考えてみてください(確認問題6)。
+管理)。理由は面白いので考えてみてください(確認問題6)。さらに2026-09-30から、
+pytestの終了後・workerの復帰前に、常設worker用subscriptionを削除する
+`purge-match-sub` が同じレシピの中で走ります。停止中に常設worker宛てに
+溜まった知らせは、workerを復帰させると一斉に処理されてしまい、試験の
+後片付けで消えたデータへの書き込みという迷子を生みます。subscriptionの
+削除が未配信の知らせごと消し、復帰したworkerの `ensure()` がsubscriptionを
+作り直す——溜まりようがない形に構造で直す、という対処です(ws-8設計 §2.7)。
 
 ## 9.9 自分で確かめる
 
@@ -582,7 +588,7 @@ UUIDならそのまま・それ以外なら文字列から組む、という1つ
 2. `uv run pytest tests/unit/test_worker_debounce.py -v` を実行し、試験名を
    縦に読む。この節で学んだ規則(未知versionだけ延長・再受信は延長しない・
    intentごとの独立)が、それぞれ試験になっていることを確認する
-3. `uv run pytest tests/unit/test_worker_stage1.py -v` を実行する。件数(21件)を
+3. `uv run pytest tests/unit/test_worker_stage1.py -v` を実行する。件数(26件)を
    確かめ、試験名から「version三分岐・行なし破棄・毒ペイロード隔離・再試行5回」の
    どこが試されているか読み分けてノートに書く
 4. `rg -n "discard_reason|failure_reason" backend/src/latch/worker/stage1.py` で

@@ -317,29 +317,35 @@ class FallbackJevAnswers(BaseModel):
 応答のJSONは、System Oneと同じ「7キーのanswers」の形に組み立て直されてから
 同じ検証関数を通るので、第一候補とフォールバックで検証の質が揃います。
 
-切替の判定はGatewayの中にあります(`gateway.py:104` の `judge_pair`)。
+切替の判定はGatewayの中にあります(`gateway.py:117` の `judge_pair`)。
 
 ```python
         try:
-            envelope = await self._jev_call(
-                intent_a, intent_b, intent_ids, fallback=False
-            )
-            ...(中略: 検証を通ればJevJudgmentを返して終わり)...
+            ...(中略: 第一候補TypeSafeの呼び出し。検証を通ればJevJudgmentを
+            返して終わり)...
         except (
             LLMTimeoutError,
             LLMRateLimitError,
             LLMOverloadedError,
             LLMConnectionError,
+            _FirstCandidateSkippedOpen,
         ):
-            pass  # 07 §4の切替条件4種。LLMProviderError・JevOutputInvalidErrorは伝播
-        envelope = await self._jev_call(intent_a, intent_b, intent_ids, fallback=True)
+            pass  # 07 §4の切替条件4種+breaker開放中のスキップ(第16章)。
+            # LLMProviderError・JevOutputInvalidErrorは伝播
+        return await self.call_jev_fallback(
+            intent_a=intent_a, intent_b=intent_b, intent_ids=intent_ids
+        )
 ```
 
-(`llm/gateway.py:116` から。中略部分は実際には検証とJevJudgment組み立て)
+(`llm/gateway.py:132` から。中略部分は実際にはcircuit breakerへの確認と
+第一候補呼び出し・検証とJevJudgment組み立て)
 
 捕捉する例外が**切替条件の4種だけ**で、400系(`LLMProviderError`)と出力検証失敗
 (`JevOutputInvalidError`)は捕捉対象に入っていません。だからそれらはそのまま
-呼び出し元へ伝播します。else節もif文もなく「例外の型で分岐する」この書き方は、
+呼び出し元へ伝播します。5番目の `_FirstCandidateSkippedOpen` は切替条件ではなく、
+breakerが「しばらく第一候補を呼ばない」と判断したときに開放の合図として使う
+内部例外です(この節の末尾と第16章で触れます)。else節もif文もなく
+「例外の型で分岐する」この書き方は、
 「どう失敗したか」の分類を例外クラスに一任する設計です。4種の例外は
 `llm/typesafe.py:84` でSDKの例外から翻訳されています(TypeSafeRateLimitError→
 LLMRateLimitError、status=529→LLMOverloadedError等)。Gatewayは送信先の
@@ -355,7 +361,7 @@ LLMRateLimitError、status=529→LLMOverloadedError等)。Gatewayは送信先の
 `RetryPolicy(max_retries=0)` で無効化しています(`llm/typesafe.py:72`)。
 フォールバック側のAnthropic SDKも `max_retries=0`。理由は単純で、**同じ相手を
 待つお金と時間は払わない**と決まっているからです。timeoutは双方とも6秒
-(`TIMEOUT_JEV_S = 6.0`。`gateway.py:39`)で、最悪でも第一候補6秒+フォールバック
+(`TIMEOUT_JEV_S = 6.0`。`gateway.py:40`)で、最悪でも第一候補6秒+フォールバック
 6秒の12秒で処理が終わります。再試行を許すと、6秒待ってさらに数秒待つ
 ことになり、遅延とコストの二重払いです。07 §4の「SDK既定のbackoff retryは
 無効化・再試行なし」は、この実装の根拠になっている確定値です。
@@ -363,11 +369,13 @@ LLMRateLimitError、status=529→LLMOverloadedError等)。Gatewayは送信先の
 そして、フォールバックまで失敗したら(双方のAPIが同時に調子を悪くしたら)。
 この**双障害**は例外としてLayer 4へ伝播し、ペアは「後でやり直す」保留
 (status=skipped、理由llm_failure)として記録されます(06 §8 D-15の**縮退**。
-13.6で見ます)。なお、断続的な障害の検知と自動回避(circuit breaker=遮断器。
-「しばらく第一候補を呼ぶのをやめる」仕組み)は後続単位(ws-8)の担当で、
-この単位は単発の失敗への切替だけを実装しています。Gatewayの `_jev_call` の
-docstringに「ここが注入ポイント」と予約だけ書いてあるのはそのためです
-(`gateway.py:143`)。
+13.6で見ます)。単発の失敗への守りがこの節の切替なら、失敗が**続く**ときの
+守りは別枠で用意されています。**circuit breaker**(サーキット・ブレーカー。
+遮断器)——直近60秒の窓で失敗や遅さが続いたら、しばらく第一候補を呼ぶのを
+やめる仕組みです(ws-8で `judge_pair` に組み込まれました。上の引用のexcept節に
+`_FirstCandidateSkippedOpen` が紛れていたのがそれ)。開いても判定はフォール
+バックで続くので、切替の延長線上にある守りと読めます。仕組みの全部は
+第16章で読みます。
 
 ## 13.6 API呼び出しはトランザクションの外で: 第10章の2フェーズをもう一度
 
@@ -696,12 +704,12 @@ SQLは並び順と資格の判定に専念する形になりました。なお�
    ```bash
    uv run pytest tests/unit/llm/test_jev_format.py -v          # 28件
    uv run pytest tests/unit/llm/test_typesafe_jev.py -v         # 13件
-   uv run pytest tests/unit/llm/test_gateway_jev_switch.py -v   # 10件
-   uv run pytest tests/unit/matching/test_layer4.py -v          #  9件
-   uv run pytest tests/unit/test_worker_jev.py -v               # 19件
+   uv run pytest tests/unit/llm/test_gateway_jev_switch.py -v   # 21件
+   uv run pytest tests/unit/matching/test_layer4.py -v          # 19件
+   uv run pytest tests/unit/test_worker_jev.py -v               # 25件
    ```
 
-   (件数は2026-09-29に実行して確認しました)
+   (件数は2026-09-30に実行して確認しました)
    test_gateway_jev_switchの試験名を読むと13.5の切替表がそのまま並んでいます。
    test_worker_jevには「deny→skipped」「双障害→llm_failure」「冪等: 再実行で
    API不呼出」のような試験が並び、13.6の分岐表を1行ずつ確かめています
@@ -733,7 +741,9 @@ SQLは並び順と資格の判定に専念する形になりました。なお�
 - 第一候補が429・529・timeout・接続障害で断られたら、**同じ7質問を**
   フォールバックLLM(Claude)にstructured outputで答え直してもらう。
   400系と検証失敗は切替しない。SDKの自動再試行は無効化(待たない・二重に
-  払わない)。送信記録は切替で2件。フォールバックも失敗したら縮退(保留)
+  払わない)。送信記録は切替で2件。フォールバックも失敗したら縮退(保留)。
+  失敗や遅さが60秒の窓で続くときはcircuit breakerが第一候補を呼ぶのを
+  やめる(第16章)
 - 実行はコミット後ack前の `_kick_jev` から、第10章と同じ2フェーズ。
   外部APIはトランザクションの外。結果は `jev_result IS NULL` のガード付き
   UPDATEで書くので、再配信で二度払いしない。deny・LLM失敗は記録して次へ、
@@ -768,7 +778,7 @@ jev_resultが埋まっていきます。次章のLayer 5は、このjev_result�
 | K_j(=8) | 1イベント処理あたりのJev実行回数の上限(06 §8 D-24) |
 | skip_reason | skipped行がスキップされた理由の列(マイグレーション0003で追加) |
 | H再検証 | 再評価時にLayer 1の条件だけ機械的に再確認すること(LAYER1_WHERE再利用) |
-| circuit breaker | しばらく第一候補を呼ぶのをやめる仕組み。実装はws-8(注入点のみ予約) |
+| circuit breaker | 失敗や遅さが続いたら、しばらく第一候補を呼ぶのをやめる仕組み(第16章) |
 | fakeredis | Redisの動きをメモリ上で再現する試験用の部品。実Redis不要 |
 
 ## 13.11 確認問題
