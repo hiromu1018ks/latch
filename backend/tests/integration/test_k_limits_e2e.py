@@ -100,6 +100,15 @@ async def _teardown_prefix(db_engine, prefix: str) -> None:
             ),
             p,
         )
+        # notificationsはuser_id FKでusersを参照(提案経路がuser単位で書く)。
+        # latch_id経由ではNULL/範囲外行が残りfk_notifications_user違反になる
+        await conn.execute(
+            text(
+                "DELETE FROM notifications WHERE user_id IN"
+                " (SELECT id FROM users WHERE auth_subject LIKE :p)"
+            ),
+            p,
+        )
         await conn.execute(
             text(
                 "DELETE FROM latches WHERE intent_ids && (SELECT array_agg(id)"

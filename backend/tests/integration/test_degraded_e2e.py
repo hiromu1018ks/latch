@@ -103,6 +103,15 @@ async def field(db_engine):
             ),
             p,
         )
+        # notificationsはuser_id FKでusersを参照(提案経路がuser単位で書く)。
+        # latch_id経由の削除ではNULL/範囲外行が残りfk_notifications_user違反になる
+        await conn.execute(
+            text(
+                "DELETE FROM notifications WHERE user_id IN"
+                " (SELECT id FROM users WHERE auth_subject LIKE :p)"
+            ),
+            p,
+        )
         await conn.execute(
             text(
                 "DELETE FROM latches WHERE intent_ids && (SELECT array_agg(id)"
@@ -385,7 +394,7 @@ async def test_3_breaker_opens_on_error_rate(
     a = await _intent(api_client, db_engine, ha, _structured(start=start))
     async with db_engine.begin() as conn:
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
-    first = StubLLM(fail_jev_exc="ratelimit")
+    first = _FlakyFirst(fail_calls=10**9, exc=LLMRateLimitError("429"))
     fb = _CountingStub()
     breaker = CircuitBreaker(clock=clock)
     gateway = _breaker_gateway(clock, first, fb, breaker=breaker)
