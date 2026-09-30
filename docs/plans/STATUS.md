@@ -292,7 +292,8 @@
     (1) **test_k_limits_e2e test_4の日次時限爆弾(M2 ws-8由来のテスト設計欠陥)**: 期限null補完が「今夜JST23:30/翌日12:00/翌日23:30/now+72h」の最寄りへスナップするため、**21:30〜23:30 JST帯の実行では**now+45分startのfixture期限がnow+2h以内(今夜23:30)になりa/bがcatch-up対象化してrun_once()!=0で失敗。supervisor検証(21:44 JST)のみ赤・agent3実行(≤21:25 JST)は窓外で緑。明示expires_at追加(ae5141e)で解消・**失敗窓内(22:11 JST)の単体実行で合格確認**。原因特定はrunner選択SQLの直接実行+pytest -l のローカル変数(calls=fixture自身のid)で実施
     (2) **agent3デバッグ行残存(m3ws1dbg-*)+M2由来users蓄積420件**: 報告書「残存0件」主張はm3ws1-%照合でも不正確だった(自己申告を信じない原則の実証例)。FK順完全削除で全テーブル0件化
   - 検証最終値: worktree test-ci 1253 passed(修正後独立実行)・**マージ後main test-ci 1253 passed**(api再ビルド後・lint緑)・basename一意・alembic head=0005不変・依存追加なし・geo実データ復旧(make geo-import)
-  - 観察(既知・スコープ外): test-ci 1回あたりm2ws1-/m2ws2-系users約12件がteardownから漏れ蓄積する(M2由来・今回420件掃除。ws-9かM4での恒久対策候補)
+  - 観察(既知・スコープ外): test-ci 1回あたりm2ws1-/m2ws2-系users約12件がteardownから漏れ蓄積する(M2由来・今回400件掃除。ws-9かM4での恒久対策候補)
+- 学習資産追従: ws-1分 a96b8b3(第17章「提案への返事がシステムを動かす: LATCH応答系とCalibration」+Lab 5〔curlで回答から成立まで〕新設・既存6ファイル更新〔README順路・00-environment・第9/14/15/16章〕。**第14・15章への閾値0.60追従はG2改版8da6423時の追従漏れの回収** — 計画外マージでもagent4追従を自問する教訓の再実証。グループ3人回答のLab実体験は後続候補として見送り。agent4はusage limitで1度中断→再開指示で完走・make test 1062 passed・lint収束)/ 2026-09-30
 
 ## G2判定資料(2026-09-30・承認済み)
 
