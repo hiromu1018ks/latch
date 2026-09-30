@@ -21,7 +21,9 @@ from pydantic import BaseModel
 from latch.llm.anthropic import ANTHROPIC_PARSER_BASE_URL, adapt_schema_for_anthropic
 from latch.llm.providers import JevProvider
 
-ANTHROPIC_JEV_FALLBACK_MODEL = "claude-sonnet-5"
+ANTHROPIC_JEV_FALLBACK_MODEL = (
+    "claude-haiku-4-5"  # v0.6改版(2026-09-30・Sonnet 5から変更。T1 v0.3・07 v0.7)
+)
 # Gateway TIMEOUT_JEV_Sと同値(unit試験が同値性を強制・循環import回避のため
 # 自前定義 — anthropic.pyのANTHROPIC_PARSER_TIMEOUT_Sと同一判断)
 ANTHROPIC_JEV_FALLBACK_TIMEOUT_S = 6.0

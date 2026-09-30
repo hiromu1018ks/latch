@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-THRESHOLDS = (0.70, 0.80, 0.90)  # 09 §4.2・D-01の3点
+THRESHOLDS = (0.50, 0.60, 0.70)  # 09 §4.2・D-01の3点(v0.6で運用閾値0.60を中心へ再設定)
 ECE_BINS = 10
 BAND_LOW, BAND_HIGH = 0.35, 0.65  # goldset-plan §5(low<0.35/mid/high≥0.65)
 SCORE_AXIS_KEYS = ("purpose_fit", "mood_fit", "timing_fit", "social_fit")
