@@ -67,6 +67,35 @@ class JevCostStore:
             f"{self._prefix}jev:exec:{day}:{provider}", _TTL_DAILY_S
         )
 
+    async def delete_daily(self, day: str) -> int:
+        """リセットジョブの旧日次キー解放(M3-4・design §2.5)。
+
+        機能的リセット(上限復帰)は日付キー切替で0時跨ぎの瞬間に成立済み。
+        これは旧キーの即時解放(TTL 48hを待たない)。戻り値=削除キー数。
+        """
+        return int(await self._redis.delete(f"{self._prefix}jev:daily:{day}"))
+
+    async def delete_monthly(self, month: str) -> int:
+        """旧月次キー解放(月初0時・TTL 45日の残留回避)。"""
+        return int(await self._redis.delete(f"{self._prefix}jev:monthly:{month}"))
+
+    async def scan_delete(self, pattern: str) -> int:
+        """SCAN一致キーの一括削除(jev:exec:{day}:* 等・prefix考慮)。
+
+        対象行数は1日分の実行内訳・Intent/ユーザ別カウンタのみで
+        常時小さい( _scan_counts と同規模)。戻り値=削除キー数。
+        """
+        cursor = 0
+        deleted = 0
+        while True:
+            cursor, keys = await self._redis.scan(
+                cursor=cursor, match=f"{self._prefix}{pattern}", count=100
+            )
+            if keys:
+                deleted += int(await self._redis.delete(*keys))
+            if cursor == 0:
+                return deleted
+
     async def set_reeval_nx(self, intent_id: str) -> bool:
         """reeval:{intent_id} の SET NX EX 1800(06 §5・design §2.6)。
 

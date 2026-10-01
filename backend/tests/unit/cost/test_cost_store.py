@@ -96,3 +96,48 @@ async def test_scan_report_aggregates_top_and_breakdown(redis):
         "jev:exec:20260929:fallback_llm": 1,
         "jev:exec:20260929:typesafe_jev": 1,
     }
+
+
+# -- 掃除メソッド(M3 ws-2・リセットジョブ用・design §2.5) --
+
+
+async def test_delete_daily_removes_key_and_is_idempotent(redis):
+    """旧日次キーの即時解放(TTL 48hを待たない)。削除数を返す・冪等。"""
+    store = JevCostStore(redis)
+    await store.incr_daily("20260930")
+    assert await store.delete_daily("20260930") == 1
+    assert await redis.get("jev:daily:20260930") is None
+    assert await store.delete_daily("20260930") == 0  # 既にない(冪等)
+
+
+async def test_delete_monthly_removes_key(redis):
+    """旧月次キーの即時解放(TTL 45日を待たない・月初0時)。"""
+    store = JevCostStore(redis)
+    await store.incr_monthly("202609")
+    assert await store.delete_monthly("202609") == 1
+    assert await redis.get("jev:monthly:202609") is None
+
+
+async def test_scan_delete_removes_matching_keys_only(redis):
+    """SCAN一致キーの一括削除(jev:exec:{day}:* 等)。対象外は保持。"""
+    store = JevCostStore(redis)
+    await store.record_execution("typesafe_jev", "20260930")
+    await store.record_execution("typesafe_jev", "20260930")
+    await store.record_execution("fallback_llm", "20260930")
+    await store.incr_daily("20260930")  # パターン外(掃除対象は日次DELが担う)
+    assert await store.scan_delete("jev:exec:20260930:*") == 2
+    assert await redis.get("jev:exec:20260930:typesafe_jev") is None
+    assert await redis.get("jev:exec:20260930:fallback_llm") is None
+    assert await redis.get("jev:daily:20260930") == "1"  # 対象外は保持
+
+
+async def test_cleanup_methods_respect_key_prefix(redis):
+    """key_prefix付きでも同一prefix空間を掃除(integration共用Redis対策)。"""
+    store = JevCostStore(redis, key_prefix="rj-")
+    await store.incr_daily("20260930")
+    await store.record_execution("typesafe_jev", "20260930")
+    await store.incr_monthly("202609")
+    assert await store.delete_daily("20260930") == 1
+    assert await store.scan_delete("jev:exec:20260930:*") == 1
+    assert await store.delete_monthly("202609") == 1
+    assert await redis.get("rj-jev:daily:20260930") is None
