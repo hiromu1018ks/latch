@@ -322,6 +322,7 @@
   - supervisor独立検証: worktree unit 1119 passed再現・コードレビュー(submit_attendance手順1〜7・_SELECT_BLOCK_BETWEEN双方向CAST・0006 Index 2本・CHAT_READONLY単一条件)すべて計画§2どおり
   - マージ後main test-ci初回で1失敗(test_geo headピン0005のまま)→ **d1b0060で機械的追随**(ws-4計画§9-2の追随访問対象からtest_geoが漏れていた。M2 ws-6と同型)
   - 検証最終値: **マージ後main test-ci 1378 passed**(api再ビルド後・0006適用・=1301+41+36)・unit 1148 passed(=1100+29+19)・lint緑(254 files)・basename一意・alembic head=0006・依存追加なし・**残存ゼロ**(m3ws3-/m3ws4-・users/messages/blocks/calibration_records)・geo復旧実施(test-ci後のfixtureリロード対応)
+- 学習資産追従: ws-3/ws-4分 5e2766f(第19章「届ける: 通知の媒体と配信」・第20章「成立のあと: チャットと実施自己申告」+Lab 7〔成立のあとを一巡する〕新設・既存5ファイル更新〔README順路・00-environment〔件数1148/1378・notifications/追加〕・第14・18章・Lab 6〕。Lab 7は全手順実行検証・残存0確認。agent4がコード側瑕疵〔errors.py docstringの「关闭」混入〕を発見・supervisorが修正。make test 1148 passed・lint収束確認)/ 2026-10-01
 
 ## G2判定資料(2026-09-30・承認済み)
 
