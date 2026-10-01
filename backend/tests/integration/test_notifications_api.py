@@ -283,8 +283,8 @@ async def test_1_e2e_push_sent_and_listed(api_client, db_engine, field, caplog):
     mine = [i for i in body["items"] if i["type"] == "proposal"]
     assert len(mine) == 1
     assert mine[0]["latch_id"] in {
-        uuid_mod.UUID(recs[0]["latch_id"]),
-        uuid_mod.UUID(recs[1]["latch_id"]),
+        recs[0]["latch_id"],
+        recs[1]["latch_id"],
     }
     assert mine[0]["latch"]["status"] == "proposed"
     assert mine[0]["latch"]["proposal"]["headcount"] == 2
@@ -327,7 +327,7 @@ async def test_2_push_body_identical_across_visibility_and_category(
             await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
         await _seed_jev(db_engine, a["id"], b["id"], 0.9, 0.9)
         with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
-            await _handle(db_engine, clock, a["id"], push=StubPushSender(clock))
+            await _handle(db_engine, clock, a["id"], push=StubPushSender(clock=clock))
     recs = [r for r in _push_records(caplog) if r["status"] == "ok"]
     assert len(recs) == 6  # 3ケース×2名
     assert {r["body"] for r in recs} == {PUSH_BODY_LATCH}  # byte同一(集合1要素)
@@ -355,7 +355,7 @@ async def test_3_muted_participant_no_push(api_client, db_engine, field, caplog)
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
     await _seed_jev(db_engine, a["id"], b["id"], 0.9, 0.85)
     with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
-        await _handle(db_engine, clock, a["id"], push=StubPushSender(clock))
+        await _handle(db_engine, clock, a["id"], push=StubPushSender(clock=clock))
     recs = _push_records(caplog)
     uid_a = await _user_id_of(db_engine, a["id"])
     uid_b = await _user_id_of(db_engine, b["id"])
@@ -650,7 +650,7 @@ async def test_7a_nearby_push_notification(api_client, db_engine, field, caplog)
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
     await _seed_jev(db_engine, a["id"], b["id"], 0.5, 0.5)  # 閾値未満
     with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
-        await _handle(db_engine, clock, a["id"], push=StubPushSender(clock))
+        await _handle(db_engine, clock, a["id"], push=StubPushSender(clock=clock))
     recs = _push_records(caplog)
     uid_a = await _user_id_of(db_engine, a["id"])
     assert len(recs) == 1
@@ -700,7 +700,7 @@ async def test_7b_nearby_daily_limit_no_push(api_client, db_engine, field, caplo
         await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
     await _seed_jev(db_engine, a["id"], b["id"], 0.5, 0.5)
     with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
-        await _handle(db_engine, clock, a["id"], push=StubPushSender(clock))
+        await _handle(db_engine, clock, a["id"], push=StubPushSender(clock=clock))
     recs = [r for r in _push_records(caplog) if r["user_id"] == uid_a]
     assert recs == []  # 上限到達→存在通知なし
     # 事前投入6件のみ(当日分は増えない)
