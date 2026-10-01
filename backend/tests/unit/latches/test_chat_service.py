@@ -18,7 +18,10 @@ from latch.latches.errors import (
     AttendanceAlreadySubmittedError,
     AttendanceWindowClosedError,
     ChatReadonlyError,
+    DependencyUnavailableError,
+    LatchClosedError,
     LatchesError,
+    LatchNotFoundError,
     LatchValidationError,
 )
 from latch.latches.schemas import (
@@ -35,6 +38,7 @@ from latch.latches.service import (
     encode_message_cursor,
     is_attendance_window_open,
 )
+from latch.latches.store import CalibrationAttendanceRow
 
 NOW = datetime(2026, 10, 1, 9, 0, 0, tzinfo=UTC)
 ME = uuid.uuid4()
@@ -291,3 +295,115 @@ async def test_list_messages_builds_next_cursor(monkeypatch):
     )
     assert items2 == [m2]
     assert next2 is None  # 次頁なし
+
+
+# -- submit_attendance(design §2.3手順1〜7) --
+
+
+async def test_submit_attendance_records_and_returns(monkeypatch):
+    """attendedのboolがそのままactual_attendedへ(cancelled_afterは排反)。
+
+    UPDATEは同一tx・now=Clock(design §2.3手順6)。
+    """
+    from latch.latches import store as store_mod
+
+    row = _row(status="completed", completed_at=NOW - timedelta(hours=1))
+    row2 = _row(status="completed", completed_at=NOW - timedelta(hours=2))
+    calls: list[dict] = []
+
+    async def _update(conn, *, latch_id, attended, now):
+        calls.append({"latch_id": latch_id, "attended": attended, "now": now})
+        return True
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    monkeypatch.setattr(
+        store_mod,
+        "select_calibration_attendance",
+        _ret(CalibrationAttendanceRow(actual_attended=None)),
+    )
+    monkeypatch.setattr(store_mod, "update_attendance", _update)
+    svc = LatchesService(clock=FakeClock(NOW), engine=_NoopEngine())
+    out = await svc.submit_attendance(
+        auth_provider="google", auth_subject="s", latch_id=row.id, attended=True
+    )
+    assert out == AttendanceResponse(latch_id=row.id, actual_attended=True)
+    # attended=Falseの対: actual_attended=Falseへ(引用#10・#13)
+    monkeypatch.setattr(store_mod, "select_latch", _ret(row2))
+    out2 = await svc.submit_attendance(
+        auth_provider="google", auth_subject="s", latch_id=row2.id, attended=False
+    )
+    assert out2 == AttendanceResponse(latch_id=row2.id, actual_attended=False)
+    assert calls == [
+        {"latch_id": row.id, "attended": True, "now": NOW},
+        {"latch_id": row2.id, "attended": False, "now": NOW},
+    ]
+
+
+async def test_submit_attendance_classifications(monkeypatch):
+    """手順3〜7の分類: 404/409×2種/503(design §2.3・引用#9/#10)。"""
+    from latch.latches import store as store_mod
+
+    svc = LatchesService(clock=FakeClock(NOW), engine=_NoopEngine())
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    done = _row(status="completed", completed_at=NOW - timedelta(hours=1))
+    monkeypatch.setattr(store_mod, "select_latch", _ret(done))
+    monkeypatch.setattr(
+        store_mod,
+        "select_calibration_attendance",
+        _ret(CalibrationAttendanceRow(actual_attended=None)),
+    )
+    # (a) 参加者以外は404(messagesの403と扱いを分ける・引用#9)
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(None))
+    with pytest.raises(LatchNotFoundError):
+        await svc.submit_attendance(
+            auth_provider="google", auth_subject="s", latch_id=done.id, attended=True
+        )
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    # (b) matched(対象時刻前)・cancelled等は409 LATCH_CLOSED(手順4)
+    for status in ("matched", "cancelled", "proposed"):
+        monkeypatch.setattr(store_mod, "select_latch", _ret(_row(status=status)))
+        with pytest.raises(LatchClosedError):
+            await svc.submit_attendance(
+                auth_provider="google",
+                auth_subject="s",
+                latch_id=uuid.uuid4(),
+                attended=True,
+            )
+    # (c) 3日+1秒経過は409 ATTENDANCE_WINDOW_CLOSED(手順5)
+    monkeypatch.setattr(
+        store_mod,
+        "select_latch",
+        _ret(
+            _row(
+                status="completed",
+                completed_at=NOW - timedelta(days=3) - timedelta(seconds=1),
+            )
+        ),
+    )
+    with pytest.raises(AttendanceWindowClosedError):
+        await svc.submit_attendance(
+            auth_provider="google",
+            auth_subject="s",
+            latch_id=uuid.uuid4(),
+            attended=True,
+        )
+    # (d) 回答済みは409 ATTENDANCE_ALREADY_SUBMITTED(手順7事前検査)
+    monkeypatch.setattr(store_mod, "select_latch", _ret(done))
+    monkeypatch.setattr(
+        store_mod,
+        "select_calibration_attendance",
+        _ret(CalibrationAttendanceRow(actual_attended=True)),
+    )
+    with pytest.raises(AttendanceAlreadySubmittedError):
+        await svc.submit_attendance(
+            auth_provider="google", auth_subject="s", latch_id=done.id, attended=True
+        )
+    # (e) calibration行不在は503(手順7・承認事項⑤)
+    monkeypatch.setattr(store_mod, "select_calibration_attendance", _ret(None))
+    with pytest.raises(DependencyUnavailableError):
+        await svc.submit_attendance(
+            auth_provider="google", auth_subject="s", latch_id=done.id, attended=True
+        )

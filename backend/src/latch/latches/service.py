@@ -19,6 +19,8 @@ from latch.core.clock import JST, Clock
 from latch.latches import calibration, store
 from latch.latches.errors import (
     AlreadyAnsweredError,
+    AttendanceAlreadySubmittedError,
+    AttendanceWindowClosedError,
     ChatReadonlyError,
     DependencyUnavailableError,
     ForbiddenError,
@@ -28,7 +30,12 @@ from latch.latches.errors import (
     LatchNotFoundError,
     LatchValidationError,
 )
-from latch.latches.schemas import LatchDetailOut, LatchSummaryOut, ParticipantOut
+from latch.latches.schemas import (
+    AttendanceResponse,
+    LatchDetailOut,
+    LatchSummaryOut,
+    ParticipantOut,
+)
 
 logger = logging.getLogger("latch.latches")
 
@@ -296,6 +303,60 @@ class LatchesService:
                 last = rows[limit - 1]
                 next_cursor = encode_message_cursor(last.created_at, last.id)
             return items, next_cursor
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
+    # -- 実施自己申告(M3 ws-4 design §2.3手順1〜7) --
+
+    async def submit_attendance(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+        attended: bool,
+    ) -> AttendanceResponse:
+        """completed LATCHへの実施自己申告(D-09・design §2.3)。
+
+        回答はLATCH単位で先着1名が確定(承認事項①)。条件付きUPDATEが
+        排他の本体(latch行は読取のみ — completedは終端状態)。
+        """
+        try:
+            async with self._engine.begin() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    # messagesの403と扱いを分ける: 通知を受け取っていない
+                    # 可能性のあるユーザーに関与の有無を開示しない(引用#9)
+                    raise LatchNotFoundError("not a participant")
+                now = self._clock.now()
+                if row.status != "completed":
+                    raise LatchClosedError("latch closed")
+                if not is_attendance_window_open(row.completed_at, now):
+                    raise AttendanceWindowClosedError("attendance window closed")
+                cal = await store.select_calibration_attendance(conn, latch_id)
+                if cal is None:
+                    logger.warning(
+                        "latch.attendance.calibration_missing latch_id=%s", latch_id
+                    )
+                    raise DependencyUnavailableError("calibration record missing")
+                if cal.actual_attended is not None:
+                    raise AttendanceAlreadySubmittedError("already submitted")
+                updated = await store.update_attendance(
+                    conn, latch_id=latch_id, attended=attended, now=now
+                )
+                if not updated:  # 影響0行=並行で先着済み(手順7)
+                    raise AttendanceAlreadySubmittedError("already submitted")
+                return AttendanceResponse(latch_id=row.id, actual_attended=attended)
         except LatchesError:
             raise
         except Exception as exc:
