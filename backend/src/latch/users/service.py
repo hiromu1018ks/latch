@@ -5,6 +5,8 @@
 intents CRUD(ws-3 M1)に委ねる — design §2.1)。時刻列はClock由来の明示値
 (DB時刻関数のDEFAULTは使わない)。検証順序は年齢(422)→INSERT(409/503)に
 固定(design §2.2 — 17歳かつ登録済みならUNDER_AGE)。
+M3 ws-6: 退会 delete_account(全Intentカスケード+ユーザー単位処理を
+同期txで・design §2.3)を追加。
 """
 
 from __future__ import annotations
@@ -12,15 +14,17 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import date, datetime
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from latch.auth.tokens import AccessTokenClaims
 from latch.core.clock import Clock
+from latch.intents.deletion import cascade_delete_intent
 from latch.users.errors import (
     DependencyUnavailableError,
     UnderAgeError,
@@ -120,10 +124,12 @@ class UserMe:
 
 CreateUserFn = Callable[[NewUser], Awaitable[uuid.UUID]]
 FetchByAuthFn = Callable[[str, str], Awaitable[UserRow | None]]
+UnitOfWork = Callable[[], AbstractAsyncContextManager[AsyncConnection]]
+CascadeFn = Callable[[AsyncConnection, uuid.UUID, datetime], Awaitable[None]]
 
 
 class UserService:
-    """register / get_me ユースケース(05 第5節)。"""
+    """register / get_me / delete_account ユースケース(05 第5節・M3 ws-6)。"""
 
     def __init__(
         self,
@@ -131,10 +137,16 @@ class UserService:
         clock: Clock,
         create_user: CreateUserFn,
         fetch_by_auth: FetchByAuthFn,
+        uow: UnitOfWork | None = None,
+        sessions=None,
+        cascade: CascadeFn | None = None,
     ) -> None:
         self._clock = clock
         self._create_user = create_user
         self._fetch_by_auth = fetch_by_auth
+        self._uow = uow
+        self._sessions = sessions
+        self._cascade = cascade
 
     async def register(
         self,
@@ -198,6 +210,46 @@ class UserService:
             profile_complete=True,  # 行の存在=true(design §1.2-9)
         )
 
+    async def delete_account(self, *, claims: AccessTokenClaims) -> None:
+        """退会: 全Intentのカスケード+ユーザー単位処理を1txで(設計 §2.3案A)。
+
+        応答204の時点で生データが消える(Worker稼働状態に非依存)。
+        コミット後にセッション失効(Redis失効リスト・引用#13)。
+        """
+        try:
+            await self._delete_account(claims=claims)
+        except UsersError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("users dependency unavailable") from exc
+
+    async def _delete_account(self, *, claims: AccessTokenClaims) -> None:
+        if self._uow is None or self._sessions is None:
+            # 失効しない退会は安全側でない(旧JWTが1時間有効のまま残る)
+            raise DependencyUnavailableError("delete_account not wired")
+        try:
+            row = await self._fetch_by_auth(claims.auth_provider, claims.auth_subject)
+        except UsersError:
+            raise
+        except Exception as exc:
+            raise DependencyUnavailableError("users dependency unavailable") from exc
+        if row is None:
+            raise UserNotFoundError("user not found")
+        now = self._clock.now()
+        cascade = self._cascade or cascade_delete_intent
+        async with self._uow() as conn:
+            rows = (
+                await conn.execute(_SELECT_ALL_INTENT_IDS, {"user_id": row.id})
+            ).fetchall()
+            for (iid,) in rows:
+                await cascade(conn, _coerce_user_id(iid), now)
+            await conn.execute(_DELETE_MESSAGES, {"user_id": row.id})
+            await conn.execute(_DELETE_NOTIFICATIONS, {"user_id": row.id})
+            await conn.execute(_ANONYMIZE_USER, {"user_id": row.id, "now": now})
+        # uowコミット後に失効(引用#13。失効が先でも無害・logoutと同じ順序)
+        await self._sessions.revoke_access(jti=claims.jti, exp=claims.exp, now=now)
+        await self._sessions.revoke_family(sid=claims.sid)
+
 
 def _coerce_user_id(value: object) -> uuid.UUID:
     """行のid値をUUIDへ正規化する。
@@ -230,13 +282,37 @@ _SELECT = text("""
     WHERE auth_provider = :provider AND auth_subject = :subject
 """)
 
+# 退会(M3 ws-6 design §2.3)。users行は残置し認証紐付けを切替(§2.4案A)
+_SELECT_ALL_INTENT_IDS = text("""
+    SELECT id FROM intents
+    WHERE user_id = CAST(:user_id AS uuid)
+    ORDER BY id
+""")
+_DELETE_MESSAGES = text("""
+    DELETE FROM messages WHERE sender_id = CAST(:user_id AS uuid)
+""")
+_DELETE_NOTIFICATIONS = text("""
+    DELETE FROM notifications WHERE user_id = CAST(:user_id AS uuid)
+""")
+_ANONYMIZE_USER = text("""
+    UPDATE users
+       SET display_name = '退会したユーザー',
+           profile = '{}'::jsonb,
+           auth_subject = 'deleted:' || id::text,
+           updated_at = CAST(:now AS timestamptz)
+     WHERE id = CAST(:user_id AS uuid)
+""")
 
-def make_user_service(*, clock: Clock, engine: AsyncEngine) -> UserService:
+
+def make_user_service(
+    *, clock: Clock, engine: AsyncEngine, sessions=None
+) -> UserService:
     """実SQL関数(text())を束ねてUserServiceを構築する(design §2.5)。
 
     engineはクロージャで束縛する(UserService自身はengineを知らない)。
     INSERT衝突はUNIQUE制約で検出し、対象制約のみUserExistsErrorへ変換
     (それ以外のIntegrityErrorは再送出 → UserServiceが503へ包む — design §2.2)。
+    M3 ws-6: uow/cascade/sessionsも束ねる(退会delete_account用・design §2.3)。
     """
 
     async def create_user(new_user: NewUser) -> uuid.UUID:
@@ -281,5 +357,10 @@ def make_user_service(*, clock: Clock, engine: AsyncEngine) -> UserService:
             )
 
     return UserService(
-        clock=clock, create_user=create_user, fetch_by_auth=fetch_by_auth
+        clock=clock,
+        create_user=create_user,
+        fetch_by_auth=fetch_by_auth,
+        uow=engine.begin,
+        sessions=sessions,
+        cascade=cascade_delete_intent,
     )
