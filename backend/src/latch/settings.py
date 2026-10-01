@@ -128,3 +128,11 @@ class Settings(BaseSettings):
     sweeper_batch_limit: int = 50
     # リセットジョブ失敗時の再試行待機秒(04 §5「翌0時まで放置しない」)
     reset_retry_sec: int = 300
+
+    # --- プッシュ通知(M3 ws-3・design §3.2)---
+    # "stub": ドライラン(送信内容を構造化ログlatch.push.sendへ記録のみ)。
+    # "real"(実FCM・FirebasePushSender)はG3後。未実装値の指定は
+    # build_push_senderがValueError(静かにスタブへ落ちない — llm_mode規律)
+    push_mode: str = "stub"
+    # スタブの遅延注入ms(10 第1節レイテンシ注入・llm_stub_delay_*と同型)
+    push_stub_delay_ms: int = 0
