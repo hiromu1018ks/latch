@@ -8,10 +8,12 @@ test_chat_attendance_api.py(integration)の担い。
 import base64
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
+from latch.core.clock import FakeClock
 from latch.latches.errors import (
     AttendanceAlreadySubmittedError,
     AttendanceWindowClosedError,
@@ -28,6 +30,7 @@ from latch.latches.schemas import (
     MessageRequest,
 )
 from latch.latches.service import (
+    LatchesService,
     decode_message_cursor,
     encode_message_cursor,
     is_attendance_window_open,
@@ -132,3 +135,159 @@ def test_is_attendance_window_open_boundaries():
         is False
     )
     assert is_attendance_window_open(None, NOW) is False  # completed_at未設定は閉
+
+
+# -- send_message / list_messages(design §2.1手順1〜7) --
+
+
+class _NoopEngine:
+    """store全体をmonkeypatch差し替えするための空エンジン(conn不使用)。"""
+
+    def begin(self):
+        return self
+
+    def connect(self):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _row(**overrides) -> SimpleNamespace:
+    """LatchRow相当のスタブ(serviceは属性アクセスのみ)。"""
+    base = dict(
+        id=uuid.uuid4(),
+        status="matched",
+        intent_ids=[I1, uuid.uuid4()],
+        completed_at=None,
+    )
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+def _ret(value):
+    """monkeypatch差し替え用の「常にvalueを返すasync関数」ファクトリ。"""
+
+    async def _inner(*args, **kwargs):
+        return value
+
+    return _inner
+
+
+def _msg(row, sender=ME, body="こんにちは", minutes_ago=0) -> object:
+    from latch.latches.store import MessageRow
+
+    return MessageRow(
+        id=uuid.uuid4(),
+        latch_id=row.id,
+        sender_id=sender,
+        body=body,
+        created_at=NOW - timedelta(minutes=minutes_ago),
+    )
+
+
+async def test_send_message_authorization_404_403(monkeypatch):
+    """未登録JWTは404・参加者以外は403(引用#17・#18・design §2.1手順1〜3)。"""
+    from latch.latches import store as store_mod
+    from latch.latches.errors import ForbiddenError, LatchNotFoundError
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(None))
+    with pytest.raises(LatchNotFoundError):
+        await LatchesService(clock=FakeClock(NOW), engine=_NoopEngine()).send_message(
+            auth_provider="google", auth_subject="s", latch_id=uuid.uuid4(), body="x"
+        )
+    row = _row()
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(None))
+    with pytest.raises(ForbiddenError):
+        await LatchesService(clock=FakeClock(NOW), engine=_NoopEngine()).send_message(
+            auth_provider="google", auth_subject="s", latch_id=row.id, body="x"
+        )
+
+
+async def test_send_message_non_matched_statuses_409(monkeypatch):
+    """matched以外の全7状態は409 CHAT_READONLY(design §2.1案A・引用#1/#5/#6)。
+
+    Review Focus 1: 部分条件(proposedだけ等)ではcompleted後の送信が
+    通ってしまう。全状態を網羅ピンする。
+    """
+    from latch.latches import store as store_mod
+
+    for status in (
+        "proposed",
+        "partial_accept",
+        "completed",
+        "cancelled",
+        "rejected",
+        "expired",
+        "candidate",
+    ):
+        row = _row(status=status)
+        monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+        monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+        monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+        with pytest.raises(ChatReadonlyError):
+            await LatchesService(
+                clock=FakeClock(NOW), engine=_NoopEngine()
+            ).send_message(
+                auth_provider="google", auth_subject="s", latch_id=row.id, body="x"
+            )
+
+
+async def test_send_message_matched_inserts_and_blocks(monkeypatch):
+    """matched+blocksなしならINSERT→MessageRow(design §2.1手順4〜7)。"""
+    from latch.latches import store as store_mod
+
+    row = _row(status="matched")
+    out_msg = _msg(row, body="はじめまして")
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    monkeypatch.setattr(store_mod, "fetch_participant_user_ids", _ret([ME, PEER]))
+    monkeypatch.setattr(store_mod, "select_block_between", _ret(False))
+    monkeypatch.setattr(store_mod, "insert_message", _ret(out_msg))
+    got = await LatchesService(clock=FakeClock(NOW), engine=_NoopEngine()).send_message(
+        auth_provider="google", auth_subject="s", latch_id=row.id, body="はじめまして"
+    )
+    assert got is out_msg
+    # blocks引っかかりは同コード(手順5・design §2.2)
+    monkeypatch.setattr(store_mod, "select_block_between", _ret(True))
+    with pytest.raises(ChatReadonlyError):
+        await LatchesService(clock=FakeClock(NOW), engine=_NoopEngine()).send_message(
+            auth_provider="google", auth_subject="s", latch_id=row.id, body="x"
+        )
+
+
+async def test_list_messages_builds_next_cursor(monkeypatch):
+    """limit+1件取得→溢れたらnext_cursor生成(latches一覧と同型・design §2.1)。"""
+    from latch.latches import store as store_mod
+
+    row = _row(status="completed")  # completedでも閲覧可(引用#5)
+    m1 = _msg(row, body="1通目", minutes_ago=2)
+    m2 = _msg(row, sender=PEER, body="2通目", minutes_ago=1)
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    monkeypatch.setattr(store_mod, "select_messages_page", _ret([m1, m2]))
+    items, next_cursor = await LatchesService(
+        clock=FakeClock(NOW), engine=_NoopEngine()
+    ).list_messages(auth_provider="google", auth_subject="s", latch_id=row.id, limit=1)
+    assert items == [m1]  # limit=1で1件だけ返す
+    assert next_cursor == encode_message_cursor(m1.created_at, m1.id)
+    # cursor渡しはdecodeしてbeforeへ渡される(形式不正は422)
+    monkeypatch.setattr(store_mod, "select_messages_page", _ret([m2]))
+    items2, next2 = await LatchesService(
+        clock=FakeClock(NOW), engine=_NoopEngine()
+    ).list_messages(
+        auth_provider="google",
+        auth_subject="s",
+        latch_id=row.id,
+        cursor=encode_message_cursor(m1.created_at, m1.id),
+        limit=1,
+    )
+    assert items2 == [m2]
+    assert next2 is None  # 次頁なし

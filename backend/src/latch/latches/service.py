@@ -19,6 +19,7 @@ from latch.core.clock import JST, Clock
 from latch.latches import calibration, store
 from latch.latches.errors import (
     AlreadyAnsweredError,
+    ChatReadonlyError,
     DependencyUnavailableError,
     ForbiddenError,
     LatchClosedError,
@@ -214,6 +215,87 @@ class LatchesService:
                 for p in participants
             ]
             return LatchDetailOut(**summary.model_dump(), **detail_extra)
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
+    # -- チャット(M3 ws-4 design §2.1手順1〜7) --
+
+    async def send_message(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+        body: str,
+    ):
+        """matched LATCHへのメッセージ送信(design §2.1)。
+
+        matched以外の全状態とblocks適用中は409 CHAT_READONLY(案A)。
+        FOR UPDATEでsweeperのcompleted化・回答APIと直列化する。
+        """
+        try:
+            async with self._engine.begin() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch_for_update(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    raise ForbiddenError("not a participant")
+                now = self._clock.now()  # FOR UPDATE取得後に採取
+                if row.status != "matched":
+                    raise ChatReadonlyError("chat readonly")
+                user_ids = await store.fetch_participant_user_ids(conn, row.intent_ids)
+                others = [u for u in user_ids if u != user_id]
+                if await store.select_block_between(conn, user_id, others):
+                    raise ChatReadonlyError("chat readonly")
+                return await store.insert_message(
+                    conn, latch_id=row.id, sender_id=user_id, body=body, now=now
+                )
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
+    async def list_messages(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+        cursor: str | None = None,
+        limit: int = 20,
+    ):
+        """messages取得(design §2.1)。参加者ならstatusを問わず閲覧可。"""
+        try:
+            async with self._engine.connect() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    raise ForbiddenError("not a participant")
+                before = decode_message_cursor(cursor) if cursor else None
+                rows = await store.select_messages_page(
+                    conn, latch_id=latch_id, before=before, limit=limit + 1
+                )
+            items = rows[:limit]
+            next_cursor = None
+            if len(rows) > limit:
+                last = rows[limit - 1]
+                next_cursor = encode_message_cursor(last.created_at, last.id)
+            return items, next_cursor
         except LatchesError:
             raise
         except Exception as exc:
