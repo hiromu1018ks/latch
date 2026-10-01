@@ -4,6 +4,8 @@ match_eventsへのINSERTがM1時点の発行の実体(Pub/SubリレーはM2-1)�
 保存と同一トランザクションで呼ぶ(原子性 — 保存が成功した行に必ずEvent行が
 伴う)。event_typeの文字列はembedding_completed(05 §2唯一の確定文字列)の
 過去分詞形に揃えた(design §2.2・§6-4。DB永続値のためM2設計が引き継ぐ)。
+M3 ws-6: 同一3点組の再発行はON CONFLICT DO NOTHINGで挿入しない
+(cancelled再削除の冪等・design §2.2)。
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ _INSERT_EVENT = text("""
     VALUES
         (:event_type, :source_intent_id, CAST(:payload AS jsonb), 'pending',
          :created_at)
+    ON CONFLICT DO NOTHING
 """)
 
 

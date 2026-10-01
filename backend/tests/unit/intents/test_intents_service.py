@@ -894,21 +894,41 @@ async def test_delete_draft_and_paused_also_cancelled():
         assert store.status_updates[0]["status"] == "cancelled"
 
 
-async def test_delete_matched_rejected():
+async def test_delete_matched_accepted_to_cancelled():
+    """matched受理(FR-19のAPI経路開通・M3 ws-6 design §2.2)。"""
     row = _row(status="matched")
-    svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
-    with pytest.raises(InvalidTransitionError):
-        await svc.delete(auth_provider="google", auth_subject="s", intent_id=row.id)
-    assert store.status_updates == []
+    svc, store, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    result = await svc.delete(
+        auth_provider="google", auth_subject="s", intent_id=row.id
+    )
+    assert result is None
+    upd = store.status_updates[0]
+    assert upd["status"] == "cancelled"
+    assert upd["version"] == 1  # 不変
+    assert upd["expected_status"] == "matched"
+    etype, params = _event_calls(uow_conn)[0]
+    assert etype == "deleted"
+    assert json.loads(params["payload"]) == {"version": 1}
 
 
-async def test_delete_twice_second_rejected():
-    """Review Focus #3: cancelled行への再DELETEは422(遷移表にない)。"""
+async def test_delete_cancelled_is_idempotent():
+    """cancelled済みへの再DELETEも受理(応答204のまま冪等・design §2.2)。
+    Eventの同一3点組重複はinsert_match_eventのON CONFLICTが挿入しない。"""
     row = _row(status="cancelled")
+    svc, store, _, uow_conn, _ = _service(store=StubStore(rows={row.id: row}))
+    await svc.delete(auth_provider="google", auth_subject="s", intent_id=row.id)
+    assert store.status_updates[0]["status"] == "cancelled"
+    assert store.status_updates[0]["expected_status"] == "cancelled"
+    etype, _ = _event_calls(uow_conn)[0]
+    assert etype == "deleted"
+
+
+async def test_delete_expired_accepted():
+    """expired受理(期限切れIntentのraw_textも「預けた意思」のため消す)。"""
+    row = _row(status="expired")
     svc, store, _, _, _ = _service(store=StubStore(rows={row.id: row}))
-    with pytest.raises(InvalidTransitionError):
-        await svc.delete(auth_provider="google", auth_subject="s", intent_id=row.id)
-    assert store.status_updates == []
+    await svc.delete(auth_provider="google", auth_subject="s", intent_id=row.id)
+    assert store.status_updates[0]["status"] == "cancelled"
 
 
 async def test_pause_other_users_intent_forbidden():
