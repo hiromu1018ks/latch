@@ -65,10 +65,13 @@ def compute_new_status(response: str, responses: list[dict], total: int) -> str:
 class LatchesService:
     """回答・一覧・詳細のユースケース(design §2.2・§2.8)。"""
 
-    def __init__(self, *, clock: Clock, engine: AsyncEngine, geo=None) -> None:
+    def __init__(
+        self, *, clock: Clock, engine: AsyncEngine, geo=None, block_cache=None
+    ) -> None:
         self._clock = clock
         self._engine = engine
         self._geo = geo  # GeoService | None(Noneならarea_name=None)
+        self._block_cache = block_cache  # BlockCache | None(NoneならDB直読み)
 
     # -- 回答(design §2.2手順0〜6) --
 
@@ -260,7 +263,13 @@ class LatchesService:
                     raise ChatReadonlyError("chat readonly")
                 user_ids = await store.fetch_participant_user_ids(conn, row.intent_ids)
                 others = [u for u in user_ids if u != user_id]
-                if await store.select_block_between(conn, user_id, others):
+                if self._block_cache is not None:
+                    blocked = await self._block_cache.is_blocked_between(
+                        user_id, others
+                    )
+                else:
+                    blocked = await store.select_block_between(conn, user_id, others)
+                if blocked:
                     raise ChatReadonlyError("chat readonly")
                 return await store.insert_message(
                     conn, latch_id=row.id, sender_id=user_id, body=body, now=now
@@ -573,8 +582,12 @@ def _page_view_of(row):
     )
 
 
-def make_latches_service(*, clock: Clock, engine: AsyncEngine) -> LatchesService:
+def make_latches_service(
+    *, clock: Clock, engine: AsyncEngine, block_cache=None
+) -> LatchesService:
     """main.py lifespan用の構築(GeoServiceはengineから作る)。"""
     from latch.geo.service import GeoService
 
-    return LatchesService(clock=clock, engine=engine, geo=GeoService(engine))
+    return LatchesService(
+        clock=clock, engine=engine, geo=GeoService(engine), block_cache=block_cache
+    )

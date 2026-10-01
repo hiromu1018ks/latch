@@ -163,7 +163,7 @@ async def _lifespan(app: FastAPI):
         )
     if build_latches:
         app.state.latches_service = make_latches_service(
-            clock=app.state.clock, engine=engine
+            clock=app.state.clock, engine=engine, block_cache=block_cache
         )
     if build_notifications:
         app.state.notifications_service = make_notifications_service(

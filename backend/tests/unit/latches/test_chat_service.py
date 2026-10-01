@@ -407,3 +407,61 @@ async def test_submit_attendance_classifications(monkeypatch):
         await svc.submit_attendance(
             auth_provider="google", auth_subject="s", latch_id=done.id, attended=True
         )
+
+
+async def test_send_message_block_cache_paths(monkeypatch):
+    """block_cache注入時はキャッシュ判定・未注入時はDB直読み(ws-5 §2.2)。
+
+    既存試験(select_block_betweenモック)は未注入経路の担保として残る。
+    (a)注入+ブロックあり→DBを問わず409 (b)注入+なし→INSERT
+    (c)未注入→select_block_between経由。
+    """
+    from latch.latches import store as store_mod
+
+    class _StubCache:
+        def __init__(self, blocked: bool):
+            self.blocked = blocked
+            self.calls: list[tuple] = []
+
+        async def is_blocked_between(self, me, others):
+            self.calls.append((me, tuple(others)))
+            return self.blocked
+
+    row = _row(status="matched")
+    out_msg = _msg(row, body="キャッシュ経路")
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    monkeypatch.setattr(store_mod, "fetch_participant_user_ids", _ret([ME, PEER]))
+    monkeypatch.setattr(store_mod, "insert_message", _ret(out_msg))
+    db_calls: list[tuple] = []
+
+    async def _db_between(conn, me, others):
+        db_calls.append((me, tuple(others)))
+        return False  # DB側は常に「ブロックなし」
+
+    monkeypatch.setattr(store_mod, "select_block_between", _db_between)
+    # (a) 注入+キャッシュTrue: DB(False)よりキャッシュを優先して409
+    cache = _StubCache(True)
+    with pytest.raises(ChatReadonlyError):
+        await LatchesService(
+            clock=FakeClock(NOW), engine=_NoopEngine(), block_cache=cache
+        ).send_message(
+            auth_provider="google", auth_subject="s", latch_id=row.id, body="x"
+        )
+    assert cache.calls == [(ME, (PEER,))]
+    assert db_calls == []  # キャッシュ経路ではDBを問わない
+    # (b) 注入+キャッシュFalse: INSERTへ到達
+    got = await LatchesService(
+        clock=FakeClock(NOW), engine=_NoopEngine(), block_cache=_StubCache(False)
+    ).send_message(
+        auth_provider="google", auth_subject="s", latch_id=row.id, body="キャッシュ経路"
+    )
+    assert got is out_msg
+    # (c) 未注入: 従来どおりselect_block_between(design §2.2の残置経路)
+    svc_plain = LatchesService(clock=FakeClock(NOW), engine=_NoopEngine())
+    got2 = await svc_plain.send_message(
+        auth_provider="google", auth_subject="s", latch_id=row.id, body="x"
+    )
+    assert got2 is out_msg
+    assert db_calls == [(ME, (PEER,))]
