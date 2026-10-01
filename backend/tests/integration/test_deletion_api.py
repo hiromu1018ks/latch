@@ -469,8 +469,9 @@ async def test_1_delete_api_cascade_via_stage1(api_client, db_engine, field):
     assert [r for r in responses if "user_id" in r] == []
     assert responses[0]["response"] == "yes"  # 回答種別は残す
     assert responses[0]["answered_at"]  # 時刻は残す
-    # 配列順保存(WITH ORDINALITY): answered_at降順=idx0(u1分)→idx1(u2分)
-    assert responses[0]["answered_at"] > responses[1]["answered_at"]
+    # 配列順保存(WITH ORDINALITY): fixtureは昇順(idx0=now-5分・idx1=now-4分)
+    # supervisor修正: 元の期待は降順比較だったがfixture実装と逆だった
+    assert responses[0]["answered_at"] < responses[1]["answered_at"]
     # ⑥ Intent行消滅
     assert (
         await _scalar(

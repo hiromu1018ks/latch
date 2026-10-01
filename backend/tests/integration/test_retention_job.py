@@ -145,7 +145,9 @@ _PAIR_COUNT = text("""
 async def test_1_retention_deletes_aged_all_statuses_keeps_recent(db_engine, field):
     """30日+1秒=削除・29日=残る・pendingも削除(design §2.5)。"""
     uid = await _user_row(db_engine, field, "retention1")
-    i1, i2, i3 = (await _intent_row(db_engine, uid) for _ in range(3))
+    i1 = await _intent_row(db_engine, uid)
+    i2 = await _intent_row(db_engine, uid)
+    i3 = await _intent_row(db_engine, uid)
     await _candidate(db_engine, i1, i2, aged=30 + 1 / 86400)  # 30日+1秒
     await _candidate(db_engine, i2, i3, aged=29.0)  # 29日
     job = RetentionJob(engine=db_engine, clock=SystemClock())
