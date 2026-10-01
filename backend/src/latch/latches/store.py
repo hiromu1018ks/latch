@@ -72,6 +72,17 @@ class ParticipantRow:
 
 
 @dataclass(frozen=True)
+class MessageRow:
+    """messages 1行(挿入RETURNING・改頁選択の読取結果・design §2.1)。"""
+
+    id: uuid.UUID
+    latch_id: uuid.UUID
+    sender_id: uuid.UUID
+    body: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class PageRow:
     """一覧の1行(design §2.8。target_timeはソートキー計算値)。"""
 
@@ -236,6 +247,44 @@ _SELECT_PARTICIPANTS = text("""
     SELECT i.id AS intent_id, i.user_id, u.display_name, u.profile
     FROM intents i JOIN users u ON u.id = i.user_id
     WHERE i.id = ANY(CAST(:ids AS uuid[]))
+""")
+
+# -- チャット(M3 ws-4 design §2.1・§2.2) --
+
+_INSERT_MESSAGE = text("""
+    INSERT INTO messages (latch_id, sender_id, body, created_at)
+    VALUES (CAST(:latch_id AS uuid), CAST(:sender_id AS uuid), :body,
+            CAST(:now AS timestamptz))
+    RETURNING id, latch_id, sender_id, body, created_at
+""")
+
+# GET改頁のキーセット(latch_id絞り+(created_at,id)昇順・design §2.1)
+_SELECT_MESSAGES_PAGE = text("""
+    SELECT id, latch_id, sender_id, body, created_at
+    FROM messages
+    WHERE latch_id = CAST(:latch_id AS uuid)
+      AND (CAST(:ct AS timestamptz) IS NULL
+           OR created_at > CAST(:ct AS timestamptz)
+           OR (created_at = CAST(:ct AS timestamptz)
+               AND id > CAST(:mid AS uuid)))
+    ORDER BY created_at ASC, id ASC
+    LIMIT :limit
+""")
+
+# 送信時のblocks判定対象(自分以外の参加者・design §2.2)
+_SELECT_PARTICIPANT_USER_IDS = text("""
+    SELECT user_id FROM intents WHERE id = ANY(CAST(:ids AS uuid[]))
+""")
+
+# blocks双方向判定(引用#7・design §2.2。ws-5のRedisキャッシュ差し替え点)
+_SELECT_BLOCK_BETWEEN = text("""
+    SELECT EXISTS (
+        SELECT 1 FROM blocks
+        WHERE (blocker_id = CAST(:me AS uuid)
+               AND blocked_id = ANY(CAST(:others AS uuid[])))
+           OR (blocker_id = ANY(CAST(:others AS uuid[]))
+               AND blocked_id = CAST(:me AS uuid))
+    )
 """)
 
 
@@ -531,3 +580,71 @@ async def select_latches_page(
             )
         )
     return out
+
+
+def _message_row(mapping) -> MessageRow:
+    """messages行→MessageRow(UUID復元)。"""
+    return MessageRow(
+        id=_coerce_uuid(mapping["id"]),
+        latch_id=_coerce_uuid(mapping["latch_id"]),
+        sender_id=_coerce_uuid(mapping["sender_id"]),
+        body=mapping["body"],
+        created_at=mapping["created_at"],
+    )
+
+
+async def fetch_participant_user_ids(
+    conn: AsyncConnection, intent_ids: list[uuid.UUID]
+) -> list[uuid.UUID]:
+    """参加Intent→user_id一覧(送信時のblocks判定対象・design §2.2)。"""
+    res = await conn.execute(_SELECT_PARTICIPANT_USER_IDS, {"ids": list(intent_ids)})
+    return [_coerce_uuid(r[0]) for r in res.fetchall()]
+
+
+async def select_block_between(
+    conn: AsyncConnection, me: uuid.UUID, others: list[uuid.UUID]
+) -> bool:
+    """自分と参加相手の間のblocks双方向判定(引用#7・design §2.2)。
+
+    ws-5がRedisキャッシュ差し替え点として使う(本実装はDB直読み)。
+    """
+    res = await conn.execute(_SELECT_BLOCK_BETWEEN, {"me": me, "others": list(others)})
+    return bool(res.scalar())
+
+
+async def insert_message(
+    conn: AsyncConnection,
+    *,
+    latch_id: uuid.UUID,
+    sender_id: uuid.UUID,
+    body: str,
+    now: datetime,
+) -> MessageRow:
+    """messages挿入(design §2.1手順6)。idはDB DEFAULT→RETURNINGで受け取る。"""
+    res = await conn.execute(
+        _INSERT_MESSAGE,
+        {"latch_id": latch_id, "sender_id": sender_id, "body": body, "now": now},
+    )
+    row = res.mappings().first()
+    assert row is not None
+    return _message_row(row)
+
+
+async def select_messages_page(
+    conn: AsyncConnection,
+    *,
+    latch_id: uuid.UUID,
+    before: tuple[datetime, uuid.UUID] | None,
+    limit: int,
+) -> list[MessageRow]:
+    """messages改頁選択(design §2.1)。before=(created_at, id)・昇順。"""
+    res = await conn.execute(
+        _SELECT_MESSAGES_PAGE,
+        {
+            "latch_id": latch_id,
+            "ct": before[0] if before else None,
+            "mid": before[1] if before else None,
+            "limit": limit,
+        },
+    )
+    return [_message_row(r) for r in res.mappings().all()]
