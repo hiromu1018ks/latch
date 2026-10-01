@@ -58,6 +58,10 @@
 
 1. ws-1: **paused参加Intentを含む成立**(05 §6遷移表のmatched行は「active→matched」表記だがcancelled/expired行は「active・paused」のため、提示後にpauseされた提案も回答可能と読む。design §5-3)
 2. ws-1: **segmentフラグの計算時点=回答確定時の現行Intent文言**(09 §2.3「提案化時に判定し記録」を判定規則の定義と読み、レコード作成は07 §6の回答確定時。提案〜回答間にIntent更新がある場合のみ評価行〔バージョン固定〕とsegment〔現行文言〕の時点がずれうる。design §5-4)
+3. ws-3: **成立(matched)通知は作らない**(05 §6遷移表が通知を規定するのはcandidate→proposed〔提案〕とmatched→completed〔申告〕のみで、proposed→matchedの通知規定なし。01 第46行「成立時にだけ通知が来る」は導入文であり具体規定が優先。ws-3 design §5-5)
+4. ws-3: **attendance_requestのプッシュ文言は第二汎用文「LATCHからのお知らせがあります」・D-08日次上限は消費しない**(文言規定なしは08 §2.6趣旨の準用として設計確定。上限対象は03 §4「提案通知」でカウントSQLどおり。ws-3 design §5-1・§5-6)
+5. ws-4: **attendanceの回答単位はLATCH単位・先着1名で確定**(05 §5「初回のみ受理」とcalibration_records構造〔参加者別の回答保持場所なし〕からの演繹。2人目以降は409 ATTENDANCE_ALREADY_SUBMITTED。参加者別集約の将来導入はschema拡張を伴うdocs改版が必要。ws-4 design §5-1)
+6. ws-4: **status != completedへのattendanceは409 LATCH_CLOSED**(LATCH_CLOSEDの語義を「競合クローズ後」から「受付可能状態でない閉状態」へ拡大。CHAT_READONLYも同様に拡大〔completed/cancelled後の送信に使用〕。ws-4 design §5-2・§5-4)
 
 ## M2 作業単位
 
@@ -303,6 +307,8 @@
   - 検証最終値: 修正後worktree test-ci **1301 passed**(独立実行・exit 0)・**マージ後main test-ci 1301 passed**(api再ビルド後・368秒)・unit 1100 passed・lint緑(237 files)・残存ゼロ(m3ws2-・5テーブル)・alembic head=0005不変・依存追加なし・変更15ファイル=計画§4どおり
   - **02#4本体(G1引継ぎ)を試験1で実施**(Intent期限切れexpired遷移+expiredイベント発行のci統合試験=G1裁定(a)の履行)
 - 学習資産追従: ws-2分 22c57f3(第18章「時間が状態を閉じる: 期限切れバッチとリセットジョブ」+Lab 6〔期限を過去へ書き換えてsweeperを観察〕新設・既存8ファイル更新〔README順路・00-environment・第7/12/14/15/17章・Lab 5〕。Lab 6は全手順実測・agent4がmake test 1100 passedとnatural-japanese lint全10ファイル収束を確認。クローズ検知drainのLab体験は大がかりのため第18章18.7の説明で担保・ws-3後に保留キューラボへ再候補)/ 2026-10-01
+- ws-3 / 設計 eba8d09(supervisor承認: design §5の6件=①attendance等の第二汎用文PUSH_BODY_NOTICE〔文言規定なし・G3時確認候補〕②nearby本文も提案同一文言〔文面分離で閾値未満がOS経路に漏れる〕③送信はtxコミット直後・失敗再送なし〔outboxはG3後再検討〕④お知らせ一覧へlatch要素LEFT JOIN埋め込み・文言はクライアント組立。解釈記録2件=成立matched通知は作らない〔05 §6遷移表に規定なし〕・attendance_requestはD-08上限不消費はG3時確認事項へ。FCM Admin SDKのIFはcontext7一次確認済み・スタブはsend_each_async/dry_run形を模倣)/ 2026-10-01
+- ws-4 / 設計 5333a6f(supervisor承認: design §5の7件=①attendanceはLATCH単位先着1名確定〔calibration_records構造からの必然・G3時確認候補〕②CHAT_READONLYをcompleted/cancelled後へ拡大〔03 §6・08 §2.5読取専用の統一〕③messages本文1〜1000字・空白のみ422④未completedへのattendanceは409 LATCH_CLOSED⑤calibration行不在は503+構造化ログ⑥マイグレーション0006=Index 2本〔05 §3規定なしは設計判断〕⑦POST messagesは201。ブロック409分岐は先行実装しws-5へstore.select_block_betweenを明け渡し。**ws-3並走・マイグレーション追加はws-4のみ0006・ws-3はhead=0005不変のため番号衝突なし。両worktreeのtest-ci同時実行禁止〔運用ルール1〕**)/ 2026-10-01
 
 ## G2判定資料(2026-09-30・承認済み)
 
