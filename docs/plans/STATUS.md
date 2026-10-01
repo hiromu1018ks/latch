@@ -335,6 +335,8 @@
   - **マージ後main test-ci 1426 passed一発グリーン**(=1378+48・api・worker再ビルド後)・unit 1187・lint緑・basename一意・head=0006不変・依存追加なし・残存ゼロ(DB 3テーブル+Redis blk:u:キー6本はteardown後のキャッシュ再構築分を掃除・TTL自然消滅系だが基準どおり0化)
   - **ws-3で発覚した「計画書テストコード欠陥」系統は今回はゼロ** — agent2へのテストコード自己見直し指示+計画Self-Reviewでの既存試験影響事前特定が効いた
 - 学習資産追従: ws-5分 c061fdb(第21章「安全を守る仕組み: ブロックと通報」+Lab 8〔ブロック登録→チャット409→redis-cliでキャッシュ観察→解除復帰→cancelled化・通報まで〕新設・既存4ファイル更新〔README順路・00-environment〔1187/1426・safety/追加〕・第20章〔キャッシュ差し替え追従〕・Lab 7〔blocks直接INSERT→登録API経由へ書き換え=キャッシュが直接INSERTを隠すため〕〕。Lab 8は全行程実機検証・make test 1187 passed確認)/ 2026-10-01
+- ws-6∥ws-7着手 / 2026-10-01ユーザーGoサイン(並行・実行waveどおり)
+- ws-7 / 設計 a95378b(supervisor承認・**QUESTIONS 1件をsupervisor裁定**: 提案詳細からの通報は08 §5.2「提案画面から常に可能」と05のparticipants=matched以降/ws-5のreportee_id必須の契約空白。**案X=reportee_id省略可+latch_idからサーバ解決**(1対1一意・グループ提案は参加者非開示のため422・成立後は明示)をbackend付帯変更としてws-7ブランチで実施。02#21がG3受け入れ条件のため先送り利益なし。05 §5・08 §5.2への追記はdocs改版候補。設計要点: hashルーター自作・1画面3姿のstatus分岐・visibility分岐=time_summaryキー有無・チャット30秒ポーリング+初回複数頁取得・texts.js文言集約・ブロック導線はws-8)/ 2026-10-01
 
 ## G2判定資料(2026-09-30・承認済み)
 
