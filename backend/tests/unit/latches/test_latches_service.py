@@ -110,6 +110,7 @@ def _latch_row(**overrides) -> object:
         proposal={"headcount": 2, "match_level": "medium"},
         group_candidate_id=None,
         created_at=NOW - timedelta(hours=1),
+        completed_at=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -652,3 +653,21 @@ async def test_get_forbidden_for_non_participant(monkeypatch):
         await _svc(ScriptedEngine([])).get(
             auth_provider="google", auth_subject="s", latch_id=uuid.uuid4()
         )
+
+
+async def test_summary_completed_at_flows_from_row():
+    """LatchSummaryOut.completed_atはrow.completed_atを流す(None固定の回帰ピン)。
+
+    _summary_from_pageのcompleted_at=None固定(ws-1由来・「completed遷移はws-2」
+    コメントの更新漏れ)でAPI応答のcompleted_atが常にnullになる欠陌が
+    M3 ws-7計画§9-6で発見された。_page_view_of→_summary_from_pageの経路で
+    値が消えないことを固定する。
+    """
+    from latch.latches.service import _page_view_of, _summary_from_page
+
+    done_at = NOW - timedelta(hours=2)
+    row = _latch_row(status="completed", completed_at=done_at)
+    summary = _summary_from_page(_page_view_of(row), ME)
+    assert summary.completed_at == done_at
+    # 未完了行はNoneのまま
+    assert _summary_from_page(_page_view_of(_latch_row()), ME).completed_at is None

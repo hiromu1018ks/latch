@@ -469,7 +469,7 @@ def _summary(
         response_deadline=row.response_deadline,
         expires_at=row.expires_at,
         created_at=row.created_at,
-        completed_at=None,  # completed遷移はws-2
+        completed_at=row.completed_at,
         proposal=row.proposal,
         is_group=row.group_candidate_id is not None,
         my_response=my_response,
@@ -576,7 +576,7 @@ def _page_view_of(row):
         response_deadline=row.response_deadline,
         expires_at=row.expires_at,
         created_at=row.created_at,
-        completed_at=None,
+        completed_at=row.completed_at,
         proposal=row.proposal,
         group_candidate_id=row.group_candidate_id,
     )
