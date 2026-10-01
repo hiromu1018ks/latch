@@ -342,6 +342,11 @@
   - a2-ws7(計画)が§9-6で発見: GET /v1/latches一覧・詳細応答のcompleted_atが常にnull(_summary_from_pageのNone固定+「completed遷移はws-2」コメントの更新漏れ・_page_view_ofも伝達漏れ。ws-1由来でws-2実装後に追随されず。ws-4のattendance実装はLatchRow直接参照のため無関係で検出不能だった)
   - supervisor直接修正: 2箇所のcompleted_at=row.completed_at化+回帰ピン1件(test_summary_completed_at_flows_from_row)。unit 1188・test-ci 1427 passed。ws-6/ws-7計画書の基準値も機械的追随済み
 - ws-6 / 計画 aabc60d(ws-7計画と同時コミット・Task 1〜8・実コード全文記載。機械チェック合格: basename新規6ファイル既存ゼロ・ピン追従〔test_worker_stage1 2試験書き換え・groupengine test_8のみ特定〕・試験数整合〔unit 19+integration 15新規=1207/1461〕)/ 2026-10-01実装着手(worktree w9・a3-ws6)
+- ws-6 / マージ 464b9cd(実装は058ae56まで・16コミット)/ docs/plans/M3/ws-6-report.md / 2026-10-02
+  - agent3実装(25分32秒・申告unit 1207 passed=期待どおり)。**正当スキップ1件**: test_account_api test_2(退会後のcancelled LATCH participants表示)は計画書期待が物理削除設計と構造矛盾〔intents消滅でintents起点JOINに出ない+cancelledはparticipants=None・latches/は禁止ファイル〕— 05 §6追記時に「cancelled詳細のparticipants=null」明記を提案。docs改版候補
+  - supervisor独立検証(test-ci初回)で3件失敗→直接修正2f30139+47fa22d(いずれもテストコード側: ①calibration匿名化後の行はlatch_id=NULLで行id事前取得へ=検証方法の誤り ②test_17のclose_latches_on_delete参照3箇所をintents/deletion移設へ=計画§4.3の検索対象漏れ ③actual_responses順序比較がfixture実態と逆 ④async generator unpack)。実装コードは無欠陥
+  - **test_matching_jev test_6のJSTタイムボムを06b5fb8で解消**(固定+14hはJST 0〜10時台の実行で翌日を跨がない・M2 ws-5由来・朝のtest-ciで顕在化→現在時刻からJST翌日0時+1秒の差分advanceへ)
+  - 検証最終値: **マージ後main test-ci 1460 passed**(=1427+19+14・試験2スキップ込み)・unit 1207・lint緑・basename一意・head=0006不変・残存ゼロ(m3ws6-・deleted:%ユーザー・30日超過候補)
 - ws-7 / 計画 aabc60d(3,762行超・Task 1〜15〔backend案X→frontend一式〕・機械チェック合格: frontend新規10テストファイル既存9と衝突なし・81件無傷の構造保証・§9-6適合措置2件〔attendanceの窓判定はサーバ409へ一本化〕・試験数整合〔backend unit 8+integration 1=1196/1436・frontend 81+86=167〕)/ 2026-10-01実装着手(worktree wA・a3-ws7)
 
 ## G2判定資料(2026-09-30・承認済み)
