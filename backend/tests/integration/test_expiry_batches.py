@@ -357,9 +357,11 @@ async def test_1_intent_expiry_transition_and_event(api_client, db_engine, field
 async def test_2_latches_expiry_matrix(api_client, db_engine, field):
     """①proposed×deadline切れ②proposed×expires切れ③candidate(nearby含む)×
     expires切れ④期限前proposed不変⑤candidate×暫定deadline過去・expires未来は
-    expiredにしない(candidateはresponse_deadlineを判定に使わない・引用#2。
-    ①②③のexpiredをクローズ検知が観測してl5は同tickdrainでproposedへ昇格 —
-    design §2.7「期限切れで空いた枠の同tick昇格」の設計どおり)。"""
+    expiredにしない(candidateはresponse_deadlineを判定に使わない・引用#2)。
+    FakeClockはset/advanceしないためrun_once内nowがsweeper構築時のlast_tickと
+    同一時刻になり(created_at > last_tick不成立・§9-11)クローズ検知は観測せず
+    同tick昇格は起きない。本番SystemClockではnow>last_tickが常に成立し昇格する
+    (design §2.7の同tick昇格の実証は試験7〔実時間イベント経路〕が担う)。"""
     clock = FakeClock(SystemClock().now())
     base = clock.now()
     ha = await _user(api_client, field)
@@ -418,8 +420,10 @@ async def test_2_latches_expiry_matrix(api_client, db_engine, field):
         l2: "expired",
         l3: "expired",
         l4: "proposed",
-        # l5は期限切れで破棄されない(⑤の本質)・空いた枠を同tickdrainが昇格
-        l5: "proposed",
+        # l5は期限切れで破棄されない(⑤の本質)。FakeClock固定では
+        # created_at == last_tick となりクローズ検知が観測しないため
+        # 同tick昇格も起きない(candidateのまま・上記docstring参照)
+        l5: "candidate",
     }
     for latch_id, expected in got.items():
         assert await _status(db_engine, "latches", latch_id) == expected, latch_id
@@ -439,7 +443,7 @@ async def test_2_latches_expiry_matrix(api_client, db_engine, field):
     from_statuses = {str(r[0]): r[1] for r in rows}
     assert from_statuses[l1] == "proposed"
     assert from_statuses[l3] == "candidate"
-    # l4(期限前)へのイベント書き込みなし・l5の遷移はcandidate→proposedのみ
+    # l4(期限前)・l5(暫定deadline過去)ともイベント書き込みなし
     # (to_status='expired'がない=暫定deadlineでの誤破棄なし・引用#2)
     async with db_engine.begin() as conn:
         res = await conn.execute(
@@ -450,7 +454,7 @@ async def test_2_latches_expiry_matrix(api_client, db_engine, field):
             {"ids": [uuid_mod.UUID(x) for x in (l4, l5)]},
         )
         rows = res.fetchall()
-    assert rows == [("proposed",)]  # l4=0行・l5=昇格1行のみ
+    assert rows == []  # l4・l5とも0行(期限前は対象外・誤破棄なし)
 
 
 # --- 試験3: 期限切れ直後の回答は409(api Clock=SystemClock基準・引用#3) ---
