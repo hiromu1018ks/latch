@@ -7,6 +7,8 @@
 SQLはtext()生SQL・時刻はClock明示値(§2グローバル制約)。
 M2 ws-4: embedding_completed 種別で matching_hook(Layer 1〜3)を
 同一トランザクションで呼ぶ。
+M3 ws-6: 削除Event(deleted)の処理は物理削除カスケード
+(intents/deletion.py)へ委譲(候補のclosed化から変更)。
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from latch.core.clock import Clock
 from latch.events import IncomingEvent
+from latch.intents.deletion import cascade_delete_intent
 from latch.intents.events import (
     EVENT_CREATED,
     EVENT_DELETED,
@@ -91,63 +94,6 @@ _MARK_QUARANTINED = text("""
     SET status = 'quarantined', processed_at = :now,
         payload = payload || CAST(:extra AS jsonb)
     WHERE id = :row_id AND status = 'pending'
-""")
-_CLOSE_CANDIDATES = text("""
-    UPDATE match_candidates
-    SET status = 'closed', updated_at = :now
-    WHERE (intent_a_id = :intent_id OR intent_b_id = :intent_id)
-      AND status <> 'closed'
-""")
-_CLOSE_GROUPS = text("""
-    UPDATE group_candidates
-    SET status = 'closed', updated_at = :now
-    WHERE CAST(:intent_id AS uuid) = ANY(intent_ids)
-      AND status <> 'closed'
-""")
-
-# M3 ws-1 design §2.7: 削除Intentを含むlatchesのクローズ・matched解散。
-# 開いている行を先にSELECT FOR UPDATE(from_status確定)→条件付きUPDATE。
-_SELECT_OPEN_LATCHES_ON_DELETE = text("""
-    SELECT id, status FROM latches
-    WHERE CAST(:intent_id AS uuid) = ANY(intent_ids)
-      AND status IN ('candidate', 'proposed', 'partial_accept')
-    ORDER BY id
-    FOR UPDATE
-""")
-_CANCEL_LATCH_ON_DELETE = text("""
-    UPDATE latches SET status = 'cancelled'
-    WHERE id = CAST(:latch_id AS uuid)
-      AND status IN ('candidate', 'proposed', 'partial_accept')
-    RETURNING id
-""")
-_SELECT_MATCHED_LATCHES_ON_DELETE = text("""
-    SELECT id, intent_ids FROM latches
-    WHERE CAST(:intent_id AS uuid) = ANY(intent_ids)
-      AND status = 'matched'
-    ORDER BY id
-    FOR UPDATE
-""")
-_CANCEL_MATCHED_LATCH_ON_DELETE = text("""
-    UPDATE latches SET status = 'cancelled'
-    WHERE id = CAST(:latch_id AS uuid) AND status = 'matched'
-    RETURNING id
-""")
-# 解散時の残る参加Intent復帰(引用#9・#20: expires_at経過→expired・それ以外→active)
-_RESTORE_INTENTS_ON_DISSOLVE = text("""
-    UPDATE intents
-    SET status = CASE WHEN expires_at <= CAST(:now AS timestamptz)
-                      THEN 'expired' ELSE 'active' END,
-        updated_at = CAST(:now AS timestamptz)
-    WHERE id = ANY(CAST(:ids AS uuid[])) AND status = 'matched'
-    RETURNING id, status
-""")
-# latch_status_events挿入(latch_engine._INSERT_LATCH_EVENTと同一SQL。
-# stage1はworker/matchingをimportしない現状構成を維持するため自前定数)
-_INSERT_LATCH_EVENT_SQL = text("""
-    INSERT INTO latch_status_events
-        (latch_id, from_status, to_status, user_id, created_at)
-    VALUES (CAST(:latch_id AS uuid), CAST(:from_status AS text),
-            :to_status, CAST(:user_id AS uuid), CAST(:now AS timestamptz))
 """)
 
 
@@ -329,11 +275,9 @@ class Stage1:
                     )
             # version == intents.version → 種別処理(§2.5)
             if event_type == EVENT_DELETED:
-                await conn.execute(
-                    _CLOSE_CANDIDATES, {"intent_id": intent_id, "now": now}
-                )
-                await conn.execute(_CLOSE_GROUPS, {"intent_id": intent_id, "now": now})
-                await close_latches_on_delete(conn, intent_id, now)
+                # 物理削除カスケード(M3 ws-6・08 §2.5。移設済みの
+                # close_latches_on_delete含む・cascade内で呼ばれる)
+                await cascade_delete_intent(conn, intent_id, now)
             elif event_type in (EVENT_CREATED, EVENT_UPDATED):
                 if self._embedding_hook is not None:
                     await self._embedding_hook(event_type, intent_id, version)
@@ -450,58 +394,3 @@ class Stage1:
                     "created_at": now,
                 },
             )
-
-
-async def close_latches_on_delete(
-    conn: AsyncConnection, intent_id: uuid.UUID, now
-) -> None:
-    """削除Event処理のlatches波及(M3 ws-1 design §2.7・引用#19・#20)。
-
-    1) 開いているlatches(candidate/proposed/partial_accept)→cancelled+events
-       (保留=latches.status=candidateの無効化・06 §1の未実装追随)
-    2) matched行→cancelled(解散・05 §6遷移表)+events+残る参加Intentの復帰
-       (削除されたIntent自身はintents側でcancelled遷移済みのため対象外)。
-    削除Intentを含むlatchesへ回答が走るレースは回答UPDATEのNOT EXISTS検査
-    (design §2.2手順4)で封じている。イベントのuser_idはNULL(システム起因)。
-    """
-    open_rows = (
-        await conn.execute(_SELECT_OPEN_LATCHES_ON_DELETE, {"intent_id": intent_id})
-    ).fetchall()
-    for latch_id, from_status in open_rows:
-        res = await conn.execute(
-            _CANCEL_LATCH_ON_DELETE, {"latch_id": _coerce_uuid(latch_id)}
-        )
-        if res.first() is None:
-            continue  # 同一tx内で他経路が閉じた(通常ない防御)
-        await conn.execute(
-            _INSERT_LATCH_EVENT_SQL,
-            {
-                "latch_id": latch_id,
-                "from_status": from_status,
-                "to_status": "cancelled",
-                "user_id": None,
-                "now": now,
-            },
-        )
-    matched_rows = (
-        await conn.execute(_SELECT_MATCHED_LATCHES_ON_DELETE, {"intent_id": intent_id})
-    ).fetchall()
-    for latch_id, intent_ids in matched_rows:
-        res = await conn.execute(
-            _CANCEL_MATCHED_LATCH_ON_DELETE, {"latch_id": _coerce_uuid(latch_id)}
-        )
-        if res.first() is None:
-            continue
-        await conn.execute(
-            _INSERT_LATCH_EVENT_SQL,
-            {
-                "latch_id": latch_id,
-                "from_status": "matched",
-                "to_status": "cancelled",
-                "user_id": None,
-                "now": now,
-            },
-        )
-        rest = [i for i in (_coerce_uuid(x) for x in intent_ids) if i != intent_id]
-        if rest:
-            await conn.execute(_RESTORE_INTENTS_ON_DISSOLVE, {"ids": rest, "now": now})
