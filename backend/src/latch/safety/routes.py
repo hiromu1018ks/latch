@@ -67,9 +67,14 @@ class BlockListResponse(BaseModel):
 
 
 class ReportRequest(BaseModel):
-    """POST /v1/reports のbody(design §2.5)。latch_idは省略可(引用#6)。"""
+    """POST /v1/reports のbody(design §2.5・ws-7案X§2.7)。
 
-    reportee_id: uuid.UUID
+    reportee_idは省略可(latch_idからサーバが通報者以外を解決 — 1対1
+    解決・グループは422)。latch_idも省略可だが両方の省略はserviceが
+    422へ。提案段階(1対1)の通報が省略形。
+    """
+
+    reportee_id: uuid.UUID | None = None
     latch_id: uuid.UUID | None = None
     reason: ReportReason
 

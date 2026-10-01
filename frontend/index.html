@@ -19,9 +19,15 @@
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="wordmark" href="#main" aria-label="LATCH ホーム">LATCH</a>
+        <a class="wordmark" href="#/" aria-label="LATCH ホーム">LATCH</a>
         <span class="topbar-divider" aria-hidden="true"></span>
-        <button class="intent-count" type="button">Intent <span>3件</span></button>
+        <div class="popover-wrap">
+          <button class="intent-count" id="intentCountButton" type="button" aria-expanded="false">Intent <span>0件</span></button>
+          <div class="popover intent-popover" id="intentPopover" hidden>
+            <p class="popover-kicker">ACTIVE INTENT</p>
+            <div class="intent-list" id="intentList"></div>
+          </div>
+        </div>
 
         <div class="topbar-actions">
           <button class="icon-button theme-button" id="themeButton" type="button" aria-label="ダークモードに切り替える" aria-pressed="false">
@@ -62,7 +68,9 @@
         <p class="token-error" id="tokenError" role="status" hidden></p>
       </section>
 
-      <main id="main" class="workspace">
+      <main id="main">
+        <div id="homeScreen">
+          <section class="workspace" aria-label="新しいIntent">
         <section class="intent-editor" aria-labelledby="page-title">
           <div class="section-kicker"><span></span>NEW INTENT</div>
           <h1 id="page-title">やりたいことを、<br class="mobile-break" />一文だけ。</h1>
@@ -156,6 +164,20 @@
 
           <p class="form-error" id="globalError" role="alert" hidden></p>
         </aside>
+          </section>
+
+          <section class="latch-section" id="candidateSection" aria-labelledby="candidateTitle">
+            <div class="section-heading"><span aria-hidden="true"></span><h2 id="candidateTitle"><b>LATCH</b>候補</h2></div>
+            <div class="latch-list" id="candidateList"></div>
+            <button class="more-button" id="moreButton" type="button" hidden>もっと見る</button>
+          </section>
+
+          <section class="latch-section" id="matchedSection" aria-labelledby="matchedTitle">
+            <div class="section-heading"><span aria-hidden="true"></span><h2 id="matchedTitle">成立済み<b>LATCH</b></h2></div>
+            <div class="latch-list" id="matchedList"></div>
+          </section>
+        </div>
+        <section class="detail-view" id="detailScreen" hidden></section>
       </main>
 
       <div class="toast" id="toast" role="status" hidden>
@@ -176,6 +198,7 @@
           <button class="return-button" id="returnButton" type="button">Intentを確認する</button>
         </section>
       </div>
+      <div class="modal-backdrop" id="reportModal" role="presentation" hidden></div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>
