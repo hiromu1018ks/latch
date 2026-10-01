@@ -251,3 +251,81 @@ def test_sql_bind_params_compile():
         compiled = str(stmt.compile(dialect=postgresql.dialect()))
         for key in keys:
             assert f":{key}" not in compiled, (key, compiled)
+
+
+# --- 13. ExpirySweeper注入(M3 ws-2・design §2.1案A・§4.1統合回帰のunit側) ---
+
+
+class RecordingSweeper:
+    """ExpirySweeperスタブ(run_onceの呼び出し記録)。"""
+
+    def __init__(self, error: Exception | None = None):
+        self.calls = 0
+        self._error = error
+
+    async def run_once(self) -> int:
+        self.calls += 1
+        if self._error is not None:
+            raise self._error
+        return 0
+
+
+async def test_sweeper_runs_first_when_injected(monkeypatch):
+    """注入あり→sweeper.run_onceがcatch-up/Bucket投入の前に実行される
+    (design §2.1「先頭実行により期限切れ確定がパイプラインの重さに
+    後ろ倒しにならない」)。"""
+    _patch_select(monkeypatch, catchup=[IID1], bucket=())
+    order: list[str] = []
+
+    class OrderedSweeper(RecordingSweeper):
+        async def run_once(self) -> int:
+            order.append("sweeper")
+            return await super().run_once()
+
+    sweeper = OrderedSweeper()
+    pipeline = RecordingPipeline()
+
+    async def ordered_pipeline(intent_id):
+        order.append("pipeline")
+        await pipeline(intent_id)
+
+    runner = ReevalRunner(
+        engine=object(),
+        clock=FakeClock(NOW),
+        guard=None,
+        pipeline=ordered_pipeline,
+        interval_sec=60.0,
+        batch_limit=50,
+        sweeper=sweeper,
+    )
+    done = await runner.run_once()
+    assert done == 1
+    assert order == ["sweeper", "pipeline"]  # sweeper先行
+    assert sweeper.calls == 1
+
+
+async def test_sweeper_none_keeps_current_behavior(monkeypatch):
+    """注入なし(既定None)→従動作。既存構成(test_k_limits_e2e等)は無傷。"""
+    _patch_select(monkeypatch, catchup=[IID1], bucket=())
+    pipeline = RecordingPipeline()
+    runner = _runner(pipeline=pipeline)  # 既存ヘルパ(sweeper渡さず)
+    assert await runner.run_once() == 1
+    assert pipeline.calls == [IID1]
+
+
+async def test_sweeper_error_propagates_from_run_once(monkeypatch):
+    """sweeper.run_onceの例外は握らず伝播(run()が握って次周期で回収)。"""
+    import pytest
+
+    _patch_select(monkeypatch, catchup=[IID1], bucket=())
+    runner = ReevalRunner(
+        engine=object(),
+        clock=FakeClock(NOW),
+        guard=None,
+        pipeline=RecordingPipeline(),
+        interval_sec=60.0,
+        batch_limit=50,
+        sweeper=RecordingSweeper(error=RuntimeError("boom")),
+    )
+    with pytest.raises(RuntimeError):
+        await runner.run_once()
