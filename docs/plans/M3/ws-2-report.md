@@ -42,8 +42,9 @@
 e4a0e68 feat: add ResetJob run_once with JST midnight key cleanup
 5728db7 feat: add JevCostStore cleanup methods for reset job
 0aecbfb refactor: make LatchEngine._drain public as drain for batch callers
+365c122 fix: test_2のl5期待をcandidateへ戻す(supervisor直接修正)
 ```
-(本報告コミットを含め10件)
+(本報告コミットを含め11件)
 
 ## 補足(詰まった点・判断した点があれば)
 
@@ -92,3 +93,20 @@ e4a0e68 feat: add ResetJob run_once with JST midnight key cleanup
 - 1回目の `make test` 実行時に共有ci-dbが一時downしておりtest_worker.py系9件が
   ConnectionRefusedで失敗した(DB healthy後の再実行で1062 passed=main同数。
   コード不備ではない)。
+
+### supervisor検証(2026-10-01・マージ前)
+
+- **test_2の試験設計欠陥を検出・修正(365c122)**: supervisor独立実行(2回)で
+  test_2のみ失敗(1 failed, 1300 passed)・単体実行でも再現=決定的失敗で、
+  実装申告の1301 passedと不一致だった。原因: FakeClock(set/advanceなし)では
+  run_once内nowがsweeper構築時のlast_tickと同一時刻になり、クローズ検知
+  (created_at > last_tick・計画§9-11)が①〜③のイベントを観測しないためdrain
+  が走らずl5はcandidateのまま(**製品コードは正しい挙動**。本番SystemClockでは
+  now>last_tickが常に成立しdesign §2.7の同tick昇格が起こる)。上記補足6の
+  「実際l5はproposedになった」観察は、常設worker稼働中の個別実行でworker側
+  sweeper(SystemClock・実時間tick)が①〜③を観測してdrainを回した**偽観察**と
+  判断し、期待を計画書当初どおりcandidateへ戻した(同tick昇格の実証は試験7の
+  実時間イベント経路が担う)。試験3〜10・unit全件は申告どおり最初から緑。
+- 修正後フルtest-ci: **1301 passed(exit 0・375秒)**=unit 1100+integration 201。
+- 残存確認: users/intents/latches/latch_status_events/notificationsとも
+  0件(subject prefix m3ws2-)。lint再実行緑(237 files formatted)。
