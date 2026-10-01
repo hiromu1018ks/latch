@@ -250,11 +250,11 @@ async def test_1_e2e_push_sent_and_listed(api_client, db_engine, field, caplog):
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client, db_engine, ha, _structured(start=start, expires=expires)
     )
-    hb, _ = await _user(api_client, field)
+    hb = await _user(api_client, field)
     b = await _intent(
         api_client, db_engine, hb, _structured(start=start, expires=expires)
     )
@@ -319,9 +319,9 @@ async def test_2_push_body_identical_across_visibility_and_category(
         ),
     ]
     for sa, sb in cases:
-        ha, _ = await _user(api_client, field)
+        ha = await _user(api_client, field)
         a = await _intent(api_client, db_engine, ha, sa)
-        hb, _ = await _user(api_client, field)
+        hb = await _user(api_client, field)
         b = await _intent(api_client, db_engine, hb, sb)
         async with db_engine.begin() as conn:
             await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
@@ -340,11 +340,11 @@ async def test_3_muted_participant_no_push(api_client, db_engine, field, caplog)
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client, db_engine, ha, _structured(start=start, expires=expires)
     )
-    hb, _ = await _user(api_client, field)
+    hb = await _user(api_client, field)
     b = await _intent(
         api_client,
         db_engine,
@@ -386,14 +386,14 @@ async def test_4a_list_desc_order_with_id_tiebreak(api_client, db_engine, field)
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client, db_engine, ha, _structured(start=start, expires=expires)
     )
     # latchを2つ作る(相手を変える・同一起点ユーザー)
     partners = []
     for _ in range(2):
-        hb, _ = await _user(api_client, field)
+        hb = await _user(api_client, field)
         partners.append(
             await _intent(
                 api_client,
@@ -421,12 +421,12 @@ async def test_4b_pagination_and_validation_errors(api_client, db_engine, field)
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client, db_engine, ha, _structured(start=start, expires=expires)
     )
     for _ in range(2):
-        hb, _ = await _user(api_client, field)
+        hb = await _user(api_client, field)
         b = await _intent(
             api_client, db_engine, hb, _structured(start=start, expires=expires)
         )
@@ -463,14 +463,14 @@ async def test_4c_hidden_row_proposal_minimal(api_client, db_engine, field):
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client,
         db_engine,
         ha,
         _structured(start=start, expires=expires, visibility="hidden_until_match"),
     )
-    hb, _ = await _user(api_client, field)
+    hb = await _user(api_client, field)
     b = await _intent(
         api_client, db_engine, hb, _structured(start=start, expires=expires)
     )
@@ -493,11 +493,11 @@ async def test_5a_read_marks_and_idempotent(api_client, db_engine, field):
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client, db_engine, ha, _structured(start=start, expires=expires)
     )
-    hb, _ = await _user(api_client, field)
+    hb = await _user(api_client, field)
     b = await _intent(
         api_client, db_engine, hb, _structured(start=start, expires=expires)
     )
@@ -524,11 +524,11 @@ async def test_5b_read_not_found_for_others_and_missing(api_client, db_engine, f
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client, db_engine, ha, _structured(start=start, expires=expires)
     )
-    hb, _ = await _user(api_client, field)
+    hb = await _user(api_client, field)
     b = await _intent(
         api_client, db_engine, hb, _structured(start=start, expires=expires)
     )
@@ -555,11 +555,11 @@ async def test_6_attendance_push_and_list(api_client, db_engine, field, caplog):
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client, db_engine, ha, _structured(start=start, expires=expires)
     )
-    hb, _ = await _user(api_client, field)
+    hb = await _user(api_client, field)
     b = await _intent(
         api_client, db_engine, hb, _structured(start=start, expires=expires)
     )
@@ -635,14 +635,14 @@ async def test_7a_nearby_push_notification(api_client, db_engine, field, caplog)
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client,
         db_engine,
         ha,
         _structured(start=start, expires=expires, notification_level="nearby_also"),
     )
-    hb, _ = await _user(api_client, field)
+    hb = await _user(api_client, field)
     b = await _intent(
         api_client, db_engine, hb, _structured(start=start, expires=expires)
     )
@@ -669,7 +669,7 @@ async def test_7b_nearby_daily_limit_no_push(api_client, db_engine, field, caplo
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
-    ha, _ = await _user(api_client, field)
+    ha = await _user(api_client, field)
     a = await _intent(
         api_client,
         db_engine,
@@ -692,7 +692,7 @@ async def test_7b_nearby_daily_limit_no_push(api_client, db_engine, field, caplo
                     "now": clock.now(),
                 },
             )
-    hb, _ = await _user(api_client, field)
+    hb = await _user(api_client, field)
     b = await _intent(
         api_client, db_engine, hb, _structured(start=start, expires=expires)
     )
