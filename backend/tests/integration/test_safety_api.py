@@ -4,7 +4,7 @@
 fixtureで直接INSERT(ws-4のtest_chat_attendance_api.pyと同型・パイプライン
 を走らせない)。ブロック登録・解除・通報は実API(D-23 cancelled化・キャッシュ
 DELを含む本体が対象のため)。時間値はnow相対(タイムボム回避)。teardownは
-FK順+blocks/reports+Redisキーblk:u:掃除(SUBJECT_PREFIX=m3ws5-)。
+FK順+blocks/reports+Redisキーblk:u:掃除(SUBJECT_PREFIX=m3ws7-)。
 """
 
 import asyncio
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.integration
 
 CATEGORY = "meal"
 BASE_HOURS = 120
-SUBJECT_PREFIX = "m3ws5-"
+SUBJECT_PREFIX = "m3ws7-"
 
 
 @pytest.fixture
@@ -656,3 +656,71 @@ async def test_9_reports_latch_participation(api_client, db_engine, field):
         },
     )
     assert r3.status_code == 201, r3.text
+
+
+# -- 試験10: 案X reportee_id省略+解決(ws-7 design §6-5) --
+
+
+async def test_10_reports_reportee_resolution(api_client, db_engine, field):
+    """案X: 省略+1対1latchで相手に解決201・グループ422・両方省略422・
+    非参加422・latch不在404・明示経路無傷(ws-7 design §2.7)。"""
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    h3 = await _user(api_client, field)
+    i1 = await _intent(api_client, h1["headers"])
+    i2 = await _intent(api_client, h2["headers"])
+    i3 = await _intent(api_client, h3["headers"])
+    pair = await _latch(db_engine, [i1["id"], i2["id"]])
+    group = await _latch(
+        db_engine, [i1["id"], i2["id"], i3["id"]], gid=str(uuid_mod.uuid4())
+    )
+    # 省略+1対1 → 201・reportee_idはh2へ解決される
+    r1 = await api_client.post(
+        "/v1/reports",
+        headers=h1["headers"],
+        json={"latch_id": pair, "reason": "other"},
+    )
+    assert r1.status_code == 201, r1.text
+    async with db_engine.connect() as conn:
+        reportee = (
+            await conn.execute(
+                text("SELECT reportee_id FROM reports WHERE id = CAST(:r AS uuid)"),
+                {"r": r1.json()["report_id"]},
+            )
+        ).scalar_one()
+    assert str(reportee) == h2["id"]  # 通報者(h1)以外の1人
+    # 省略+グループlatch → 422(対象特定不能)
+    r2 = await api_client.post(
+        "/v1/reports",
+        headers=h1["headers"],
+        json={"latch_id": group, "reason": "other"},
+    )
+    assert r2.status_code == 422
+    assert r2.json()["error"]["code"] == "VALIDATION_ERROR"
+    # 両方省略 → 422
+    r3 = await api_client.post(
+        "/v1/reports", headers=h1["headers"], json={"reason": "other"}
+    )
+    assert r3.status_code == 422
+    # 省略+自分非参加のlatch → 422
+    other = await _latch(db_engine, [i2["id"], i3["id"]])
+    r4 = await api_client.post(
+        "/v1/reports",
+        headers=h1["headers"],
+        json={"latch_id": other, "reason": "other"},
+    )
+    assert r4.status_code == 422
+    # 省略+latch不在 → 404
+    r5 = await api_client.post(
+        "/v1/reports",
+        headers=h1["headers"],
+        json={"latch_id": str(uuid_mod.uuid4()), "reason": "other"},
+    )
+    assert r5.status_code == 404
+    # 明示経路(reportee_id指定)は現行どおり201
+    r6 = await api_client.post(
+        "/v1/reports",
+        headers=h1["headers"],
+        json={"reportee_id": h2["id"], "latch_id": pair, "reason": "other"},
+    )
+    assert r6.status_code == 201, r6.text
