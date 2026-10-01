@@ -334,6 +334,7 @@
   - supervisor独立検証: worktree unit 1187 passed再現・コードレビュー(BlockCache双方向判定+RedisError DBフォールバック・D-23 cancelled化のuser_id=blockerイベント・冪等201)すべて計画§2どおり
   - **マージ後main test-ci 1426 passed一発グリーン**(=1378+48・api・worker再ビルド後)・unit 1187・lint緑・basename一意・head=0006不変・依存追加なし・残存ゼロ(DB 3テーブル+Redis blk:u:キー6本はteardown後のキャッシュ再構築分を掃除・TTL自然消滅系だが基準どおり0化)
   - **ws-3で発覚した「計画書テストコード欠陥」系統は今回はゼロ** — agent2へのテストコード自己見直し指示+計画Self-Reviewでの既存試験影響事前特定が効いた
+- 学習資産追従: ws-5分 c061fdb(第21章「安全を守る仕組み: ブロックと通報」+Lab 8〔ブロック登録→チャット409→redis-cliでキャッシュ観察→解除復帰→cancelled化・通報まで〕新設・既存4ファイル更新〔README順路・00-environment〔1187/1426・safety/追加〕・第20章〔キャッシュ差し替え追従〕・Lab 7〔blocks直接INSERT→登録API経由へ書き換え=キャッシュが直接INSERTを隠すため〕〕。Lab 8は全行程実機検証・make test 1187 passed確認)/ 2026-10-01
 
 ## G2判定資料(2026-09-30・承認済み)
 
