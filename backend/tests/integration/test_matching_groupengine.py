@@ -898,8 +898,8 @@ async def test_7_visibility_branch(
     assert latch[3]["headcount"] == 3
 
 
-async def test_8_delete_event_closes_group(api_client, db_engine, field):
-    """削除Eventで集合close(引用#15): stage1の_CLOSE_GROUPS。"""
+async def test_8_delete_event_deletes_group(api_client, db_engine, field):
+    """削除Eventで集合・ペア行の物理削除(M3 ws-6・08 §2.5・処理済み含む)。"""
     clock = _clock()
     start = _future(BASE_HOURS)
     expires = _future(FAR_EXPIRES_H)
@@ -937,10 +937,10 @@ async def test_8_delete_event_closes_group(api_client, db_engine, field):
     assert result.kind == "processed"
 
     gc2 = await _group_of(db_engine, ids)
-    assert gc2 is not None and gc2[1] == "closed"
-    # 構成ペア行は _CLOSE_CANDIDATES の既存動作どおりclosed
+    assert gc2 is None  # group_candidates行ごと消える(物理削除)
+    # 構成ペア行も削除(処理済み含む全削除 — design §2.1)
     row = await _pair_row(db_engine, a, b)
-    assert row is not None and row[1] == "closed"
+    assert row is None
 
 
 async def test_9_idempotent_double_handle(
