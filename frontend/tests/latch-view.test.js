@@ -99,6 +99,12 @@ describe("visibility分岐(design §2.4・引用#5)", () => {
   it("最小形はnull(条件サマリを組まない)", () => {
     expect(conditionSummaryLines(latch({}, minimalProposal))).toBeNull();
   });
+
+  it("area_name nullは行を組まない(「null」という文字列を出さない)", () => {
+    expect(
+      conditionSummaryLines(latch({}, { ...fullProposal, area_name: null })),
+    ).toEqual(["2026-10-01 20:00", "2人", "軽く飲めるお店", "ひとり5,000円まで"]);
+  });
 });
 
 describe("一致度(design §2.4・生スコアは出さない)", () => {

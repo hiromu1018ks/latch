@@ -57,6 +57,7 @@ export const groupNeedText = (latch) =>
 
 // 条件サマリ(全フィールド版のみ・design §2.4末尾の書式)。
 // raw_text・NG条件・座標・距離は組まない(引用#20の#22・#23)。
+// area_name等のnullは行ごと組まない(逆ジオコーディング不成立の状態)。
 export const conditionSummaryLines = (latch) => {
   if (isMinimalProposal(latch)) return null;
   const p = latch.proposal;
@@ -68,7 +69,7 @@ export const conditionSummaryLines = (latch) => {
       primary: p.category_primary,
       secondary: p.category_secondary,
     }),
-  ];
+  ].filter((line) => line != null && line !== "");
   if (p.budget && p.budget.max != null) {
     lines.push(`ひとり${Number(p.budget.max).toLocaleString("ja-JP")}円まで`);
   }

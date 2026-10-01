@@ -44,8 +44,13 @@ export const createChat = ({ client, latch, meId, mount }) => {
   };
 
   const render = () => {
+    // 保持(messages)は昇順の全量・「先頭を省略して表示」はここだけ(design §2.6)。
+    // 保持側を切り詰めると差分同期のid排除と不整合を起こす(順序崩壊)。
+    const visible = messages.length > MAX_PAGES * PAGE_LIMIT
+      ? messages.slice(messages.length - MAX_PAGES * PAGE_LIMIT)
+      : messages;
     listEl.replaceChildren(
-      ...messages.map((m) => {
+      ...visible.map((m) => {
         const row = document.createElement("div");
         const mine = m.sender_id === meId;
         row.className = `chat-message ${mine ? "chat-mine" : "chat-theirs"}`;
@@ -65,13 +70,15 @@ export const createChat = ({ client, latch, meId, mount }) => {
   const sync = async () => {
     let pages = 0;
     // cursorなし=最古頁・next_cursorは「より新しい頁」への不透明文字列。
-    // 初回はnext_cursorが尽きるまで進めて会話の末尾(最新)まで取得する。
-    // 終端(next_cursor=null)到達後の再同期も最古頁からになるため、追記は
-    // id重複排除で行う(design §2.6「保持しているcursorから差分を追記」)。
+    // 初回はnext_cursorが尽きるまで(上限5頁)進めて会話の末尾(最新)まで。
+    // 終端(next_cursor=null)に達したらcursorを「当該頁の取得に使った位置」へ
+    // 戻す — 以降の差分同期はその頁を取り直し、既知はid排除・新着だけが
+    // 追記される(design §2.6「保持している最終頁のcursorから差分を追記」)。
     const seen = new Set(messages.map((m) => m.id));
     do {
-      const query = cursor
-        ? `?limit=${PAGE_LIMIT}&cursor=${encodeURIComponent(cursor)}`
+      const requestCursor = cursor;
+      const query = requestCursor
+        ? `?limit=${PAGE_LIMIT}&cursor=${encodeURIComponent(requestCursor)}`
         : `?limit=${PAGE_LIMIT}`;
       const data = await client.call(
         "GET",
@@ -83,12 +90,13 @@ export const createChat = ({ client, latch, meId, mount }) => {
           seen.add(m.id);
         }
       }
+      if (data.next_cursor === null) {
+        cursor = requestCursor; // 次回の差分同期はこの頁の位置から
+        break; // 終端 — これ以上進む頁はない
+      }
       cursor = data.next_cursor;
       pages += 1;
-    } while (cursor && pages < MAX_PAGES);
-    if (messages.length > MAX_PAGES * PAGE_LIMIT) {
-      messages = messages.slice(messages.length - MAX_PAGES * PAGE_LIMIT);
-    }
+    } while (pages < MAX_PAGES);
     render();
   };
 

@@ -67,6 +67,15 @@ describe("latchCardHtml", () => {
     expect(html).toContain("2026-10-01 20:00 天文館周辺"); // 見出し=日時+場所
     expect(html).toContain("一致度 高");
   });
+
+  it("area_name nullの見出しは日時のみ(人数を行に混ぜない)", () => {
+    const html = latchCardHtml(
+      latch("proposed", { proposal: { ...fullProposal, area_name: null } }),
+      "2026-10-01T09:00:00+09:00",
+    );
+    expect(html).toContain("2026-10-01 20:00");
+    expect(html).not.toContain("2026-10-01 20:00 2人");
+  });
 });
 
 describe("createHome(design §2.2)", () => {

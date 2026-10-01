@@ -189,4 +189,29 @@ describe("chat(デザイン§2.6)", () => {
       .toBe('<img src=x onerror="alert(1)">');
     chat.stop();
   });
+
+  it("500件超の会話でも順序が崩れない(先頭省略は表示のみ・差分同期は最終頁cursorから)", async () => {
+    vi.useFakeTimers();
+    const PAGE = 100;
+    const TOTAL = 800;
+    // cursor=cN は「頁Nの次(=頁N+1)」の位置を指す不透明文字列のモック
+    const callImpl = async (method, path) => {
+      const m = /cursor=c(\d+)/.exec(decodeURIComponent(path));
+      const page = m ? Number(m[1]) + 1 : 1;
+      return {
+        items: Array.from({ length: PAGE }, (_, j) =>
+          message(`m${(page - 1) * PAGE + j + 1}`, PEER, `msg${(page - 1) * PAGE + j + 1}`)),
+        next_cursor: page * PAGE < TOTAL ? `c${page}` : null,
+      };
+    };
+    const { mount, chat } = mountChat(matchedLatch, callImpl);
+    await chat.start(); // 頁1〜5(m1..m500)
+    await vi.advanceTimersByTimeAsync(30_000); // poll1: 頁6〜8で終端まで
+    await vi.advanceTimersByTimeAsync(30_000); // poll2: 差分同期(順序崩壊の回帰対象)
+    const bodies = [...mount.querySelectorAll(".chat-body")].map((el) => el.textContent);
+    expect(bodies.length).toBe(500); // 表示は末尾500件(先頭省略)
+    expect(bodies[0]).toBe("msg301");
+    expect(bodies.at(-1)).toBe("msg800"); // 昇順が維持される
+    chat.stop();
+  });
 });

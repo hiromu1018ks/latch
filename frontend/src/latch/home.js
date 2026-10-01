@@ -30,8 +30,13 @@ export const splitStatuses = (items) => ({
 
 export const latchCardHtml = (latchItem, nowIso) => {
   const lines = conditionSummaryLines(latchItem);
-  // 最小形(hidden_until_match)は条件サマリを出さない(引用#5)
-  const title = lines ? `${lines[0]} ${lines[1] ?? ""}`.trim() : HIDDEN_PROPOSAL_TEXT;
+  // 最小形(hidden_until_match)は条件サマリを出さない(引用#5)。見出しは
+  // 日時+場所(area_name nullなら日時のみ — 行indexに依存しない)
+  const title = lines
+    ? [latchItem.proposal.time_summary, latchItem.proposal.area_name]
+        .filter(Boolean)
+        .join(" ")
+    : HIDDEN_PROPOSAL_TEXT;
   const deadline = CANDIDATE_STATUSES.has(latchItem.status)
     ? `<span class="latch-card-deadline">${escapeHtml(
         remainingTimeText(latchItem.response_deadline, nowIso),
