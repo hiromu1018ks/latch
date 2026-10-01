@@ -565,7 +565,7 @@ class LatchEngine:
             rows = await _select_target_rows(conn, org.intent_id, org.version)
         for row in rows:
             await self._evaluate_pair(org, row)
-        await self._drain()
+        await self.drain()
 
     async def _evaluate_pair(self, org, row: LatchTargetRow) -> None:
         """1ペア: 材料読取(tx前)→tx1(H再検証+退避つきUPDATE+D-07+latches+events)。
@@ -809,8 +809,13 @@ class LatchEngine:
                     conn, p.user_id, NOTIFICATION_PROPOSAL, latch_id, now
                 )
 
-    async def _drain(self) -> None:
+    async def drain(self) -> None:
         """保留キューを提示順に走査し各行へtry_promote(評価経路のたび・引用#17)。
+
+        M3 ws-2(design §2.6): 0時リセット完了時・クローズ検知(sweeper §2.7)からも
+        呼ばれるpublic IF。差分化(引用#12)に正確に対応する — Jevを呼ばず
+        提示順の再計算のみ(try_promoteの行単位上限判定が上限内の件数のみ処理し、
+        残りは次トリガーへ委ねる)。
 
         大量保留時は行単位の上限判定で自然に上限内のみ処理され、残りは
         次トリガーへ(design §2.10-8: Worker 1構成を前提に行ロックのみ)。

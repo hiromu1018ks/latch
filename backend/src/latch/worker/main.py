@@ -31,7 +31,9 @@ from latch.worker.matching import run_candidate_retrieval
 from latch.worker.matching.group_engine import GroupEngine
 from latch.worker.matching.latch_engine import LatchEngine
 from latch.worker.reeval import ReevalRunner
+from latch.worker.reset import ResetJob
 from latch.worker.stage1 import Stage1
+from latch.worker.sweeper import ExpirySweeper
 
 logger = logging.getLogger(__name__)
 
@@ -181,12 +183,20 @@ class Worker:
                     latch=self._latch,
                 )
             # ReevalRunner DI(design §2.8): catch-up・Bucket再評価の周期task。
-            # pipelineはengineを閉包した直接投入(_run_direct_pipeline)
+            # pipelineはengineを閉包した直接投入(_run_direct_pipeline)。
+            # M3 ws-2(design §2.1案A): ExpirySweeperを注入し60秒tickを1本化
+            # (latches・Intent期限切れ・catch-upの切替・停止は単一ジョブ)
             if self._reeval_runner is None and redis_client is not None:
 
                 async def _pipeline(intent_id: uuid.UUID) -> None:
                     await self._run_direct_pipeline(engine, intent_id)
 
+                sweeper = ExpirySweeper(
+                    engine=engine,
+                    clock=self.clock,
+                    latch=self._latch,
+                    batch_limit=self.settings.sweeper_batch_limit,
+                )
                 self._reeval_runner = ReevalRunner(
                     engine=engine,
                     clock=self.clock,
@@ -194,14 +204,30 @@ class Worker:
                     pipeline=_pipeline,
                     interval_sec=self.settings.reeval_runner_interval_sec,
                     batch_limit=self.settings.reeval_runner_batch_limit,
+                    sweeper=sweeper,
                 )
             reeval_runner = self._reeval_runner
+            # ResetJob DI(M3-4・design §2.5): 次JST 0時の掃除+drain。60秒系
+            # とは別周期の独立task。cost_storeはJevWorker用と別インスタンス
+            # (掃除専用・redis接続は共用)。sleepは渡さない(asyncio.sleep=本番待機)
+            reset_job = None
+            if redis_client is not None:
+                reset_job = ResetJob(
+                    cost_store=JevCostStore(redis_client),
+                    clock=self.clock,
+                    latch=self._latch,
+                    retry_sec=self.settings.reset_retry_sec,
+                )
             await bus.ensure()
             self._subscription = await bus.subscribe(self._dispatch)
             debouncer_task = asyncio.create_task(debouncer.run(stop=self._stop))
             backfill_task = asyncio.create_task(backfill.run(stop=self._stop))
+            reeval_task = None
             if reeval_runner is not None:
                 reeval_task = asyncio.create_task(reeval_runner.run(stop=self._stop))
+            reset_task = None
+            if reset_job is not None:
+                reset_task = asyncio.create_task(reset_job.run(stop=self._stop))
             logger.info("worker started (app_env=%s)", self.settings.app_env)
             await self._stop.wait()
             # graceful shutdown: 窓内entryは解放せず未ack再配信へ(design §2.3)
@@ -211,6 +237,8 @@ class Worker:
             await backfill_task
             if reeval_runner is not None:
                 await reeval_task
+            if reset_job is not None:
+                await reset_task
             logger.info("worker stopped")
         finally:
             if owns_engine and engine is not None:

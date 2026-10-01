@@ -121,3 +121,10 @@ class Settings(BaseSettings):
     # (60秒はexpiry_sweeperと同一周期・06 §9。初期値。計測後に調整)
     reeval_runner_interval_sec: int = 60
     reeval_runner_batch_limit: int = 50
+
+    # --- 期限切れバッチ・リセットジョブ(M3 ws-2・06 §6・04 §5)---
+    # expiry_sweeper(latches/Intent期限切れ・completed遷移)の1tickあたり処理
+    # 上限。周期はreeval_runner_interval_secと同一スケジューラ(60秒・06 §6)
+    sweeper_batch_limit: int = 50
+    # リセットジョブ失敗時の再試行待機秒(04 §5「翌0時まで放置しない」)
+    reset_retry_sec: int = 300

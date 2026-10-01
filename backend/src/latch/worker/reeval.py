@@ -5,7 +5,11 @@ catch-upスキャン(expires_atまで2時間以内のactive)と30分Bucket再評
 reevalガード(ws-4資産・入口で共用)を通してpipelineを直接投入する
 (Eventは発行しない — 同一versionのidempotencyキー衝突のため・06 §9)。
 sleep-first・stop追従・run_once内の例外は握らずrun()が握って次周期で回収。
-M3-3がexpiry_sweeperを同一周期へ統合できるよう独立クラスにする。
+
+M3 ws-2(design §2.1案A): ExpirySweeperをオプション注入(sweeper=Noneで
+従動作)。run_onceの**先頭**でsweeper.run_once()を実行してからcatch-up/
+Bucket投入へ(期限切れ確定がパイプラインの重さに後ろ倒しにならない)。
+60秒tickの1本化でlatches・Intent期限切れ・catch-upの切替・停止は単一ジョブ。
 """
 
 from __future__ import annotations
@@ -93,6 +97,7 @@ class ReevalRunner:
         interval_sec: float,
         batch_limit: int,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        sweeper=None,  # ExpirySweeper | None(M3 ws-2・design §2.1案A)
     ) -> None:
         self._engine = engine
         self._clock = clock
@@ -101,10 +106,16 @@ class ReevalRunner:
         self._interval_sec = interval_sec
         self._batch_limit = batch_limit
         self._sleep = sleep
+        self._sweeper = sweeper  # ExpirySweeper | None(M3 ws-2・design §2.1案A)
         self._last_bucket: datetime | None = None  # 前回処理Bucket(メモリ保持)
 
     async def run_once(self) -> int:
-        """1周期分: catch-up抽出→Bucket処理→直接投入。例外は握らない。"""
+        """1周期分: sweeper(注入時)→catch-up抽出→Bucket処理→直接投入。
+
+        例外は握らない(sweeper内も含む・design §2.1)。
+        """
+        if self._sweeper is not None:
+            await self._sweeper.run_once()  # 先頭(期限切れ確定を先行)
         now = self._clock.now()
         ids = await _select_catchup_targets(self._engine, now, self._batch_limit)
         b_start = latch_calc.bucket_start(now)

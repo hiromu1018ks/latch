@@ -949,7 +949,7 @@ async def test_drain_promotes_in_order(monkeypatch):
 
     monkeypatch.setattr(le, "_drain_candidates", fake_drain_ids)
     monkeypatch.setattr(le.LatchEngine, "try_promote", fake_try)
-    await _engine()._drain()
+    await _engine().drain()
     assert order == [_uid(11), _uid(12), _uid(13)]
 
 
@@ -966,7 +966,7 @@ async def test_drain_passes_threshold_and_excludes_nearby(monkeypatch):
 
     monkeypatch.setattr(le, "_drain_candidates", fake_drain_ids)
     clock = FakeClock(NOW)
-    await _engine(clock=clock)._drain()
+    await _engine(clock=clock).drain()
     assert captured == [(NOW, le.latch_calc.LATCH_THRESHOLD)]
     assert "l.score >= CAST(:threshold AS numeric)" in str(le._DRAIN_CANDIDATES)
 

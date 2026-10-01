@@ -11,6 +11,8 @@ def test_settings_defaults(monkeypatch):
     assert s.log_level == "INFO"
     assert s.reeval_runner_interval_sec == 60  # M2 ws-6(design §2.8)
     assert s.reeval_runner_batch_limit == 50
+    assert s.sweeper_batch_limit == 50  # M3 ws-2(06 §6・期限切れバッチ1tick上限)
+    assert s.reset_retry_sec == 300  # M3 ws-2(04 §5・リセット失敗時の再試行間隔)
 
 
 def test_settings_env_override_with_latch_prefix(monkeypatch):
