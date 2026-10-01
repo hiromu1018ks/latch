@@ -67,7 +67,7 @@ class DependencyUnavailableError(LatchesError):
 class ChatReadonlyError(LatchesError):
     """チャット読取専用状態への送信(05 §2・08 D-23・design §2.1案A)。
 
-    matched以外の全状態(completed/cancelled後の送信关闭を含む)と
+    matched以外の全状態(completed/cancelled後の送信閉止を含む)と
     blocks適用中の両方に使う単一コード(03 §6・08 §2.5の統一・承認事項②)。
     """
 

@@ -316,7 +316,7 @@ JevカウンタはRedisのINCRでした。ところが今回は違います。**
 変わるだけなので、「0時にカウンタを
 ゼロに戻すジョブ」は不要です。
 
-この検査を含む `try_promote` の手順を、順に追います(`latch_engine.py:746` から)。
+この検査を含む `try_promote` の手順を、順に追います(`latch_engine.py:767` から)。
 
 ```text
 1. latches行を SELECT ... FOR UPDATE で行ロックして読む(candidateであることを確認)
@@ -329,6 +329,9 @@ JevカウンタはRedisのINCRでした。ところが今回は違います。**
 8. latch_status_events(candidate→proposed)とnotifications(通知する人だけ)を
    同じトランザクションで書く
 ```
+
+(手順8のあと、トランザクションを抜けたところでプッシュ送信が1回走ります。
+通知行を書く経路に届け方を足したのは第19章の実装で、この章では読みません)
 
 手順7の「条件つきUPDATE」は第13章13.6の再登場です。`UPDATE ... WHERE id = ... AND
 status = 'candidate'` と書いておけば、行数が0のとき=他の経路が先に遷移させた
