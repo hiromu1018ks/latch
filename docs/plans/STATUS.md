@@ -348,6 +348,11 @@
   - **test_matching_jev test_6のJSTタイムボムを06b5fb8で解消**(固定+14hはJST 0〜10時台の実行で翌日を跨がない・M2 ws-5由来・朝のtest-ciで顕在化→現在時刻からJST翌日0時+1秒の差分advanceへ)
   - 検証最終値: **マージ後main test-ci 1460 passed**(=1427+19+14・試験2スキップ込み)・unit 1207・lint緑・basename一意・head=0006不変・残存ゼロ(m3ws6-・deleted:%ユーザー・30日超過候補)
 - ws-7 / 計画 aabc60d(3,762行超・Task 1〜15〔backend案X→frontend一式〕・機械チェック合格: frontend新規10テストファイル既存9と衝突なし・81件無傷の構造保証・§9-6適合措置2件〔attendanceの窓判定はサーバ409へ一本化〕・試験数整合〔backend unit 8+integration 1=1196/1436・frontend 81+86=167〕)/ 2026-10-01実装着手(worktree wA・a3-ws7)
+- ws-7 / マージ e8417e1(実装はd23f6c8まで・18コミット)/ docs/plans/M3/ws-7-report.md / 2026-10-02
+  - agent3実装(50分+usage limit中断→再開3分19秒で完走)。中断点からの再開指示で未コミット4ファイルを仕上げ・最終レビューでチャット再同期の二重連結(concat→id重複排除+終端cursor戻し)を自力修正
+  - 検証実績: backend unit 1196 passed・frontend **170 passed**(計画167+最終レビューの回帰ピン3)・npm run build成功
+  - supervisor独立検証(test-ci初回)で1件失敗 → b0bc437: test_10のグループfixtureが存在しないランダムuuidをgroup_candidate_idへ渡すFK違反=テストコードの誤り(group_candidates実INSERTへ)。実装コードは無欠陥。test_safety_api test_6の単体実行失敗は試験間依存ノイズ(test-ci全体で安定グリーン)
+  - 検証最終値: **マージ後main test-ci 1469 passed**(=1460+9)・lint緑・残存ゼロ(m3ws7-・reports・Redis blk:u:24キー掃除)・head=0006不変・依存追加なし
 
 ## G2判定資料(2026-09-30・承認済み)
 
