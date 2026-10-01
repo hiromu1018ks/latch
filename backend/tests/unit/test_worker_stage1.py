@@ -13,8 +13,8 @@ import pytest
 
 from latch.core.clock import FakeClock
 from latch.events import IncomingEvent
+from latch.intents import deletion as deletion_mod
 from latch.settings import Settings
-from latch.worker import stage1 as stage1_mod
 from latch.worker.stage1 import (
     BACKOFF_SEC,
     PayloadInvalid,
@@ -333,46 +333,45 @@ async def test_process_locked_row_not_pending_returns_without_side_effects():
     assert len(engine.conn.calls) == 1  # intents照会もUPDATEもしていない
 
 
-async def test_process_deleted_closes_candidates():
-    """deleted → match_candidatesの無効化SQL(status='closed'・06 §1)。"""
+async def test_process_deleted_deletes_match_candidates():
+    """deleted → match_candidates物理削除(08 §2.5・M3 ws-6・処理済み含む)。"""
     engine = ScriptedEngine(
         [
             FakeResult(("pending",)),
             FakeResult((1,)),
-            FakeResult(None, 0),  # 候補UPDATE(0件でも正常 — design §2.5)
-            FakeResult(None, 0),  # group_candidatesUPDATE(ws-7・0件でも正常)
-            FakeResult((), 0),  # latches(開いている)SELECT(M3 ws-1・0行)
-            FakeResult((), 0),  # latches(matched)SELECT(M3 ws-1・0行)
+            FakeResult(None, 0),  # match_candidates DELETE(0件でも正常)
+            FakeResult(None, 0),  # latches group_candidate_id NULL化
+            FakeResult(None, 0),  # group_candidates DELETE
+            FakeResult((), 0),  # 開いているlatches SELECT(0行)
+            FakeResult((), 0),  # matched latches SELECT(0行)
+            FakeResult(None, 0),  # calibration匿名化
+            FakeResult(None, 0),  # intents DELETE
             FakeResult(None, 1),  # processed
         ]
     )
     await _stage1(engine).process(
         _event("deleted", IID, 1), ("deleted", IID, 1), ROW_ID
     )
-    close_sql = _sql(engine.conn, 2)
-    assert "match_candidates" in close_sql and "closed" in close_sql
+    delete_sql = _sql(engine.conn, 2)
+    assert "DELETE FROM match_candidates" in delete_sql
+    assert "status" not in delete_sql  # 処理済みstatus問わず全行
     assert engine.conn.calls[2][1]["intent_id"] == IID
-    # group_candidatesの無効化はmatch_candidatesの直後(§9-10)
-    gc_sql = _sql(engine.conn, 3)
-    assert "group_candidates" in gc_sql and "closed" in gc_sql
-    assert "ANY(intent_ids)" in gc_sql
-    assert engine.conn.calls[3][1]["intent_id"] == IID
+    assert "DELETE FROM intents" in _sql(engine.conn, 8)  # Intent行ごと
 
 
-async def test_process_deleted_closes_group_candidates():
-    """deleted → group_candidatesの無効化SQL(status='closed'・06 §1・design §2.7-5)。
-
-    実行順序: match_candidates→group_candidates(集合がlatchesのFK元のため
-    group_candidatesは閉じるのみ・latches・ペア行は触らない)。
-    """
+async def test_process_deleted_detaches_groups_before_delete():
+    """deleted → group FK解消(latches NULL化)→group_candidates物理削除の順序。"""
     engine = ScriptedEngine(
         [
             FakeResult(("pending",)),
             FakeResult((1,)),
-            FakeResult(None, 0),  # match_candidates UPDATE
-            FakeResult(None, 0),  # group_candidates UPDATE(本試験の主対象)
-            FakeResult((), 0),  # latches(開いている)SELECT(M3 ws-1)
-            FakeResult((), 0),  # latches(matched)SELECT(M3 ws-1)
+            FakeResult(None, 0),  # match_candidates DELETE
+            FakeResult(None, 0),  # latches NULL化(本試験の主対象)
+            FakeResult(None, 0),  # group_candidates DELETE
+            FakeResult((), 0),  # 開いているlatches SELECT
+            FakeResult((), 0),  # matched latches SELECT
+            FakeResult(None, 0),  # calibration匿名化
+            FakeResult(None, 0),  # intents DELETE
             FakeResult(None, 1),  # processed
         ]
     )
@@ -380,16 +379,14 @@ async def test_process_deleted_closes_group_candidates():
         _event("deleted", IID, 1), ("deleted", IID, 1), ROW_ID
     )
     assert engine.begins == 1  # 同一トランザクション
-    gc_sql = _sql(engine.conn, 3)
-    assert "UPDATE group_candidates" in gc_sql
-    assert "SET status = 'closed'" in gc_sql
-    assert "CAST(:intent_id AS uuid) = ANY(intent_ids)" in gc_sql
-    assert "status <> 'closed'" in gc_sql
-    assert engine.conn.calls[3][1]["intent_id"] == IID
-    assert engine.conn.calls[3][1]["now"] is not None
-    # 実行順序: calls[2]=match_candidates→calls[3]=group_candidates
-    assert "match_candidates" in _sql(engine.conn, 2)
-    assert "group_candidates" in _sql(engine.conn, 3)
+    detach_sql = _sql(engine.conn, 3)
+    assert "UPDATE latches" in detach_sql
+    assert "group_candidate_id = NULL" in detach_sql
+    assert "ANY(intent_ids)" in detach_sql
+    delete_sql = _sql(engine.conn, 4)
+    assert "DELETE FROM group_candidates" in delete_sql
+    # 実行順序: calls[3]=latches NULL化 → calls[4]=group削除(RESTRICT回避)
+    assert "DELETE FROM intents" in _sql(engine.conn, 8)
 
 
 async def test_embedding_hook_called_for_created_and_updated_only():
@@ -597,7 +594,7 @@ async def test_close_latches_on_delete_cancels_open_latches():
             FakeResult((), 0),  # matched SELECT(0行)
         ]
     )
-    await stage1_mod.close_latches_on_delete(conn, IID, S1_NOW)
+    await deletion_mod.close_latches_on_delete(conn, IID, S1_NOW)
     select_sql = str(conn.calls[0][0])
     assert "status IN ('candidate', 'proposed', 'partial_accept')" in select_sql
     assert "CAST(:intent_id AS uuid) = ANY(intent_ids)" in select_sql
@@ -621,7 +618,7 @@ async def test_close_latches_on_delete_dissolves_matched_and_restores():
             FakeResult((REST_ID, "active"), 1),  # 復帰UPDATE
         ]
     )
-    await stage1_mod.close_latches_on_delete(conn, IID, S1_NOW)
+    await deletion_mod.close_latches_on_delete(conn, IID, S1_NOW)
     restore_sql = str(conn.calls[4][0])
     assert "CASE WHEN expires_at <= CAST(:now AS timestamptz)" in restore_sql
     assert "THEN 'expired'" in restore_sql

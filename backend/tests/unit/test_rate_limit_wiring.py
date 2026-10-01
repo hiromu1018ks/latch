@@ -67,7 +67,7 @@ def test_all_v1_routes_are_rate_limited():
         "/v1/notifications/{notification_id}/read": 1,  # M3 ws-3(既読)
         "/v1/reports": 1,  # M3 ws-5(通報)
         "/v1/users": 1,
-        "/v1/users/me": 1,
+        "/v1/users/me": 2,  # GET + DELETE(M3 ws-6・退会)
         "/v1/users/me/blocks": 1,  # M3 ws-5(ブロック一覧)
         "/v1/users/{user_id}/block": 2,  # M3 ws-5(登録+解除)
     }

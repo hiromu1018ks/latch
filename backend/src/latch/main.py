@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse
 from latch.auth.errors import AuthError
 from latch.auth.routes import logout_router, public_router
 from latch.auth.service import build_auth_service, make_user_lookup
+from latch.auth.sessions import SessionStore
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.core.deps import get_clock
@@ -85,9 +86,10 @@ async def _lifespan(app: FastAPI):
         return
     settings: Settings = app.state.settings
     redis_client = None
-    if build_auth or build_rate_limit or build_safety:
+    if build_auth or build_rate_limit or build_safety or build_users:
         # Redisはauth(失効リスト)・レート制限カウンタ・ブロックキャッシュ(blk:)
-        # の共用(design §2.8・ws-5 §2.2)
+        # の共用(design §2.8・ws-5 §2.2)。M3 ws-6: 退会のセッション失効
+        # (SessionStore)もusers構築時に必要なため条件へ追加
         redis_client = aioredis.Redis.from_url(
             settings.redis_url, decode_responses=True
         )
@@ -116,7 +118,9 @@ async def _lifespan(app: FastAPI):
         )
     if build_users:
         app.state.users_service = make_user_service(
-            clock=app.state.clock, engine=engine
+            clock=app.state.clock,
+            engine=engine,
+            sessions=SessionStore(redis_client) if redis_client is not None else None,
         )
     if build_intents:
         app.state.intent_parse_service = make_intent_parse_service(

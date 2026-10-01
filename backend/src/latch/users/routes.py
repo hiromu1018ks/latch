@@ -1,6 +1,7 @@
 """usersルータ(M1 ws-1。05 第5節 認証・ユーザー系)。
 
 POST /v1/users(初回登録・201)と GET /v1/users/me(本人のみ・200)。
+DELETE /v1/users/me(退会・204・M3 ws-6 design §2.3)。
 ルータ単位で require_authenticated を付す(C3の強制方法 — 05 第5節冒頭)。
 profileの正規化(bio=None → bioキーなし)はこの層で行う(design §2.7)。
 ログはイベント名と結果/コードのみ — subject・claim値・display_nameは出さない
@@ -106,3 +107,14 @@ async def get_users_me(
         birth_date=me.birth_date,
         profile_complete=me.profile_complete,
     )
+
+
+@users_router.delete("/me", status_code=204)
+async def delete_users_me(
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[UserService, Depends(get_users_service)],
+) -> None:
+    """退会(M3 ws-6・design §2.3)。全Intentカスケード+ユーザー単位処理を
+    1トランザクションで同期実行し、コミット後にセッションを失効する。"""
+    await svc.delete_account(claims=claims)
+    logger.info("users.delete_me ok")

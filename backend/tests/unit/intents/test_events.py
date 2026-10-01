@@ -51,3 +51,10 @@ def test_insert_sql_pins_pending_status_literal():
     """status='pending'はSQLリテラル(design §2.2A)。"""
     assert "'pending'" in str(events._INSERT_EVENT)
     assert "match_events" in str(events._INSERT_EVENT)
+
+
+def test_insert_event_sql_has_on_conflict_do_nothing():
+    """同一3点組の再発行(cancelled再DELETE等)はUNIQUE索引で挿入しない
+    (M3 ws-6 design §2.2・ux_match_events_idempotency)。"""
+    compiled = str(events._INSERT_EVENT)
+    assert "ON CONFLICT DO NOTHING" in compiled

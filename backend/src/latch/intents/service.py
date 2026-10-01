@@ -762,8 +762,17 @@ class IntentService:
             auth_provider=auth_provider,
             auth_subject=auth_subject,
             intent_id=intent_id,
-            allowed_from=("draft", "active", "paused"),
-            new_status="cancelled",  # 物理削除しない(05 §6・M3-8参照)
+            # 全status受理(matched=FR-19経路・expired=raw_text残存回避・
+            # cancelled=冪等再削除。M3 ws-6 design §2.2)
+            allowed_from=(
+                "draft",
+                "active",
+                "paused",
+                "matched",
+                "expired",
+                "cancelled",
+            ),
+            new_status="cancelled",  # Event処理(stage1)で物理削除(M3 ws-6)
             version_delta=0,
             event_type=EVENT_DELETED,
         )
