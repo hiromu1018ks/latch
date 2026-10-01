@@ -353,6 +353,7 @@
   - 検証実績: backend unit 1196 passed・frontend **170 passed**(計画167+最終レビューの回帰ピン3)・npm run build成功
   - supervisor独立検証(test-ci初回)で1件失敗 → b0bc437: test_10のグループfixtureが存在しないランダムuuidをgroup_candidate_idへ渡すFK違反=テストコードの誤り(group_candidates実INSERTへ)。実装コードは無欠陥。test_safety_api test_6の単体実行失敗は試験間依存ノイズ(test-ci全体で安定グリーン)
   - 検証最終値: **マージ後main test-ci 1469 passed**(=1460+9)・lint緑・残存ゼロ(m3ws7-・reports・Redis blk:u:24キー掃除)・head=0006不変・依存追加なし
+- 学習資産追従: ws-6/ws-7分 8a17dd4(第22章「消すことの設計: カスケードと匿名化」+Lab 9〔フロント3画面を動かす・preview実機〕新設・既存6ファイル更新〔README・00-environment〔unit 1215・frontend 170・test-ci 1469〕・第6章〔DELETEの2段構え〕・第8章〔170件〕・第20章〔画面から使える〕・第21章〔案X拡張〕〕。make test 1215 passed・frontend 170 passed確認)/ 2026-10-02
 
 ## G2判定資料(2026-09-30・承認済み)
 
