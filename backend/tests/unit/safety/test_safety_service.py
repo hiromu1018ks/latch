@@ -9,6 +9,7 @@ test_safety_api.py(integration)の担い。
 import base64
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -317,3 +318,139 @@ async def test_list_blocks_invalid_cursor_422(monkeypatch):
     monkeypatch.setattr(latches_store, "fetch_user_id", _ret(None))
     with pytest.raises(SafetyNotFoundError):
         await _svc().list_blocks(auth_provider="google", auth_subject="s")
+
+
+# -- report_user(design §2.5) --
+
+
+def _latch_row(intent_ids: list) -> SimpleNamespace:
+    """latches行スタブ(report_userはintent_idsのみ読む)。"""
+    return SimpleNamespace(id=uuid.uuid4(), intent_ids=intent_ids)
+
+
+async def test_report_self_422_and_reportee_missing_404(monkeypatch):
+    """自分自身は422・reportee不在は404(design §2.5)。"""
+    from latch.safety.errors import SafetyNotFoundError
+
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    with pytest.raises(SafetyValidationError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            reportee_id=ME,
+            reason="other",
+        )
+    monkeypatch.setattr(safety_store, "user_exists", _ret(False))
+    with pytest.raises(SafetyNotFoundError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            reportee_id=TARGET,
+            reason="other",
+        )
+
+
+async def test_report_latch_participation(monkeypatch):
+    """latch_id指定時: 不在404・自分非参加422・reportee非参加422(§2.5)。"""
+    from latch.safety.errors import SafetyNotFoundError
+
+    i1, i2, i3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    latch = _latch_row([i1, i2])  # 自分+第三者のlatch(TARGET非参加)
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(safety_store, "user_exists", _ret(True))
+
+    async def _participants(conn, intent_ids):
+        return [ME, i3]  # latchの参加者(TARGETを含まない)
+
+    monkeypatch.setattr(latches_store, "select_latch", _ret(latch))
+    monkeypatch.setattr(latches_store, "fetch_participant_user_ids", _participants)
+    # reporteeが非参加 → 422
+    with pytest.raises(SafetyValidationError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            reportee_id=TARGET,
+            latch_id=latch.id,
+            reason="other",
+        )
+    # 自分が非参加(他人のlatch) → 422
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(uuid.uuid4()))
+    with pytest.raises(SafetyValidationError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            reportee_id=TARGET,
+            latch_id=latch.id,
+            reason="other",
+        )
+    # latch不在 → 404
+    monkeypatch.setattr(latches_store, "select_latch", _ret(None))
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    with pytest.raises(SafetyNotFoundError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            reportee_id=TARGET,
+            latch_id=uuid.uuid4(),
+            reason="other",
+        )
+
+
+async def test_report_inserts_pending(monkeypatch):
+    """挿入はstatus='pending'固定・latch_id省略可(null・§2.5)。"""
+    i1, i2 = uuid.uuid4(), uuid.uuid4()
+    latch = _latch_row([i1, i2])
+    inserts: list[dict] = []
+
+    async def _insert_report(
+        conn, *, reporter, reportee, latch_id, reason, status, now
+    ):
+        inserts.append(
+            {
+                "reporter": reporter,
+                "reportee": reportee,
+                "latch_id": latch_id,
+                "reason": reason,
+                "status": status,
+                "now": now,
+            }
+        )
+        return uuid.uuid4()
+
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(safety_store, "user_exists", _ret(True))
+    monkeypatch.setattr(latches_store, "select_latch", _ret(latch))
+
+    async def _participants(conn, intent_ids):
+        return [ME, TARGET]
+
+    monkeypatch.setattr(latches_store, "fetch_participant_user_ids", _participants)
+    monkeypatch.setattr(safety_store, "insert_report", _insert_report)
+    await _svc().report_user(
+        auth_provider="google",
+        auth_subject="s",
+        reportee_id=TARGET,
+        latch_id=latch.id,
+        reason="inappropriate_content",
+    )
+    await _svc().report_user(
+        auth_provider="google", auth_subject="s", reportee_id=TARGET, reason="other"
+    )
+    assert inserts == [
+        {
+            "reporter": ME,
+            "reportee": TARGET,
+            "latch_id": latch.id,
+            "reason": "inappropriate_content",
+            "status": "pending",
+            "now": NOW,
+        },
+        {
+            "reporter": ME,
+            "reportee": TARGET,
+            "latch_id": None,  # 省略時はnull(引用#6)
+            "reason": "other",
+            "status": "pending",
+            "now": NOW,
+        },
+    ]

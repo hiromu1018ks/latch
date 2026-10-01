@@ -190,3 +190,44 @@ class BlockReportService:
             raise
         except Exception as exc:
             raise _wrap_unexpected(exc) from exc
+
+    async def report_user(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        reportee_id: uuid.UUID,
+        latch_id: uuid.UUID | None = None,
+        reason: str,
+    ) -> uuid.UUID:
+        """POST /v1/reports(design §2.5)。受付・記録のみ・pending固定。"""
+        try:
+            async with self._engine.begin() as conn:
+                me = await self._me(conn, auth_provider, auth_subject)
+                if reportee_id == me:
+                    raise SafetyValidationError("cannot report yourself")
+                if not await store.user_exists(conn, reportee_id):
+                    raise SafetyNotFoundError("user not found")
+                if latch_id is not None:
+                    row = await latches_store.select_latch(conn, latch_id)
+                    if row is None:
+                        raise SafetyNotFoundError("latch not found")
+                    participants = await latches_store.fetch_participant_user_ids(
+                        conn, row.intent_ids
+                    )
+                    if me not in participants or reportee_id not in participants:
+                        raise SafetyValidationError("not latch participants")
+                now = self._clock.now()
+                return await store.insert_report(
+                    conn,
+                    reporter=me,
+                    reportee=reportee_id,
+                    latch_id=latch_id,
+                    reason=reason,
+                    status=REPORT_STATUS_PENDING,
+                    now=now,
+                )
+        except SafetyError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
