@@ -364,6 +364,11 @@ async def test_1_delete_api_cascade_via_stage1(api_client, db_engine, field):
     await _latch(db_engine, [i1, i4], status="matched")  # m2(expired復帰検証用)
     # ⑤ calibration(actual_responsesにu1/u2のuser_id)
     await _calibration(db_engine, m1, [i1, i2], [u1["id"], u2["id"]])
+    cal_row_id = await _scalar(
+        db_engine,
+        "SELECT id FROM calibration_records WHERE latch_id = CAST(:l AS uuid)",
+        {"l": m1},
+    )
 
     resp = await api_client.delete(f"/v1/intents/{i1}", headers=u1["headers"])
     assert resp.status_code == 204, resp.text
@@ -446,12 +451,14 @@ async def test_1_delete_api_cascade_via_stage1(api_client, db_engine, field):
         )
         == "expired"
     )  # expires_at経過→expired復帰
-    # ⑤ calibration匿名化(D-13第一段)
+    # ⑤ calibration匿名化(D-13第一段)。匿名化でlatch_idはNULL化されるため
+    # 行はidで特定する(cascade前に控えた行id — supervisor修正: 元の検索は
+    # WHERE latch_id = m1 で、匿名化後は恒久的に見つからない)
     row = await _first(
         db_engine,
         "SELECT latch_id, intent_ids, actual_responses FROM"
-        " calibration_records WHERE latch_id = CAST(:l AS uuid)",
-        {"l": m1},
+        " calibration_records WHERE id = CAST(:c AS uuid)",
+        {"c": cal_row_id},
     )
     assert row is not None
     latch_id_v, intent_ids_v, responses = row

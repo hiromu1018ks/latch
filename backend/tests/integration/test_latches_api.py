@@ -809,7 +809,7 @@ async def test_16_detail_release_after_match(api_client, db_engine, field):
 
 
 async def test_17_deletion_closes_and_restores(api_client, db_engine, field):
-    from latch.worker import stage1 as stage1_mod
+    from latch.intents import deletion as deletion_mod
 
     h1 = await _user(api_client, field)
     h2 = await _user(api_client, field)
@@ -820,7 +820,7 @@ async def test_17_deletion_closes_and_restores(api_client, db_engine, field):
     del1 = await api_client.delete(f"/v1/intents/{i1['id']}", headers=h1)
     assert del1.status_code == 204
     async with db_engine.begin() as conn:
-        await stage1_mod.close_latches_on_delete(
+        await deletion_mod.close_latches_on_delete(
             conn, uuid_mod.UUID(i1["id"]), SystemClock().now()
         )
     assert (await _latch_row(db_engine, latch_open))["status"] == "cancelled"
@@ -842,7 +842,7 @@ async def test_17_deletion_closes_and_restores(api_client, db_engine, field):
             {"i": i3["id"]},
         )
     async with db_engine.begin() as conn:
-        await stage1_mod.close_latches_on_delete(
+        await deletion_mod.close_latches_on_delete(
             conn, uuid_mod.UUID(i3["id"]), SystemClock().now()
         )
     assert (await _latch_row(db_engine, latch_m))["status"] == "cancelled"
@@ -876,7 +876,7 @@ async def test_17_deletion_closes_and_restores(api_client, db_engine, field):
             {"i": i5["id"]},
         )
     async with db_engine.begin() as conn:
-        await stage1_mod.close_latches_on_delete(
+        await deletion_mod.close_latches_on_delete(
             conn, uuid_mod.UUID(i5["id"]), SystemClock().now()
         )
     async with db_engine.connect() as conn:
