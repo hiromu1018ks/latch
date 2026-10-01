@@ -13,7 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from latch.auth.deps import require_authenticated
 from latch.auth.tokens import AccessTokenClaims
 from latch.main import create_app
-from latch.safety.errors import SafetyNotFoundError
+from latch.safety.errors import SafetyNotFoundError, SafetyValidationError
 from latch.safety.store import BlockRow
 
 NOW = datetime(2026, 10, 1, 9, 0, 0, tzinfo=UTC)
@@ -173,3 +173,38 @@ async def test_domain_error_maps_to_envelope():
     body = resp.json()
     assert body["error"]["code"] == "NOT_FOUND"
     assert set(body["error"]) == {"code", "message", "details"}
+
+
+async def test_report_without_reportee_id_201():
+    """reportee_id省略bodyは201・serviceへreportee_id=Noneが渡る(案X)。"""
+    stub = StubService()
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(stub)), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/v1/reports",
+            json={"latch_id": str(uuid.uuid4()), "reason": "other"},
+        )
+    assert resp.status_code == 201, resp.text
+    assert resp.json() == {"report_id": REPORT_ID}
+    assert stub.calls[0][1]["reportee_id"] is None  # 省略がそのまま伝播
+    assert stub.calls[0][1]["latch_id"] is not None
+
+
+async def test_report_both_omitted_422():
+    """reportee_id・latch_idとも省略は422 VALIDATION_ERROR(§2.7条件1)。
+
+    検査はserviceが担うため、ここではenvelope変換までをピンする
+    (ServiceValidationError→422の契約)。
+    """
+
+    class _RaiseService(StubService):
+        async def report_user(self, **kwargs):
+            raise SafetyValidationError("reportee_id or latch_id required")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(_RaiseService())), base_url="http://test"
+    ) as client:
+        resp = await client.post("/v1/reports", json={"reason": "other"})
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"

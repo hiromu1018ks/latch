@@ -211,9 +211,7 @@ class BlockReportService:
             async with self._engine.begin() as conn:
                 me = await self._me(conn, auth_provider, auth_subject)
                 if reportee_id is None and latch_id is None:
-                    raise SafetyValidationError(
-                        "reportee_id or latch_id required"
-                    )
+                    raise SafetyValidationError("reportee_id or latch_id required")
                 if latch_id is not None:
                     row = await latches_store.select_latch(conn, latch_id)
                     if row is None:
