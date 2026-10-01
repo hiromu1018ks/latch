@@ -538,8 +538,17 @@ async def test_6_reselection_rules(
     await worker3.handle(uuid_mod.UUID(a2["id"]))
     rows2 = await _candidates(db_engine, a2["id"])
     assert rows2[0][0] == "skipped" and rows2[0][1] == "intent_daily"
-    # JST翌日へ進める(同日では再選択されない)
-    clock2.advance(timedelta(hours=14))
+    # JST翌日0時まで進める(同日では再選択されない)。固定+14hはJST 0〜10時台の
+    # 実行で翌日を跨がないタイムボムだった(supervisor修正: 現在時刻から翌日0時の
+    # 差分+1秒を進める)
+    import zoneinfo
+
+    _jst = zoneinfo.ZoneInfo("Asia/Tokyo")
+    _now_jst = clock2.now().astimezone(_jst)
+    _next_midnight = (_now_jst + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    clock2.advance(_next_midnight - _now_jst + timedelta(seconds=1))
     await worker3.handle(uuid_mod.UUID(a2["id"]))
     rows2 = await _candidates(db_engine, a2["id"])
     assert rows2[0][0] == "evaluated"  # updated_at < jst_day_start分岐
