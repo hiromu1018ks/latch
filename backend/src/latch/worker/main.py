@@ -21,6 +21,7 @@ from latch.events import EventBus, IncomingEvent, make_event_bus
 from latch.geo.service import GeoService
 from latch.intents.events import EVENT_CREATED, EVENT_EMBEDDING_COMPLETED, EVENT_UPDATED
 from latch.llm.gateway import build_worker_gateway
+from latch.notifications.sender import build_push_sender
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
 from latch.worker.cost import JevCostGuard, JevCostStore, ReevalGuard
@@ -167,11 +168,18 @@ class Worker:
                     guard=JevCostGuard(store=cost_store, clock=self.clock),
                     cost_store=cost_store,
                 )
+            # PushSender(M3 ws-3・design §2.1案A): StubPushSender(ドライラン)。
+            # LatchEngineとExpirySweeperの両方へ注入(notifications書き込みtxの
+            # コミット直後に送信・失敗はsender側で握る)。real(実FCM)はG3後
+            push = build_push_sender(self.clock, self.settings)
             # LatchEngine DI(M2 ws-6・design §2.1案A): JevWorker直後のLayer 5。
             # redis非依存のため常に構築(注入済み資産は再構築しない)
             if self._latch is None:
                 self._latch = LatchEngine(
-                    engine=engine, clock=self.clock, geo=GeoService(engine)
+                    engine=engine,
+                    clock=self.clock,
+                    geo=GeoService(engine),
+                    push=push,
                 )
             # GroupEngine DI(M2 ws-7・design §2.1案A): LatchEngine直後の
             # グループ生成・集約。latchはtry_promote委譲用(Noneなら提案化なし)
@@ -196,6 +204,7 @@ class Worker:
                     clock=self.clock,
                     latch=self._latch,
                     batch_limit=self.settings.sweeper_batch_limit,
+                    push=push,
                 )
                 self._reeval_runner = ReevalRunner(
                     engine=engine,

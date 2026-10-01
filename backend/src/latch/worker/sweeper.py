@@ -19,16 +19,18 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from latch.intents.events import EVENT_EXPIRED, insert_match_event
+from latch.notifications.types import NOTIFICATION_ATTENDANCE_REQUEST
+
+if TYPE_CHECKING:
+    from latch.notifications.sender import PushSender
 
 logger = logging.getLogger(__name__)
-
-# 実施自己申告の通知type(実装定義・supervisor承認②。媒体・読み取りはws-3)
-NOTIFICATION_ATTENDANCE_REQUEST = "attendance_request"
 
 # latches期限切れ対象抽出(06 §6の対象条件・design §2.2)。
 # ORDER BYは期限切れが古い順(response_deadline・expires_at・id)
@@ -198,11 +200,13 @@ class ExpirySweeper:
         clock,  # Clock(既存のClock型・core.clock)
         latch,  # LatchEngine(drain呼び出し・design §2.7)
         batch_limit: int,
+        push: PushSender | None = None,
     ) -> None:
         self._engine = engine
         self._clock = clock
         self._latch = latch
         self._batch_limit = batch_limit
+        self._push = push  # PushSender | None(未注入ならno-op・design §2.7)
         self._last_tick: datetime = clock.now()  # 起動時刻(§2.7)
 
     async def run_once(self) -> int:
@@ -295,7 +299,9 @@ class ExpirySweeper:
 
         cancelled(解散済み)はstatus='matched'でなく対象外=通知を送らない
         (引用#15・構造的担保)。参加者はintents.user_idを行順に全員へ(§9-9)。
+        M3 ws-3: プッシュ送信はtxコミット後(design §2.1案A)。
         """
+        targets: list[uuid.UUID] = []
         async with self._engine.begin() as conn:
             res = await conn.execute(
                 _COMPLETE_LATCH, {"latch_id": latch_id, "now": now}
@@ -327,5 +333,23 @@ class ExpirySweeper:
                         "now": now,
                     },
                 )
+                targets.append(_coerce_uuid(user_id))
             logger.info("sweeper.completed latch_id=%s", latch_id)
-            return True
+        await self._send_attendance_pushes(latch_id, targets)
+        return True
+
+    async def _send_attendance_pushes(
+        self, latch_id: uuid.UUID, targets: list[uuid.UUID]
+    ) -> None:
+        """txコミット後のattendanceプッシュ送信(design §2.1案A・§2.7)。
+
+        未注入(既存試験構成)はno-op。送信例外はsender側で握る。
+        """
+        if self._push is None:
+            return
+        for user_id in targets:
+            await self._push.send(
+                user_id=user_id,
+                notification_type=NOTIFICATION_ATTENDANCE_REQUEST,
+                latch_id=latch_id,
+            )

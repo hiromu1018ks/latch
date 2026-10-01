@@ -13,6 +13,8 @@ def test_settings_defaults(monkeypatch):
     assert s.reeval_runner_batch_limit == 50
     assert s.sweeper_batch_limit == 50  # M3 ws-2(06 §6・期限切れバッチ1tick上限)
     assert s.reset_retry_sec == 300  # M3 ws-2(04 §5・リセット失敗時の再試行間隔)
+    assert s.push_mode == "stub"  # M3 ws-3(design §3.2・realはG3後)
+    assert s.push_stub_delay_ms == 0  # M3 ws-3(スタブ遅延注入)
 
 
 def test_settings_env_override_with_latch_prefix(monkeypatch):
