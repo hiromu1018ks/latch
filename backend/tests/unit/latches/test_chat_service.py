@@ -5,8 +5,9 @@ storeはスタブ(monkeypatch差し替え)でSQLに依存しない(test_latches_
 test_chat_attendance_api.py(integration)の担い。
 """
 
+import base64
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
@@ -16,6 +17,7 @@ from latch.latches.errors import (
     AttendanceWindowClosedError,
     ChatReadonlyError,
     LatchesError,
+    LatchValidationError,
 )
 from latch.latches.schemas import (
     AttendanceRequest,
@@ -24,6 +26,11 @@ from latch.latches.schemas import (
     MessageListResponse,
     MessageOut,
     MessageRequest,
+)
+from latch.latches.service import (
+    decode_message_cursor,
+    encode_message_cursor,
+    is_attendance_window_open,
 )
 
 NOW = datetime(2026, 10, 1, 9, 0, 0, tzinfo=UTC)
@@ -83,3 +90,45 @@ def test_message_and_attendance_response_shapes():
     assert AttendanceRequest(attended=False).attended is False
     with pytest.raises(ValidationError):
         AttendanceRequest(attended="maybe")  # boolへパース不能な文字列は422
+
+
+def _b64(s: str) -> str:
+    """テスト用: 不透明cursor候補の生成(base64url・パディング除去)。"""
+    return base64.urlsafe_b64encode(s.encode()).rstrip(b"=").decode()
+
+
+def test_message_cursor_roundtrip():
+    """2キー(created_at,id)のencode/decode往復(design §2.1)。"""
+    created = NOW - timedelta(minutes=5)
+    mid = uuid.uuid4()
+    token = encode_message_cursor(created, mid)
+    assert decode_message_cursor(token) == (created, mid)
+    assert "=" not in token  # base64urlのパディング除去(不透明文字列)
+
+
+def test_message_cursor_invalid_422():
+    """形式不正cursorは422 VALIDATION_ERROR(latches/intentsと同型)。"""
+    for bad in (
+        _b64("no-pipe-here"),  # 区切りなし
+        _b64("not-a-datetime|" + str(uuid.uuid4())),  # 日時復元失敗
+        "!!!",  # base64urlとして不正
+    ):
+        with pytest.raises(LatchValidationError):
+            decode_message_cursor(bad)
+
+
+def test_is_attendance_window_open_boundaries():
+    """3日窓は閉区間: ちょうど3日まで受理・+1秒で閉じ(design §2.3手順5)。
+
+    Review Focus 3: 「以内」を開区間に読むとちょうど3日目の正当な
+    申告を409で捨てる。境界を明示ピンする。
+    """
+    assert is_attendance_window_open(NOW - timedelta(days=2), NOW) is True
+    assert (
+        is_attendance_window_open(NOW - timedelta(days=3), NOW) is True
+    )  # ちょうど3日
+    assert (
+        is_attendance_window_open(NOW - timedelta(days=3) - timedelta(seconds=1), NOW)
+        is False
+    )
+    assert is_attendance_window_open(None, NOW) is False  # completed_at未設定は閉

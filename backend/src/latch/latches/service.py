@@ -11,7 +11,7 @@ from __future__ import annotations
 import base64
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -346,6 +346,38 @@ def decode_cursor(cursor: str) -> tuple[datetime, datetime, uuid.UUID]:
         return datetime.fromisoformat(tt), datetime.fromisoformat(ct), uuid.UUID(lid)
     except (ValueError, UnicodeDecodeError) as exc:
         raise LatchValidationError("invalid cursor") from exc
+
+
+def encode_message_cursor(created_at: datetime, message_id: uuid.UUID) -> str:
+    """messagesのキーセットcursor 2キー(design §2.1): base64url("ISO|uuid")。
+
+    latches一覧のencode_cursor(3キー)の縮小版。ソート順
+    (created_at ASC, id ASC)をタプル比較で表現する。
+    """
+    raw = f"{created_at.isoformat()}|{message_id}"
+    return base64.urlsafe_b64encode(raw.encode()).rstrip(b"=").decode()
+
+
+def decode_message_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+    """messages cursor復元。形式不正は422 VALIDATION_ERROR(同型)。"""
+    padded = cursor + "=" * (-len(cursor) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        ct, mid = raw.split("|")
+        return datetime.fromisoformat(ct), uuid.UUID(mid)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise LatchValidationError("invalid cursor") from exc
+
+
+def is_attendance_window_open(completed_at: datetime | None, now: datetime) -> bool:
+    """D-09の3日窓(閉区間: now <= completed_at + 3日・design §2.3手順5)。
+
+    「3日以内」の以内を閉区間として読む(supervisor承認・design §2.3)。
+    completed_at未設定(None)は窓閉と扱う(通常起きない防御)。
+    """
+    if completed_at is None:
+        return False
+    return now <= completed_at + timedelta(days=3)
 
 
 def _yes_count(responses: list[dict]) -> int:
