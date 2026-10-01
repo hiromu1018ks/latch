@@ -26,13 +26,13 @@ describe("回答flow(design §2.5)", () => {
     await flow.submit("yes", buttons);
     await flow.submit("defer", buttons);
     await flow.submit("no", buttons);
-    expect(client.mock.calls[0]).toEqual([
+    expect(client.call.mock.calls[0]).toEqual([
       "POST",
       `/v1/latches/${LATCH_ID}/response`,
       { body: { response: "yes" } },
     ]);
-    expect(client.mock.calls[1][2]).toEqual({ body: { response: "defer" } });
-    expect(client.mock.calls[2][2]).toEqual({ body: { response: "no" } });
+    expect(client.call.mock.calls[1][2]).toEqual({ body: { response: "defer" } });
+    expect(client.call.mock.calls[2][2]).toEqual({ body: { response: "no" } });
   });
 
   it("pending中の二重送信を防ぐ(ボタンはdisabled)", async () => {
