@@ -267,8 +267,15 @@ async def _calibration_row(db_engine, latch_id: str, intent_ids: list[str]) -> N
         )
 
 
-async def _block(db_engine, blocker_intent: str, blocked_intent: str) -> None:
-    """blocks行を直接INSERT(ws-5を待たない・design §2.2/§4.2)。"""
+async def _block(
+    db_engine, blocker_intent: str, blocked_intent: str, redis_client=None
+) -> None:
+    """blocks行を直接INSERT(ws-5適用後の整合: blk:u:手動DELつき)。
+
+    API経由でない行追加はキャッシュ更新経由を通らないため、該当2
+    ユーザーのキーを手動DELして送信判定へ反映させる(design §2.2整合・
+    ws-5計画§4のスコープ外最小変更)。
+    """
     async with db_engine.begin() as conn:
         a = (
             await conn.execute(
@@ -290,6 +297,8 @@ async def _block(db_engine, blocker_intent: str, blocked_intent: str) -> None:
             ),
             {"a": a, "b": b, "now": SystemClock().now()},
         )
+    if redis_client is not None:
+        await redis_client.delete(f"blk:u:{a}", f"blk:u:{b}")
 
 
 async def _pair_eval(db_engine, a_id: str, b_id: str, *, wa: float, wb: float) -> None:
@@ -482,14 +491,14 @@ async def test_5_send_after_cancelled_409_get_ok(api_client, db_engine, field):
 # -- 試験6: blocks双方向 --
 
 
-async def test_6_block_both_directions_409(api_client, db_engine, field):
+async def test_6_block_both_directions_409(api_client, db_engine, redis_client, field):
     h1 = await _user(api_client, field)
     h2 = await _user(api_client, field)
     i1 = await _intent(api_client, h1)
     i2 = await _intent(api_client, h2)
     latch = await _latch(db_engine, [i1["id"], i2["id"]])
     await _send(api_client, h1, latch, "ブロック前")
-    await _block(db_engine, i1["id"], i2["id"])  # (A,B)のみ挿入
+    await _block(db_engine, i1["id"], i2["id"], redis_client)  # (A,B)のみ挿入
     ra = await _send(api_client, h1, latch, "x")
     assert ra.status_code == 409
     assert ra.json()["error"]["code"] == "CHAT_READONLY"
