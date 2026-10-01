@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **M3 ws-5(ブロック・通報)実装中**(2026-10-01ユーザーGoサイン。次はws-6∥ws-7)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
+- 次の着手: **M3 ws-6∥ws-7並行可**(ws-5完了〔2026-10-01・test-ci 1426 passed〕・着手はユーザーGoサイン待ち。実行wave: (ws-6 ∥ ws-7) → ws-8 → ws-9)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -328,6 +328,12 @@
   - 検証最終値: **マージ後main test-ci 1378 passed**(api再ビルド後・0006適用・=1301+41+36)・unit 1148 passed(=1100+29+19)・lint緑(254 files)・basename一意・alembic head=0006・依存追加なし・**残存ゼロ**(m3ws3-/m3ws4-・users/messages/blocks/calibration_records)・geo復旧実施(test-ci後のfixtureリロード対応)
 - 学習資産追従: ws-3/ws-4分 5e2766f(第19章「届ける: 通知の媒体と配信」・第20章「成立のあと: チャットと実施自己申告」+Lab 7〔成立のあとを一巡する〕新設・既存5ファイル更新〔README順路・00-environment〔件数1148/1378・notifications/追加〕・第14・18章・Lab 6〕。Lab 7は全手順実行検証・残存0確認。agent4がコード側瑕疵〔errors.py docstringの「关闭」混入〕を発見・supervisorが修正。make test 1148 passed・lint収束確認)/ 2026-10-01
 - ws-5 / 設計 3554fc9(supervisor承認: design §5の5件=①Layer 1はSQL直読みのまま〔08 §5.1との文言差分を明示残置〕②D-23対象にcandidate含み③解除後は現物参照④1対1ブロックでセッション失効不使用⑤display_name・reason英語コード・status値域は設計判断。解釈記録4件=⑦〜⑩はG3時確認事項へ追記済み。キャッシュ=blk:u:{user_id} JSON一覧read-through・TTL3600・コミット後DEL両者・Redis断はDBフォールバック)/ 2026-10-01
+- ws-5 / 計画 60b2b14(3,368行・Task 1〜8・実コード全文記載。機械チェック合格: **design §4.1のbasename衝突3件(test_store_sql/test_service/test_routes)を計画時検証で発見しtest_safety_接頭辞へ解消**・test_chat_attendance_api試験6がキャッシュ差し替えで壊れることを特定し_blockヘルパーへのblk:u:手動DELを計画に織り込み・試験数整合〔unit 39新規=1187・test-ci 1426=1378+48〕)/ 2026-10-01実装着手
+- ws-5 / マージ 5ca9620(実装は2d19506まで・8コミット)/ docs/plans/M3/ws-5-report.md / 2026-10-01
+  - agent3実装(17分33秒・8コミット・申告unit 1187 passed=期待どおり)。逸脱は機械的lint対応3件(zip strict・変数名E741・計画書の件数計測違い指摘)のみ
+  - supervisor独立検証: worktree unit 1187 passed再現・コードレビュー(BlockCache双方向判定+RedisError DBフォールバック・D-23 cancelled化のuser_id=blockerイベント・冪等201)すべて計画§2どおり
+  - **マージ後main test-ci 1426 passed一発グリーン**(=1378+48・api・worker再ビルド後)・unit 1187・lint緑・basename一意・head=0006不変・依存追加なし・残存ゼロ(DB 3テーブル+Redis blk:u:キー6本はteardown後のキャッシュ再構築分を掃除・TTL自然消滅系だが基準どおり0化)
+  - **ws-3で発覚した「計画書テストコード欠陥」系統は今回はゼロ** — agent2へのテストコード自己見直し指示+計画Self-Reviewでの既存試験影響事前特定が効いた
 
 ## G2判定資料(2026-09-30・承認済み)
 
