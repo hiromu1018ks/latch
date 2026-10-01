@@ -49,6 +49,7 @@ class LatchRow:
     proposal: dict
     group_candidate_id: uuid.UUID | None
     created_at: datetime
+    completed_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,13 @@ class MessageRow:
 
 
 @dataclass(frozen=True)
+class CalibrationAttendanceRow:
+    """attendance事前読取の1行(行の有無と回答済みの区別用・design §2.3手順7)。"""
+
+    actual_attended: bool | None
+
+
+@dataclass(frozen=True)
 class PageRow:
     """一覧の1行(design §2.8。target_timeはソートキー計算値)。"""
 
@@ -103,7 +111,7 @@ class PageRow:
 
 _SELECT_LATCH_FOR_UPDATE = text("""
     SELECT id, status, intent_ids, responses, response_deadline, expires_at,
-           score, proposal, group_candidate_id, created_at
+           score, proposal, group_candidate_id, created_at, completed_at
     FROM latches WHERE id = CAST(:latch_id AS uuid)
     FOR UPDATE
 """)
@@ -229,7 +237,7 @@ _SELECT_LATCHES_PAGE = text("""
 
 _SELECT_LATCH = text("""
     SELECT id, status, intent_ids, responses, response_deadline, expires_at,
-           score, proposal, group_candidate_id, created_at
+           score, proposal, group_candidate_id, created_at, completed_at
     FROM latches WHERE id = CAST(:latch_id AS uuid)
 """)
 
@@ -287,6 +295,24 @@ _SELECT_BLOCK_BETWEEN = text("""
     )
 """)
 
+# -- 実施自己申告(M3 ws-4 design §2.3) --
+
+_SELECT_CALIBRATION_ATTENDANCE = text("""
+    SELECT actual_attended FROM calibration_records
+    WHERE latch_id = CAST(:latch_id AS uuid)
+""")
+
+# 手順6: 条件付きUPDATE(二重回答の排他の本体・design §2.3)
+_UPDATE_ATTENDANCE = text("""
+    UPDATE calibration_records
+    SET actual_attended = :attended,
+        cancelled_after = NOT :attended,
+        updated_at = CAST(:now AS timestamptz)
+    WHERE latch_id = CAST(:latch_id AS uuid)
+      AND actual_attended IS NULL
+    RETURNING id
+""")
+
 
 def _latch_row(mapping) -> LatchRow:
     """_SELECT_LATCH(_FOR_UPDATE)のmappings行→LatchRow。"""
@@ -309,6 +335,7 @@ def _latch_row(mapping) -> LatchRow:
             else None
         ),
         created_at=mapping["created_at"],
+        completed_at=mapping["completed_at"],
     )
 
 
@@ -648,3 +675,30 @@ async def select_messages_page(
         },
     )
     return [_message_row(r) for r in res.mappings().all()]
+
+
+async def select_calibration_attendance(
+    conn: AsyncConnection, latch_id: uuid.UUID
+) -> CalibrationAttendanceRow | None:
+    """attendance事前読取(design §2.3手順7)。None=行そのものがない。"""
+    row = (
+        await conn.execute(_SELECT_CALIBRATION_ATTENDANCE, {"latch_id": latch_id})
+    ).first()
+    if row is None:
+        return None
+    return CalibrationAttendanceRow(actual_attended=row[0])
+
+
+async def update_attendance(
+    conn: AsyncConnection,
+    *,
+    latch_id: uuid.UUID,
+    attended: bool,
+    now: datetime,
+) -> bool:
+    """手順6: 条件付きUPDATE。False=影響0行(呼び出し側はAlreadySubmitted)。"""
+    res = await conn.execute(
+        _UPDATE_ATTENDANCE,
+        {"latch_id": latch_id, "attended": attended, "now": now},
+    )
+    return res.first() is not None

@@ -14,6 +14,8 @@ _NEW_SQL = (
     "_SELECT_MESSAGES_PAGE",
     "_SELECT_PARTICIPANT_USER_IDS",
     "_SELECT_BLOCK_BETWEEN",
+    "_SELECT_CALIBRATION_ATTENDANCE",
+    "_UPDATE_ATTENDANCE",
 )
 
 
@@ -77,3 +79,33 @@ def test_block_between_bidirectional_pinned():
     assert "blocked_id = ANY(CAST(:others AS uuid[]))" in raw
     assert "blocked_id = CAST(:me AS uuid)" in raw
     assert raw.count("ANY(CAST(:others AS uuid[]))") == 2
+
+
+def test_attendance_update_conditional_pinned():
+    """条件付きUPDATE: 排他の本体(design §2.3手順6)。
+
+    Review Focus 4: WHERE actual_attended IS NULL 忘れで2人目が上書き得る。
+    actual_attended/cancelled_afterは同時代入で排他を構造担保。
+    """
+    raw = str(store._UPDATE_ATTENDANCE)
+    assert "actual_attended = :attended" in raw
+    assert "cancelled_after = NOT :attended" in raw
+    assert "updated_at = CAST(:now AS timestamptz)" in raw
+    assert "latch_id = CAST(:latch_id AS uuid)" in raw
+    assert "actual_attended IS NULL" in raw
+    assert "RETURNING id" in raw
+
+
+def test_select_calibration_attendance_pinned():
+    """事前読取はactual_attendedのみ(design §2.3手順7の分類用)。"""
+    raw = str(store._SELECT_CALIBRATION_ATTENDANCE)
+    assert "SELECT actual_attended FROM calibration_records" in raw
+    assert "latch_id = CAST(:latch_id AS uuid)" in raw
+    # LatchRowはcompleted_atを持つ(attendance手順5・§4のスコープ注記)
+    assert "completed_at" in store.LatchRow.__dataclass_fields__
+
+
+def test_latch_selects_now_read_completed_at():
+    """_SELECT_LATCH(_FOR_UPDATE)はcompleted_atを取得する(手順5の入力)。"""
+    assert "completed_at" in str(store._SELECT_LATCH)
+    assert "completed_at" in str(store._SELECT_LATCH_FOR_UPDATE)
