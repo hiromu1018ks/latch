@@ -454,3 +454,163 @@ async def test_report_inserts_pending(monkeypatch):
             "now": NOW,
         },
     ]
+
+
+# -- report_user 案X: reportee_id省略+latch解決(ws-7 design §2.7) --
+
+
+async def test_report_resolve_one_on_one_latch(monkeypatch):
+    """reportee_id省略+1対1latch: 通報者以外の1人を解決して挿入(§2.7)。
+
+    解決経路では自分自身がreporteeにならない(othersはmeを除く集合)。
+    """
+    i1, i2 = uuid.uuid4(), uuid.uuid4()
+    latch = _latch_row([i1, i2])
+    inserts: list[dict] = []
+
+    async def _insert_report(
+        conn, *, reporter, reportee, latch_id, reason, status, now
+    ):
+        inserts.append(
+            {
+                "reporter": reporter,
+                "reportee": reportee,
+                "latch_id": latch_id,
+                "reason": reason,
+                "status": status,
+                "now": now,
+            }
+        )
+        return uuid.uuid4()
+
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(latches_store, "select_latch", _ret(latch))
+    monkeypatch.setattr(safety_store, "user_exists", _ret(True))
+
+    async def _participants(conn, intent_ids):
+        return [ME, TARGET]  # 1対1: 通報者+相手
+
+    monkeypatch.setattr(latches_store, "fetch_participant_user_ids", _participants)
+    monkeypatch.setattr(safety_store, "insert_report", _insert_report)
+    await _svc().report_user(
+        auth_provider="google",
+        auth_subject="s",
+        latch_id=latch.id,
+        reason="unpleasant_behavior",
+    )
+    assert inserts == [
+        {
+            "reporter": ME,
+            "reportee": TARGET,  # 解決先は通報者以外の1人(自分ではない)
+            "latch_id": latch.id,
+            "reason": "unpleasant_behavior",
+            "status": "pending",
+            "now": NOW,
+        }
+    ]
+
+
+async def test_report_resolve_group_latch_422(monkeypatch):
+    """グループlatch(通報者以外が2人以上)は対象特定不能で422(§2.7条件2)。"""
+    latch = _latch_row([uuid.uuid4(), uuid.uuid4(), uuid.uuid4()])
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(latches_store, "select_latch", _ret(latch))
+
+    async def _participants(conn, intent_ids):
+        return [ME, TARGET, uuid.uuid4()]  # 通報者以外が2人
+
+    monkeypatch.setattr(latches_store, "fetch_participant_user_ids", _participants)
+    with pytest.raises(SafetyValidationError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            latch_id=latch.id,
+            reason="other",
+        )
+
+
+async def test_report_both_omitted_422(monkeypatch):
+    """reportee_id・latch_idの両方省略は422(§2.7条件1)。"""
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    with pytest.raises(SafetyValidationError):
+        await _svc().report_user(
+            auth_provider="google", auth_subject="s", reason="other"
+        )
+
+
+async def test_report_resolve_latch_missing_404(monkeypatch):
+    """省略経路でもlatch不在は404(既存検査の等価適用・§2.7条件3)。"""
+    from latch.safety.errors import SafetyNotFoundError
+
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(latches_store, "select_latch", _ret(None))
+    with pytest.raises(SafetyNotFoundError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            latch_id=uuid.uuid4(),
+            reason="other",
+        )
+
+
+async def test_report_resolve_reporter_not_participant_422(monkeypatch):
+    """省略経路で自分が非参加のlatchは422(§2.7条件3)。"""
+    latch = _latch_row([uuid.uuid4(), uuid.uuid4()])
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(latches_store, "select_latch", _ret(latch))
+    monkeypatch.setattr(
+        latches_store, "fetch_participant_user_ids", _ret([TARGET, uuid.uuid4()])
+    )
+    with pytest.raises(SafetyValidationError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            latch_id=latch.id,
+            reason="other",
+        )
+
+
+async def test_report_explicit_path_unchanged(monkeypatch):
+    """明示経路(reportee_id指定)は現行どおり201相当で挿入(§2.7条件3)。
+
+    reporteeが非参加のlatchへの明示指定は引き続き422。
+    """
+    latch = _latch_row([uuid.uuid4(), uuid.uuid4()])
+    inserts: list[dict] = []
+
+    async def _insert_report(
+        conn, *, reporter, reportee, latch_id, reason, status, now
+    ):
+        inserts.append({"reporter": reporter, "reportee": reportee})
+        return uuid.uuid4()
+
+    monkeypatch.setattr(latches_store, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(latches_store, "select_latch", _ret(latch))
+    monkeypatch.setattr(safety_store, "user_exists", _ret(True))
+
+    async def _participants(conn, intent_ids):
+        return [ME, TARGET]
+
+    monkeypatch.setattr(latches_store, "fetch_participant_user_ids", _participants)
+    monkeypatch.setattr(safety_store, "insert_report", _insert_report)
+    # 正常: reportee明示+参加 → 挿入
+    await _svc().report_user(
+        auth_provider="google",
+        auth_subject="s",
+        reportee_id=TARGET,
+        latch_id=latch.id,
+        reason="other",
+    )
+    assert inserts == [{"reporter": ME, "reportee": TARGET}]
+    # reportee非参加のlatch → 422(現行挙動)
+    monkeypatch.setattr(
+        latches_store, "fetch_participant_user_ids", _ret([ME, uuid.uuid4()])
+    )
+    with pytest.raises(SafetyValidationError):
+        await _svc().report_user(
+            auth_provider="google",
+            auth_subject="s",
+            reportee_id=TARGET,
+            latch_id=latch.id,
+            reason="other",
+        )

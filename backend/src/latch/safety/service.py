@@ -196,18 +196,24 @@ class BlockReportService:
         *,
         auth_provider: str,
         auth_subject: str,
-        reportee_id: uuid.UUID,
+        reportee_id: uuid.UUID | None = None,
         latch_id: uuid.UUID | None = None,
         reason: str,
     ) -> uuid.UUID:
-        """POST /v1/reports(design §2.5)。受付・記録のみ・pending固定。"""
+        """POST /v1/reports(design §2.5・ws-7案X§2.7)。受付・記録のみ。
+
+        reportee_id省略時はlatch_id必須で、当該latchの参加者から通報者
+        以外を解決する(1人ならその者がreportee・2人以上は422)。既存の
+        ws-5検査(自分自身拒否・reportee実在・latch存在・両者参加者)は
+        省略経路でも等価に適用する。
+        """
         try:
             async with self._engine.begin() as conn:
                 me = await self._me(conn, auth_provider, auth_subject)
-                if reportee_id == me:
-                    raise SafetyValidationError("cannot report yourself")
-                if not await store.user_exists(conn, reportee_id):
-                    raise SafetyNotFoundError("user not found")
+                if reportee_id is None and latch_id is None:
+                    raise SafetyValidationError(
+                        "reportee_id or latch_id required"
+                    )
                 if latch_id is not None:
                     row = await latches_store.select_latch(conn, latch_id)
                     if row is None:
@@ -215,8 +221,21 @@ class BlockReportService:
                     participants = await latches_store.fetch_participant_user_ids(
                         conn, row.intent_ids
                     )
-                    if me not in participants or reportee_id not in participants:
+                    if me not in participants:
                         raise SafetyValidationError("not latch participants")
+                    if reportee_id is None:
+                        others = [u for u in participants if u != me]
+                        if len(others) != 1:
+                            raise SafetyValidationError(
+                                "cannot resolve reportee from latch"
+                            )
+                        reportee_id = others[0]
+                    elif reportee_id not in participants:
+                        raise SafetyValidationError("not latch participants")
+                if reportee_id == me:
+                    raise SafetyValidationError("cannot report yourself")
+                if not await store.user_exists(conn, reportee_id):
+                    raise SafetyNotFoundError("user not found")
                 now = self._clock.now()
                 return await store.insert_report(
                     conn,
