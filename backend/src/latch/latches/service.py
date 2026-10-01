@@ -11,7 +11,7 @@ from __future__ import annotations
 import base64
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -19,6 +19,9 @@ from latch.core.clock import JST, Clock
 from latch.latches import calibration, store
 from latch.latches.errors import (
     AlreadyAnsweredError,
+    AttendanceAlreadySubmittedError,
+    AttendanceWindowClosedError,
+    ChatReadonlyError,
     DependencyUnavailableError,
     ForbiddenError,
     LatchClosedError,
@@ -27,7 +30,12 @@ from latch.latches.errors import (
     LatchNotFoundError,
     LatchValidationError,
 )
-from latch.latches.schemas import LatchDetailOut, LatchSummaryOut, ParticipantOut
+from latch.latches.schemas import (
+    AttendanceResponse,
+    LatchDetailOut,
+    LatchSummaryOut,
+    ParticipantOut,
+)
 
 logger = logging.getLogger("latch.latches")
 
@@ -219,6 +227,141 @@ class LatchesService:
         except Exception as exc:
             raise _wrap_unexpected(exc) from exc
 
+    # -- チャット(M3 ws-4 design §2.1手順1〜7) --
+
+    async def send_message(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+        body: str,
+    ):
+        """matched LATCHへのメッセージ送信(design §2.1)。
+
+        matched以外の全状態とblocks適用中は409 CHAT_READONLY(案A)。
+        FOR UPDATEでsweeperのcompleted化・回答APIと直列化する。
+        """
+        try:
+            async with self._engine.begin() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch_for_update(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    raise ForbiddenError("not a participant")
+                now = self._clock.now()  # FOR UPDATE取得後に採取
+                if row.status != "matched":
+                    raise ChatReadonlyError("chat readonly")
+                user_ids = await store.fetch_participant_user_ids(conn, row.intent_ids)
+                others = [u for u in user_ids if u != user_id]
+                if await store.select_block_between(conn, user_id, others):
+                    raise ChatReadonlyError("chat readonly")
+                return await store.insert_message(
+                    conn, latch_id=row.id, sender_id=user_id, body=body, now=now
+                )
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
+    async def list_messages(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+        cursor: str | None = None,
+        limit: int = 20,
+    ):
+        """messages取得(design §2.1)。参加者ならstatusを問わず閲覧可。"""
+        try:
+            async with self._engine.connect() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    raise ForbiddenError("not a participant")
+                before = decode_message_cursor(cursor) if cursor else None
+                rows = await store.select_messages_page(
+                    conn, latch_id=latch_id, before=before, limit=limit + 1
+                )
+            items = rows[:limit]
+            next_cursor = None
+            if len(rows) > limit:
+                last = rows[limit - 1]
+                next_cursor = encode_message_cursor(last.created_at, last.id)
+            return items, next_cursor
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
+    # -- 実施自己申告(M3 ws-4 design §2.3手順1〜7) --
+
+    async def submit_attendance(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+        attended: bool,
+    ) -> AttendanceResponse:
+        """completed LATCHへの実施自己申告(D-09・design §2.3)。
+
+        回答はLATCH単位で先着1名が確定(承認事項①)。条件付きUPDATEが
+        排他の本体(latch行は読取のみ — completedは終端状態)。
+        """
+        try:
+            async with self._engine.begin() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    # messagesの403と扱いを分ける: 通知を受け取っていない
+                    # 可能性のあるユーザーに関与の有無を開示しない(引用#9)
+                    raise LatchNotFoundError("not a participant")
+                now = self._clock.now()
+                if row.status != "completed":
+                    raise LatchClosedError("latch closed")
+                if not is_attendance_window_open(row.completed_at, now):
+                    raise AttendanceWindowClosedError("attendance window closed")
+                cal = await store.select_calibration_attendance(conn, latch_id)
+                if cal is None:
+                    logger.warning(
+                        "latch.attendance.calibration_missing latch_id=%s", latch_id
+                    )
+                    raise DependencyUnavailableError("calibration record missing")
+                if cal.actual_attended is not None:
+                    raise AttendanceAlreadySubmittedError("already submitted")
+                updated = await store.update_attendance(
+                    conn, latch_id=latch_id, attended=attended, now=now
+                )
+                if not updated:  # 影響0行=並行で先着済み(手順7)
+                    raise AttendanceAlreadySubmittedError("already submitted")
+                return AttendanceResponse(latch_id=row.id, actual_attended=attended)
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
     @staticmethod
     def _raise_closed_or_expired(row, now) -> None:
         """手順2c/5の409分類(期限切れが上・design §2.2)。"""
@@ -346,6 +489,38 @@ def decode_cursor(cursor: str) -> tuple[datetime, datetime, uuid.UUID]:
         return datetime.fromisoformat(tt), datetime.fromisoformat(ct), uuid.UUID(lid)
     except (ValueError, UnicodeDecodeError) as exc:
         raise LatchValidationError("invalid cursor") from exc
+
+
+def encode_message_cursor(created_at: datetime, message_id: uuid.UUID) -> str:
+    """messagesのキーセットcursor 2キー(design §2.1): base64url("ISO|uuid")。
+
+    latches一覧のencode_cursor(3キー)の縮小版。ソート順
+    (created_at ASC, id ASC)をタプル比較で表現する。
+    """
+    raw = f"{created_at.isoformat()}|{message_id}"
+    return base64.urlsafe_b64encode(raw.encode()).rstrip(b"=").decode()
+
+
+def decode_message_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+    """messages cursor復元。形式不正は422 VALIDATION_ERROR(同型)。"""
+    padded = cursor + "=" * (-len(cursor) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        ct, mid = raw.split("|")
+        return datetime.fromisoformat(ct), uuid.UUID(mid)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise LatchValidationError("invalid cursor") from exc
+
+
+def is_attendance_window_open(completed_at: datetime | None, now: datetime) -> bool:
+    """D-09の3日窓(閉区間: now <= completed_at + 3日・design §2.3手順5)。
+
+    「3日以内」の以内を閉区間として読む(supervisor承認・design §2.3)。
+    completed_at未設定(None)は窓閉と扱う(通常起きない防御)。
+    """
+    if completed_at is None:
+        return False
+    return now <= completed_at + timedelta(days=3)
 
 
 def _yes_count(responses: list[dict]) -> int:

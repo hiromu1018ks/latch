@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 ResponseValue = Literal["yes", "no", "defer"]
 
@@ -74,3 +74,63 @@ class LatchListResponse(BaseModel):
 
     items: list[LatchSummaryOut]
     next_cursor: str | None = None
+
+
+class MessageRequest(BaseModel):
+    """POST /v1/latches/{id}/messages のbody(05 §5・実装定義・承認事項③)。
+
+    bodyはtrim後1〜1000字(空白のみ不可)。保存はtrimしない。
+    値域違反はValueError→RequestValidationError→422 VALIDATION_ERROR。
+    """
+
+    body: str
+
+    @field_validator("body")
+    @classmethod
+    def _body_length(cls, v: str) -> str:
+        if not 1 <= len(v.strip()) <= 1000:
+            raise ValueError(
+                "body must be 1..1000 chars (excluding surrounding whitespace)"
+            )
+        return v
+
+
+class MessageOut(BaseModel):
+    """messages応答の1件(design §2.1手順7)。表示名は含めない
+
+    (matched/completedのLATCH詳細participantsで解決・design §2.1)。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    latch_id: uuid.UUID
+    sender_id: uuid.UUID
+    body: str
+    created_at: datetime
+
+
+class MessageEnvelope(BaseModel):
+    """POST /v1/latches/{id}/messages の201応答(承認事項⑦)。"""
+
+    message: MessageOut
+
+
+class MessageListResponse(BaseModel):
+    """GET /v1/latches/{id}/messages 応答(05 §5共通規定・cursor改頁)。"""
+
+    items: list[MessageOut]
+    next_cursor: str | None = None
+
+
+class AttendanceRequest(BaseModel):
+    """POST /v1/latches/{id}/attendance のbody(05 §5)。"""
+
+    attended: bool
+
+
+class AttendanceResponse(BaseModel):
+    """attendanceの200応答(05 §5)。cancelled_afterは出さない(design §2.3)。"""
+
+    latch_id: uuid.UUID
+    actual_attended: bool

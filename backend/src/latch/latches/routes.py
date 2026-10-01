@@ -15,9 +15,14 @@ from fastapi import APIRouter, Depends, Query, Request
 from latch.auth.deps import require_authenticated
 from latch.auth.tokens import AccessTokenClaims
 from latch.latches.schemas import (
+    AttendanceRequest,
+    AttendanceResponse,
     LatchDetailEnvelope,
     LatchEnvelope,
     LatchListResponse,
+    MessageEnvelope,
+    MessageListResponse,
+    MessageRequest,
     ResponseRequest,
 )
 from latch.latches.service import LatchesService
@@ -86,3 +91,57 @@ async def respond_to_latch(
     )
     logger.info("latches.response ok status=%s", summary.status)
     return LatchEnvelope(latch=summary)
+
+
+@latches_router.post(
+    "/{latch_id}/messages", response_model=MessageEnvelope, status_code=201
+)
+async def send_message(
+    latch_id: uuid.UUID,
+    body: MessageRequest,
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[LatchesService, Depends(get_latches_service)],
+) -> MessageEnvelope:
+    """POST /v1/latches/{id}/messages(05 §5・matchedのみ書込可・承認事項⑦の201)。"""
+    message = await svc.send_message(
+        auth_provider=claims.auth_provider,
+        auth_subject=claims.auth_subject,
+        latch_id=latch_id,
+        body=body.body,
+    )
+    return MessageEnvelope(message=message)
+
+
+@latches_router.get("/{latch_id}/messages", response_model=MessageListResponse)
+async def list_messages(
+    latch_id: uuid.UUID,
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[LatchesService, Depends(get_latches_service)],
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> MessageListResponse:
+    """GET /v1/latches/{id}/messages(05 §5改頁共通規定・閲覧は状態を問わず)。"""
+    items, next_cursor = await svc.list_messages(
+        auth_provider=claims.auth_provider,
+        auth_subject=claims.auth_subject,
+        latch_id=latch_id,
+        cursor=cursor,
+        limit=limit,
+    )
+    return MessageListResponse(items=items, next_cursor=next_cursor)
+
+
+@latches_router.post("/{latch_id}/attendance", response_model=AttendanceResponse)
+async def submit_attendance(
+    latch_id: uuid.UUID,
+    body: AttendanceRequest,
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[LatchesService, Depends(get_latches_service)],
+) -> AttendanceResponse:
+    """POST /v1/latches/{id}/attendance(D-09・3日以内・初回のみ受理)。"""
+    return await svc.submit_attendance(
+        auth_provider=claims.auth_provider,
+        auth_subject=claims.auth_subject,
+        latch_id=latch_id,
+        attended=body.attended,
+    )

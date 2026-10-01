@@ -60,6 +60,8 @@ def test_all_v1_routes_are_rate_limited():
         "/v1/intents/{intent_id}/resume": 1,
         "/v1/latches": 1,  # M3 ws-1(一覧)
         "/v1/latches/{latch_id}": 1,  # M3 ws-1(詳細)
+        "/v1/latches/{latch_id}/attendance": 1,  # M3 ws-4(実施自己申告)
+        "/v1/latches/{latch_id}/messages": 2,  # M3 ws-4(送信+取得)
         "/v1/latches/{latch_id}/response": 1,  # M3 ws-1(回答)
         "/v1/notifications": 1,  # M3 ws-3(お知らせ一覧)
         "/v1/notifications/{notification_id}/read": 1,  # M3 ws-3(既読)

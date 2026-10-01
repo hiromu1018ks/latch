@@ -62,3 +62,31 @@ class DependencyUnavailableError(LatchesError):
 
     http_status = 503
     code = "DEPENDENCY_UNAVAILABLE"
+
+
+class ChatReadonlyError(LatchesError):
+    """チャット読取専用状態への送信(05 §2・08 D-23・design §2.1案A)。
+
+    matched以外の全状態(completed/cancelled後の送信关闭を含む)と
+    blocks適用中の両方に使う単一コード(03 §6・08 §2.5の統一・承認事項②)。
+    """
+
+    http_status = 409
+    code = "CHAT_READONLY"
+
+
+class AttendanceAlreadySubmittedError(LatchesError):
+    """実施自己申告の二重回答(初回のみ受理・訂正不可・05 §5)。
+
+    LATCH単位先着1名のため2人目以降の回答もこれに含む(承認事項①)。
+    """
+
+    http_status = 409
+    code = "ATTENDANCE_ALREADY_SUBMITTED"
+
+
+class AttendanceWindowClosedError(LatchesError):
+    """申告窓閉鎖(completed遷移から3日経過・D-09・design §2.3手順5)。"""
+
+    http_status = 409
+    code = "ATTENDANCE_WINDOW_CLOSED"
