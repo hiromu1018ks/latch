@@ -302,6 +302,7 @@
   - supervisorコードレビュー: sweeper.pyの1tick=1時刻・4処理順序(書き込み→観測→drain→last_tick)・_coerce_uuid・uuid[]bind規律・reset.pyの月初判定・main.py配線(§9-13)すべて計画§8どおり
   - 検証最終値: 修正後worktree test-ci **1301 passed**(独立実行・exit 0)・**マージ後main test-ci 1301 passed**(api再ビルド後・368秒)・unit 1100 passed・lint緑(237 files)・残存ゼロ(m3ws2-・5テーブル)・alembic head=0005不変・依存追加なし・変更15ファイル=計画§4どおり
   - **02#4本体(G1引継ぎ)を試験1で実施**(Intent期限切れexpired遷移+expiredイベント発行のci統合試験=G1裁定(a)の履行)
+- 学習資産追従: ws-2分 22c57f3(第18章「時間が状態を閉じる: 期限切れバッチとリセットジョブ」+Lab 6〔期限を過去へ書き換えてsweeperを観察〕新設・既存8ファイル更新〔README順路・00-environment・第7/12/14/15/17章・Lab 5〕。Lab 6は全手順実測・agent4がmake test 1100 passedとnatural-japanese lint全10ファイル収束を確認。クローズ検知drainのLab体験は大がかりのため第18章18.7の説明で担保・ws-3後に保留キューラボへ再候補)/ 2026-10-01
 
 ## G2判定資料(2026-09-30・承認済み)
 
