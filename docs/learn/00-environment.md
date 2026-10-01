@@ -197,16 +197,16 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **1187件を約7〜8秒**(`make test`)。フロントエンドも
-  **81件を約0.6秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
-- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 239件を含め計
-  **1426件**(2026-10-01のM3 ws-5マージ検証で全件グリーンを確認。ci環境の起動を
+- unit テスト(部品単体の試験): backend **1215件を約7〜8秒**(`make test`)。フロントエンドも
+  **170件を約1秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
+- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 254件を含め計
+  **1469件**(2026-10-02のM3 ws-7マージ検証で全件グリーンを確認。ci環境の起動を
   待つ分、実行には数分かかります)
 
 数秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
 「壊して試す」学習法(Lab 2)が気軽にできます。この速さ自体が、このプロジェクトの
 設計(次章のClock)の成果物です。フロントエンドも同じ構造で、画面の部品から
-外部環境(ブラウザ・通信)を切り離して置いてあるため、81件が0.6秒ほどで
+外部環境(ブラウザ・通信)を切り離して置いてあるため、170件が1秒ほどで
 回ります(第8章8.7)。
 
 **TDD(ティーディーディー、テスト駆動開発)** という作り方も、この教科書で何度も出てきます。
@@ -235,7 +235,7 @@ latch/
 │   ├── 00〜12-*.md        仕様書(何を作るかの最終決定。実装はここに従う)
 │   ├── plans/             作業の進行状態(STATUS.md)と設計・計画・報告の記録
 │   └── learn/             ← この教科書
-├── frontend/              フロントエンドの本体(Vite + vanilla JS。APIに接続する。第8章)
+├── frontend/              フロントエンドの本体(Vite + vanilla JS。APIに接続する。第8章・3画面はLab 9)
 ├── prototype/             フロントエンドの試作(実装基準の参照物・APIに接続しない)
 ├── backend/               Pythonプロジェクトの本体
 │   ├── pyproject.toml     依存の宣言(何のライブラリを使うか)
@@ -247,7 +247,7 @@ latch/
 │   │   ├── core/          基盤部品(clock.py=時計, db.py=DB接続)
 │   │   ├── auth/          認証(トークン発行・検証・失効)
 │   │   ├── users/         ユーザー登録・本人参照のAPI(第4章)
-│   │   ├── intents/       自然文の構造化(Intent Parser)・parse API・Intentの保存とCRUD(第5章・第6章)
+│   │   ├── intents/       自然文の構造化(Intent Parser)・parse API・Intentの保存とCRUD・削除カスケード(第5章・第6章・第22章)
 │   │   ├── ratelimit/     レート制限(Redisカウンタと上限判定)(第7章)
 │   │   ├── latches/       提案への回答・成立後のチャットと実施自己申告・成立・不成立の確定(第17章・第20章)
 │   │   ├── notifications/ お知らせ一覧・既読APIとプッシュ送信(第19章)
@@ -255,7 +255,7 @@ latch/
 │   │   ├── llm/           AI(LLM)呼び出しの単一経路
 │   │   ├── geo/           地名⇔座標の変換(ジオコーディング)
 │   │   ├── events/        知らせの運搬(EventBusポート・Pub/Sub実装・回収リレー)(第9章)
-│   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチングとコスト保護・提案・グループ・期限切れバッチとリセットジョブ・プッシュ送信)(第9章〜第15章・第18章〜第19章)
+│   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチングとコスト保護・提案・グループ・期限切れバッチとリセットジョブ・30日定期削除・プッシュ送信)(第9章〜第15章・第18章〜第19章・第22章)
 │   └── tests/             テスト(unit/=部品単体, integration/=組み合わせ)
 ├── compose.yaml           5サービス(db/redis/pubsub/api/worker)の定義
 ├── Makefile               よく使うコマンドのショートカット集
@@ -273,7 +273,7 @@ latch/
 | `make ps` | 5サービスの状態一覧。`(healthy)` は健康診断合格の印 |
 | `make logs` | 5サービスのログを流し見る。Ctrl+Cで停止 |
 | `make lint` | コードの書式・静的検査(ruff)。コミット前に緑を確認 |
-| `make test` | unit テスト1187件。約7〜8秒。最もよく使う |
+| `make test` | unit テスト1215件。約7〜8秒。最もよく使う |
 | `make test-ci` | unit+integration。実DB・実Redis・実Pub/Subエミュレータを使う。実行中は常設workerを一時停止し、終わると復帰する(第9章9.8)。終了時には溜まった知らせを掃除してから復帰する(2026-09-30追加) |
 | `make migrate` | DB定義を最新版に更新(Alembic) |
 | `make geo-import` | 鹿児島の地物データをDBへ取り込み(数分) |
@@ -284,8 +284,9 @@ latch/
 | `make jev-smoke` | Jevの実APIスモーク(1呼び出し・課金)。`.env` に `LATCH_LLM_MODE=real` と3つの鍵が必要。`FALLBACK=1` でフォールバック側の直接呼び出し(第13章13.8) |
 | `cd frontend && npm install` | フロントエンドの依存を導入。初回と、`package.json` が変わった後に実行 |
 | `cd frontend && npm run dev` | 画面の開発サーバーを起動(http://localhost:5173/)。`/v1` をapiへ転送する |
-| `cd frontend && npm test` | フロントエンドのunit テスト81件。約0.6秒 |
+| `cd frontend && npm test` | フロントエンドのunit テスト170件。約1秒 |
 | `cd frontend && npm run build` | 画面を配信用の形にまとめる(`dist/client/` へ出力) |
+| `cd frontend && npm run preview` | ビルド成果物を localhost:4173 で配信(`npm run dev` の開発サーバーと違い、本番と同じ配られ方をする。Lab 9) |
 
 **注意が3つあります**。`make test-ci` は地物データを実データ(609行)から試験用の
 偽データ(7行)に差し替えます。仕様なので驚かないでください。元に戻すには `make geo-import` を
