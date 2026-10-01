@@ -15,12 +15,15 @@ match_events expired)・attendance通知を**同一tx**で挿入する(C10)。
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+from latch.intents.events import EVENT_EXPIRED, insert_match_event
 
 logger = logging.getLogger(__name__)
 
@@ -178,3 +181,151 @@ async def _has_recent_close(engine: AsyncEngine, last_tick: datetime) -> bool:
     async with engine.begin() as conn:
         res = await conn.execute(_SELECT_RECENT_CLOSE, {"last_tick": last_tick})
         return res.first() is not None
+
+
+class ExpirySweeper:
+    """期限切れバッチ本体(06 §6・design §2.2〜2.4・§2.7)。
+
+    ReevalRunner.run_onceの先頭から呼ばれる(60秒tick・design §2.1案A)。
+    run_onceはpublic(unit/integrationから直接呼ぶ・ReevalRunnerと同型)。
+    独立した周期ループは持たない(切替・停止はReevalRunnerの単一ジョブ)。
+    """
+
+    def __init__(
+        self,
+        *,
+        engine: AsyncEngine,
+        clock,  # Clock(既存のClock型・core.clock)
+        latch,  # LatchEngine(drain呼び出し・design §2.7)
+        batch_limit: int,
+    ) -> None:
+        self._engine = engine
+        self._clock = clock
+        self._latch = latch
+        self._batch_limit = batch_limit
+        self._last_tick: datetime = clock.now()  # 起動時刻(§2.7)
+
+    async def run_once(self) -> int:
+        """1周期分: latches期限切れ→Intent期限切れ→completed→クローズ検知drain。
+
+        戻り値=遷移させた行数(latches+intents+completedの合計・drain呼出を
+        含まない)。例外は握らない(ReevalRunner.runが握って次周期で回収)。
+        1tick=1時刻: 抽出・UPDATE・挿入すべてで同一のnowを使う(design §2.2)。
+        """
+        now = self._clock.now()
+        done = 0
+        for latch_id, status in await _select_expiring_latches(
+            self._engine, now, self._batch_limit
+        ):
+            if await self._expire_latch(latch_id, status, now):
+                done += 1
+        for intent_id, _status in await _select_expiring_intents(
+            self._engine, now, self._batch_limit
+        ):
+            if await self._expire_intent(intent_id, now):
+                done += 1
+        for latch_id in await _select_completion_targets(
+            self._engine, now, self._batch_limit
+        ):
+            if await self._complete_latch(latch_id, now):
+                done += 1
+        # 観測→drainの順(自分の書いたexpiredも観測=枠回復を同じtickで。
+        # drain後の観測はしない=再帰なし・Review Focus 4)
+        if await _has_recent_close(self._engine, self._last_tick):
+            await self._latch.drain()
+        self._last_tick = now
+        return done
+
+    async def _expire_latch(
+        self, latch_id: uuid.UUID, from_status: str, now: datetime
+    ) -> bool:
+        """行単位tx: 条件付きUPDATE→影響1ならlatch_status_events同一tx挿入。
+
+        抽出時のstatusでUPDATE文を使い分ける(candidateは期限のみ判定)。
+        影響0(回答API等が先行)はイベントなしで無視(引用#3)。
+        """
+        async with self._engine.begin() as conn:
+            stmt = (
+                _EXPIRE_CANDIDATE_LATCH
+                if from_status == "candidate"
+                else _EXPIRE_RESPONSE_LATCH
+            )
+            res = await conn.execute(stmt, {"latch_id": latch_id, "now": now})
+            if res.first() is None:
+                return False
+            await conn.execute(
+                _INSERT_LATCH_EVENT_SQL,
+                {
+                    "latch_id": latch_id,
+                    "from_status": from_status,
+                    "to_status": "expired",
+                    "user_id": None,
+                    "now": now,
+                },
+            )
+            logger.info("sweeper.expired latch_id=%s from=%s", latch_id, from_status)
+            return True
+
+    async def _expire_intent(self, intent_id: uuid.UUID, now: datetime) -> bool:
+        """行単位tx: expired化+expiredイベント同一tx発行(引用#19・保存と同一慣行)。
+
+        draft(下書き)も対象(引用#5)。paused→expiredも対象(resume Event競合は
+        version検査とstatus検査で二重遷移なし)。match_candidates等は閉じない
+        (supervisor承認⑤・Layer 1のstatus='active'条件とH再検証で自然無力化)。
+        """
+        async with self._engine.begin() as conn:
+            res = await conn.execute(
+                _EXPIRE_INTENT, {"intent_id": intent_id, "now": now}
+            )
+            row = res.first()
+            if row is None:
+                return False
+            await insert_match_event(
+                conn,
+                event_type=EVENT_EXPIRED,
+                intent_id=intent_id,
+                version=int(row[0]),
+                now=now,
+            )
+            logger.info("sweeper.intent_expired intent_id=%s", intent_id)
+            return True
+
+    async def _complete_latch(self, latch_id: uuid.UUID, now: datetime) -> bool:
+        """行単位tx: completed化+イベント+実施自己申告の通知先行書き込み(D-09)。
+
+        cancelled(解散済み)はstatus='matched'でなく対象外=通知を送らない
+        (引用#15・構造的担保)。参加者はintents.user_idを行順に全員へ(§9-9)。
+        """
+        async with self._engine.begin() as conn:
+            res = await conn.execute(
+                _COMPLETE_LATCH, {"latch_id": latch_id, "now": now}
+            )
+            row = res.first()
+            if row is None:
+                return False
+            await conn.execute(
+                _INSERT_LATCH_EVENT_SQL,
+                {
+                    "latch_id": latch_id,
+                    "from_status": "matched",
+                    "to_status": "completed",
+                    "user_id": None,
+                    "now": now,
+                },
+            )
+            users = await conn.execute(
+                _SELECT_LATCH_PARTICIPANT_USERS,
+                {"ids": [_coerce_uuid(x) for x in row[0]]},
+            )
+            for (user_id,) in users.fetchall():
+                await conn.execute(
+                    _INSERT_ATTENDANCE_NOTIFICATION,
+                    {
+                        "user_id": _coerce_uuid(user_id),
+                        "type": NOTIFICATION_ATTENDANCE_REQUEST,
+                        "payload": json.dumps({"latch_id": str(latch_id)}),
+                        "now": now,
+                    },
+                )
+            logger.info("sweeper.completed latch_id=%s", latch_id)
+            return True
