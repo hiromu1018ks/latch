@@ -75,3 +75,44 @@ class ResetJob:
         if jst_today.day == 1:
             await self._cost_store.delete_monthly(_prev_month_key(jst_today))
         await self._latch.drain()  # 完了時に保留キュー再評価(引用#11・§2.6)
+
+    async def run(self, *, stop: asyncio.Event | None = None) -> None:
+        """次のJST 0時まで待機→run_once(失敗時はretry_secで再試行)。
+
+        待機中のstopで発火を挟まず終了(graceful shutdown・BackfillRunner
+        と同一契約)。0時丁度でなく数秒遅れの発火を許容する(run_onceが
+        Clock.jst_date()を再取得するため・design §2.5)。
+        """
+        while stop is None or not stop.is_set():
+            now = self._clock.now()
+            await self._wait((next_jst_midnight(now) - now).total_seconds(), stop)
+            if stop is not None and stop.is_set():
+                break
+            while True:  # 失敗時はretry_secで再試行(翌0時まで放置しない)
+                try:
+                    await self.run_once()
+                    break
+                except Exception:
+                    logger.warning("reset run_once failed", exc_info=True)
+                    await self._wait(self._retry_sec, stop)
+                    if stop is not None and stop.is_set():
+                        return
+
+    async def _wait(self, seconds: float, stop: asyncio.Event | None) -> None:
+        """待機。注入sleepとstop待ちを並行させ、先に完了した方で返る。
+
+        stopが来れば待機秒の残りを無視して即返る(shutdown応答性)。
+        注入sleep(run(stop=event)でも使う)でunit試験が決定的に回せる。
+        """
+        if stop is None:
+            await self._sleep(seconds)
+            return
+        sleep_task = asyncio.create_task(self._sleep(seconds))
+        stop_task = asyncio.create_task(stop.wait())
+        done, pending = await asyncio.wait(
+            {sleep_task, stop_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        for task in done:
+            task.result()  # 例外があれば再送出(待機自体の失敗は握らない)

@@ -4,7 +4,8 @@
 0時跨ぎ・月末・年跨ぎはFakeClock.setとnext_jst_midnightの純関数性で再現。
 """
 
-from datetime import UTC, date, datetime
+import asyncio
+from datetime import UTC, date, datetime, timedelta
 
 from latch.core.clock import JST, FakeClock
 from latch.worker.reset import ResetJob, _prev_month_key, next_jst_midnight
@@ -119,3 +120,74 @@ async def test_run_once_keeps_monthly_on_non_first_day():
     assert ("daily", "20261014") in store.calls
     assert all(kind != "monthly" for kind, _ in store.calls)
     assert latch.drains == 1
+
+
+# --- 4. run: 次JST 0時待機→run_once・stop追従・例外retry(§4.1-5) ---
+
+
+def _advancing_sleep(clock: FakeClock, stop: asyncio.Event, stop_at: int):
+    """待機秒だけClockを前進させるsleep差し替え(0時跨ぎの決定的再現)。
+    stop_at回目の呼び出しでstopを立て、runループを終了させる。"""
+    calls: list[float] = []
+
+    async def _sleep(seconds: float) -> None:
+        calls.append(seconds)
+        clock.set(clock.now() + timedelta(seconds=seconds))
+        if len(calls) >= stop_at:
+            stop.set()
+
+    return _sleep, calls
+
+
+async def test_run_waits_until_midnight_then_runs_once():
+    """0時まで待機(待機秒=next_jst_midnightとの差)→run_once→次0時待機で終了。"""
+    clock = FakeClock(NOW)  # JST 10-01 21:00 → 次0時まで3時間
+    stop = asyncio.Event()
+    sleep, calls = _advancing_sleep(clock, stop, stop_at=2)
+    latch = RecordingLatch()
+    job = _job(clock=clock, latch=latch, sleep=sleep)
+    await job.run(stop=stop)
+    assert calls[0] == 3 * 3600.0  # 21:00→24:00
+    assert latch.drains == 1  # 0時到達でrun_once実行
+    assert calls[1] == 24 * 3600.0  # 次周期の待機(翌0時まで丸1日)
+
+
+async def test_run_retries_after_failure_with_retry_sec():
+    """run_once失敗(例外)→retry_sec待機→再試行で成功(翌0時まで放置しない)。"""
+    clock = FakeClock(NOW)
+    stop = asyncio.Event()
+    sleep, calls = _advancing_sleep(clock, stop, stop_at=3)
+    latch = RecordingLatch(fail_first=True)  # 1回目のdrainで例外
+    job = _job(clock=clock, latch=latch, retry_sec=300, sleep=sleep)
+    await job.run(stop=stop)
+    assert calls[1] == 300.0  # retry_secでの待機
+    assert latch.drains == 2  # 再試行で成功
+
+
+async def test_run_stops_immediately_when_stop_already_set():
+    """stopセット済みで起動→待機もrun_onceもしない(graceful shutdown)。"""
+    clock = FakeClock(NOW)
+    stop = asyncio.Event()
+    stop.set()
+    latch = RecordingLatch()
+    sleep_calls: list[float] = []
+
+    async def sleep(seconds: float) -> None:  # pragma: no cover - 呼ばれない
+        sleep_calls.append(seconds)
+
+    await _job(clock=clock, latch=latch, sleep=sleep).run(stop=stop)
+    assert latch.drains == 0
+    assert sleep_calls == []
+
+
+async def test_wait_without_stop_uses_injected_sleep():
+    """stop=Noneの待機は注入sleepをそのまま使う(unit専用経路)。"""
+    clock = FakeClock(NOW)
+    sleep_calls: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    job = _job(clock=clock, sleep=sleep)
+    await job._wait(5.0, None)
+    assert sleep_calls == [5.0]
