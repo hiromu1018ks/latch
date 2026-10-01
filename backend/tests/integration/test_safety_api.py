@@ -671,9 +671,27 @@ async def test_10_reports_reportee_resolution(api_client, db_engine, field):
     i2 = await _intent(api_client, h2["headers"])
     i3 = await _intent(api_client, h3["headers"])
     pair = await _latch(db_engine, [i1["id"], i2["id"]])
-    group = await _latch(
-        db_engine, [i1["id"], i2["id"], i3["id"]], gid=str(uuid_mod.uuid4())
-    )
+    # グループlatchのgroup_candidate_idはgroup_candidates行の実idでなければ
+    # FK違反になる(supervisor修正: 元は存在しないランダムuuidを渡していた)
+    async with db_engine.begin() as conn:
+        gid_row = await conn.execute(
+            text("""
+                INSERT INTO group_candidates
+                    (intent_ids, status, created_at, updated_at)
+                VALUES (CAST(:ids AS uuid[]), 'candidate',
+                        CAST(:now AS timestamptz), CAST(:now AS timestamptz))
+                RETURNING id
+            """),
+            {
+                "ids": sorted(
+                    [uuid_mod.UUID(i) for i in (i1["id"], i2["id"], i3["id"])],
+                    key=str,
+                ),
+                "now": SystemClock().now(),
+            },
+        )
+    gid = str(gid_row.first()[0])
+    group = await _latch(db_engine, [i1["id"], i2["id"], i3["id"]], gid=gid)
     # 省略+1対1 → 201・reportee_idはh2へ解決される
     r1 = await api_client.post(
         "/v1/reports",
