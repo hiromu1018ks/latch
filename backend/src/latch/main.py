@@ -38,6 +38,12 @@ from latch.notifications import (
 )
 from latch.ratelimit import make_rate_limiter
 from latch.ratelimit.errors import RateLimitError
+from latch.safety import (
+    BlockCache,
+    SafetyError,
+    make_safety_service,
+    safety_router,
+)
 from latch.settings import Settings
 from latch.users.errors import UsersError
 from latch.users.routes import users_router
@@ -49,6 +55,7 @@ intents_logger = logging.getLogger("latch.intents")
 latches_logger = logging.getLogger("latch.latches")
 notifications_logger = logging.getLogger("latch.notifications")
 ratelimit_logger = logging.getLogger("latch.ratelimit")
+safety_logger = logging.getLogger("latch.safety")
 
 
 @asynccontextmanager
@@ -62,6 +69,7 @@ async def _lifespan(app: FastAPI):
     build_notifications = not hasattr(app.state, "notifications_service")
     build_rate_limit = not hasattr(app.state, "rate_limiter")
     build_events = not hasattr(app.state, "event_bus")
+    build_safety = not hasattr(app.state, "safety_service")
     if not (
         build_auth
         or build_users
@@ -71,13 +79,15 @@ async def _lifespan(app: FastAPI):
         or build_notifications
         or build_rate_limit
         or build_events
+        or build_safety
     ):
         yield
         return
     settings: Settings = app.state.settings
     redis_client = None
-    if build_auth or build_rate_limit:
-        # Redisはauth(失効リスト)とレート制限カウンタの共用(design §2.8)
+    if build_auth or build_rate_limit or build_safety:
+        # Redisはauth(失効リスト)・レート制限カウンタ・ブロックキャッシュ(blk:)
+        # の共用(design §2.8・ws-5 §2.2)
         redis_client = aioredis.Redis.from_url(
             settings.redis_url, decode_responses=True
         )
@@ -144,6 +154,13 @@ async def _lifespan(app: FastAPI):
             limiter=app.state.rate_limiter if build_rate_limit else None,
             event_bus=getattr(app.state, "event_bus", None),
         )
+    block_cache = None
+    if build_safety:
+        # BlockCache は safety(書込み側)と latches(送信判定)の共有資産
+        block_cache = BlockCache(redis_client=redis_client, engine=engine)
+        app.state.safety_service = make_safety_service(
+            clock=app.state.clock, engine=engine, block_cache=block_cache
+        )
     if build_latches:
         app.state.latches_service = make_latches_service(
             clock=app.state.clock, engine=engine
@@ -185,6 +202,7 @@ def create_app(
     rate_limiter=None,
     latches_service=None,
     notifications_service=None,
+    safety_service=None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.clock = clock if clock is not None else SystemClock()
@@ -203,6 +221,8 @@ def create_app(
         app.state.latches_service = latches_service
     if notifications_service is not None:
         app.state.notifications_service = notifications_service
+    if safety_service is not None:
+        app.state.safety_service = safety_service
 
     @app.get("/health")
     async def health(
@@ -217,6 +237,7 @@ def create_app(
     app.include_router(intents_crud_router)
     app.include_router(latches_router)
     app.include_router(notifications_router)
+    app.include_router(safety_router)
 
     @app.exception_handler(AuthError)
     async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
@@ -259,6 +280,14 @@ def create_app(
         request: Request, exc: NotificationsError
     ) -> JSONResponse:
         notifications_logger.warning("notifications.error code=%s", exc.code)
+        return JSONResponse(
+            status_code=exc.http_status,
+            content=_error_body(exc.code, str(exc)),
+        )
+
+    @app.exception_handler(SafetyError)
+    async def safety_error_handler(request: Request, exc: SafetyError) -> JSONResponse:
+        safety_logger.warning("safety.error code=%s", exc.code)
         return JSONResponse(
             status_code=exc.http_status,
             content=_error_body(exc.code, str(exc)),

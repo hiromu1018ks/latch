@@ -231,3 +231,10 @@ class BlockReportService:
             raise
         except Exception as exc:
             raise _wrap_unexpected(exc) from exc
+
+
+def make_safety_service(
+    *, clock: Clock, engine: AsyncEngine, block_cache: BlockCache | None = None
+) -> BlockReportService:
+    """main.py lifespan用の構築(§2.1・block_cacheはlatchesと共有資産)。"""
+    return BlockReportService(clock=clock, engine=engine, block_cache=block_cache)
