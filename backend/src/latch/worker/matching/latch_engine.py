@@ -16,20 +16,22 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from latch.core.clock import Clock
+from latch.notifications.types import NOTIFICATION_NEARBY, NOTIFICATION_PROPOSAL
 from latch.worker.matching import group_calc, latch_calc, layer4
 from latch.worker.matching import origin as origin_mod
 from latch.worker.matching import proposal as proposal_mod
 from latch.worker.matching.proposal import LatchIntentInputs
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from latch.notifications.sender import PushSender
 
-NOTIFICATION_PROPOSAL = "proposal"
-NOTIFICATION_NEARBY = "nearby_candidate"
+logger = logging.getLogger(__name__)
 
 # フェーズ1: 起点に紐づく「計算済みでない評価行」(design §2.2。
 # 起点version一致・latch_score IS NULL(冪等ガード)・相手version=相手現行のEXISTS。
@@ -544,10 +546,18 @@ class LatchEngine:
     try_promote(latch_id) はpublic(GroupEngine.finalizeが呼ぶ・ws-7)。
     """
 
-    def __init__(self, *, engine: AsyncEngine, clock: Clock, geo=None) -> None:
+    def __init__(
+        self,
+        *,
+        engine: AsyncEngine,
+        clock: Clock,
+        geo=None,
+        push: PushSender | None = None,
+    ) -> None:
         self._engine = engine
         self._clock = clock
         self._geo = geo  # GeoService | None(Noneならarea_name=None)
+        self._push = push  # PushSender | None(未注入ならno-op・design §2.7)
 
     async def handle(self, intent_id: uuid.UUID) -> None:
         """フェーズ1(読取)→各行評価→drain(design §2.9のtx分割)。"""
@@ -603,6 +613,8 @@ class LatchEngine:
         deadline0 = latch_calc.response_deadline(now, target, min_expires)
         # tx1: H再検証(SELECT) + 退避つきlatch_score UPDATE + 生成物
         latch_id: uuid.UUID | None = None
+        nearby_latch_id: uuid.UUID | None = None
+        notified_users: list[uuid.UUID] = []
         async with self._engine.begin() as conn:
             if not await layer4.hard_constraint_holds(conn, org, peer_id):
                 await _close_h_broken(conn, row.row_id, now)
@@ -673,7 +685,7 @@ class LatchEngine:
                     latch_id = lid
             else:
                 # nearbyはtry_promoteしない(candidateのまま・引用#9)
-                await self._nearby_in_tx(
+                nearby_latch_id, notified_users = await self._nearby_in_tx(
                     conn,
                     a_id=a_id,
                     b_id=b_id,
@@ -687,6 +699,11 @@ class LatchEngine:
                 )
         if latch_id is not None:
             await self.try_promote(latch_id)
+        if nearby_latch_id is not None:
+            # 存在通知の送信もtxコミット後(design §2.1案A・§3.2④)
+            await self._send_pushes(
+                [(uid, NOTIFICATION_NEARBY, nearby_latch_id) for uid in notified_users]
+            )
 
     async def _nearby_in_tx(
         self,
@@ -701,11 +718,13 @@ class LatchEngine:
         min_expires,
         has_no,
         now,
-    ) -> uuid.UUID | None:
+    ) -> tuple[uuid.UUID | None, list[uuid.UUID]]:
         """閾値未満: nearby_also参加者への存在通知(§2.7・引用#9・集約tx内)。
 
-        戻り値は「新規INSERT成功ならlatch_id・開いている行あり/対象なしはNone」。
-        nearbyはtry_promoteしない(candidateのまま)。
+        戻り値は(latch_id, 通知済みuser_id群)。新規INSERT成功かつ日次上限内
+        の場合のみ通知済みリストが非空(開いている行あり/対象なしは(None, []))。
+        nearbyはtry_promoteしない(candidateのまま)。M3 ws-3: 通知済みuser_id群は
+        呼び出し元がtx後にプッシュ送信へ使う(design §3.2④)。
         """
         notify_targets = [
             inp
@@ -713,9 +732,9 @@ class LatchEngine:
             if inp.notification_level == "nearby_also"
         ]
         if not notify_targets:
-            return None
+            return None, []
         if has_no:
-            return None  # 存在通知も出さない(D-07の一貫適用・設計確定)
+            return None, []  # 存在通知も出さない(D-07の一貫適用・設計確定)
         latch_id = await _insert_latch(
             conn,
             a_id=a_id,
@@ -727,21 +746,23 @@ class LatchEngine:
             now=now,
         )
         if latch_id is None:
-            return None  # 開いている行あり・閾値未満評価では既存行を更新しない
+            return None, []  # 開いている行あり・閾値未満評価では既存行を更新しない
         await _insert_latch_event(conn, latch_id, None, "candidate", None, now)
         day_start = layer4.jst_day_start(self._clock.jst_date())
         day_next = day_start + timedelta(days=1)
         counts = await _count_daily_notifications(
             conn, [u.user_id for u in notify_targets], day_start, day_next
         )
+        notified: list[uuid.UUID] = []
         for u in notify_targets:
             if counts.get(u.user_id, 0) < latch_calc.D08_DAILY_LIMIT:
                 await _insert_notification(
                     conn, u.user_id, NOTIFICATION_NEARBY, latch_id, now
                 )
+                notified.append(u.user_id)
             else:
                 logger.info("latch nearby daily limit uid=%s", u.user_id)
-        return latch_id
+        return latch_id, notified
 
     async def try_promote(self, latch_id: uuid.UUID) -> None:
         """提示判定(1tx・design §2.6手順1〜9・Review Focus 4の手順順序)。
@@ -751,7 +772,9 @@ class LatchEngine:
         75分と同一扱い)→D-08日次→D-08同時→条件付きproposed遷移→
         イベント+notifications(muted除外)。上限超過はcandidateのままreturn
         (破棄しない — 引用#8)。ws-7で|S|人対応(2〜4要素のintent_ids)。
+        M3 ws-3: 通知対象はtx内で収集しtxコミット後にプッシュ送信(§2.1案A)。
         """
+        pending: list[tuple[uuid.UUID, str, uuid.UUID]] = []
         async with self._engine.begin() as conn:
             row = await _select_latch_for_update(conn, latch_id)
             if row is None or row[1] != "candidate":
@@ -808,6 +831,26 @@ class LatchEngine:
                 await _insert_notification(
                     conn, p.user_id, NOTIFICATION_PROPOSAL, latch_id, now
                 )
+                pending.append((p.user_id, NOTIFICATION_PROPOSAL, latch_id))
+        # txコミット後のみ送信(§2.1: コミット前に送るとnotifications行が
+        # ないままプッシュが飛び得る)。早期return(candidate保留・競合負け)
+        # はpending空のままtxを抜けるため送信されない。
+        await self._send_pushes(pending)
+
+    async def _send_pushes(
+        self, targets: list[tuple[uuid.UUID, str, uuid.UUID]]
+    ) -> None:
+        """txコミット後のプッシュ送信(design §2.1案A・§2.7)。
+
+        未注入(既存試験構成)はno-op(_kick_embeddingと同型)。送信例外は
+        sender側で握るためここからは伝播しない。
+        """
+        if self._push is None:
+            return
+        for user_id, ntype, lid in targets:
+            await self._push.send(
+                user_id=user_id, notification_type=ntype, latch_id=lid
+            )
 
     async def drain(self) -> None:
         """保留キューを提示順に走査し各行へtry_promote(評価経路のたび・引用#17)。

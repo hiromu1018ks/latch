@@ -245,8 +245,10 @@ def _patch(
     return log
 
 
-def _engine(clock=None, geo=None) -> LatchEngine:
-    return LatchEngine(engine=_FakeEngine(), clock=clock or FakeClock(NOW), geo=geo)
+def _engine(clock=None, geo=None, push=None) -> LatchEngine:
+    return LatchEngine(
+        engine=_FakeEngine(), clock=clock or FakeClock(NOW), geo=geo, push=push
+    )
 
 
 # --- 1. no-op分岐 ---
@@ -1283,3 +1285,76 @@ async def test_evaluate_pair_completes_after_peer_inputs_restored(monkeypatch):
     assert [c[1] for c in log2["record"]] == [0.85]  # LATCH_C×min(0.9,0.85)
     assert log2["insert"]  # latches生成
     assert (None, "candidate") in [(e[1], e[2]) for e in log2["events"]]
+
+
+# --- M3 ws-3: PushSender注入(design §2.1案A・§4.1-5) ---
+
+
+class _RecordingPush:
+    """送信呼び出しを記録するスタブ(design §4.1-5)。"""
+
+    name = "fake"
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    async def send(self, *, user_id, notification_type, latch_id):
+        self.calls.append((user_id, notification_type, latch_id))
+
+
+async def test_promote_sends_push_to_notify_participants(monkeypatch):
+    """proposed遷移+通知書き込み(tx内)→tx後にnotify全員へ送信(2名=2件)。"""
+    log = _patch_promote(monkeypatch, row=_latch_row())
+    push = _RecordingPush()
+    await _engine(push=push).try_promote(LID)
+    assert log["promote"]  # proposed遷移が起きた前提
+    assert push.calls == log["notifications"]  # 通知書き込みと同一対象・同一順
+    assert {u for u, _, _ in push.calls} == {
+        _participant(1).user_id,
+        _participant(101).user_id,
+    }
+    assert all(t == NOTIFICATION_PROPOSAL for _, t, _ in push.calls)
+
+
+async def test_promote_push_skips_muted_participant(monkeypatch):
+    """片方muted → pushはnon-muted側1件のみ(引用#6・Review Focus 3)。"""
+    parts = [
+        _participant(1),
+        _participant(101, notification_level="muted"),
+    ]
+    log = _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
+    push = _RecordingPush()
+    await _engine(push=push).try_promote(LID)
+    assert push.calls == [(_participant(1).user_id, NOTIFICATION_PROPOSAL, LID)]
+    assert log["notifications"] == push.calls
+
+
+async def test_promote_daily_limit_candidate_keeps_no_push(monkeypatch):
+    """日次上限到達 → candidate保留・notifications 0件・push 0件
+    (Review Focus 2: 早期returnでは1件も送らない)。"""
+    daily = {
+        _participant(1).user_id: 6,
+        _participant(101).user_id: 6,
+    }
+    log = _patch_promote(monkeypatch, row=_latch_row(), daily=daily)
+    push = _RecordingPush()
+    await _engine(push=push).try_promote(LID)
+    assert log["promote"] == []
+    assert log["notifications"] == []
+    assert push.calls == []
+
+
+async def test_nearby_push_sent_to_nearby_also_only(monkeypatch):
+    """nearby存在通知のプッシュはnearby_also側のみ(txコミット後・承認②)。"""
+    row = _row(1, wa=0.5, wb=0.5)
+    inputs = {
+        _uid(1): _inputs(1, notification_level="nearby_also"),
+        _uid(101): _inputs(101, notification_level="muted"),
+    }
+    log = _patch(monkeypatch, org=_origin(1), rows=[row], inputs=inputs)
+    push = _RecordingPush()
+    await _engine(push=push).handle(_uid(1))
+    assert log["notifications"] == [
+        (_inputs(1).user_id, NOTIFICATION_NEARBY, NEW_LATCH_ID)
+    ]
+    assert push.calls == log["notifications"]
