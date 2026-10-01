@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **M3 ws-2(バッチ群)の実装から**(単位表は2026-09-30ユーザーGoサインで確定・ws-1〜ws-9)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
+- 次の着手: **M3 ws-3(通知)から**(ws-2完了・着手はユーザーGoサイン待ち。単位表は2026-09-30ユーザーGoサインで確定・ws-1〜ws-9)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -296,6 +296,12 @@
 - 学習資産追従: ws-1分 a96b8b3(第17章「提案への返事がシステムを動かす: LATCH応答系とCalibration」+Lab 5〔curlで回答から成立まで〕新設・既存6ファイル更新〔README順路・00-environment・第9/14/15/16章〕。**第14・15章への閾値0.60追従はG2改版8da6423時の追従漏れの回収** — 計画外マージでもagent4追従を自問する教訓の再実証。グループ3人回答のLab実体験は後続候補として見送り。agent4はusage limitで1度中断→再開指示で完走・make test 1062 passed・lint収束)/ 2026-09-30
 - ws-2 / 設計 0491dd9(supervisor承認: design §5の5件=①保留キュー再評価イベントの実体=drain直接実行〔event_type 6値固定・catch-upと同型のEvent不発行判断。G3時確認候補〕 ②attendance通知type='attendance_request'は実装定義 ③クローズ検知drainをsweeper tickへ包含〔06 §10クローズ側トリガーの消費実装〕 ④統合スケジューラの遅延許容〔正しさへの影響なし・案B分割は後から可能〕 ⑤Intent期限切れ時の候補closed化なし〔Layer 1 status='active'条件とlatches側sweeperで自然無力化。G3時確認候補〕。引用確定値23件と既存実装接続8点〔Layer1 status条件・cost/store.pyキー体系・ws-1設計§1.4引継ぎ・latch_engine._drain/try_promote・reeval.py統合前提docstring・Clock.jst_date・completed_at列(0001)〕はスーパーバイザーがdocs・実コードと突合済み。スケジューラ統合=ReevalRunnerへExpirySweeper注入・マイグレーション追加なし)/ 2026-10-01
 - ws-2 / 計画 647bb37(2,953行・Task 1〜10・SQL/コード全文記載。機械チェック合格: basename一意〔既存111+新規3ファイル〕・_drain参照は4箇所のみ正確〔module関数_drain_candidatesは影響外と区別〕・ピン試験追随访問〔test_latch_engine 952/969・test_worker_reeval・test_settings・test_llm_factory無傷・test_worker即shutdown〕・DB干渉対抗策〔m3ws2-プレフィックス+FK順teardown+BASE_HOURS=120+Redis m3ws2r-〕。§9にIF確定事項14件+Self-Review記録・Review Focus 5点〔競合影響0・暫定deadline不使用・cancelled除外・last_tick更新順序・Intent/latch同時閉鎖〕・試験数基準値1062+191=1253整合)/ 2026-10-01実装着手
+- ws-2 / マージ b890123(設計 0491dd9・計画 647bb37・実装はf991e2cまで・12コミット)/ docs/plans/M3/ws-2-report.md / 2026-10-01
+  - agent3実装(48分・10コミット)。申告test-ci 1301 passedに対し**supervisor独立実行2回でtest_2のみ失敗**(1 failed, 1300 passed・単体実行でも再現=決定的失敗)→ supervisor直接修正365c122: **試験設計欠陥**(FakeClockをset/advanceしないためrun_once内nowがsweeper構築時last_tickと同一時刻になり、クローズ検知created_at>last_tick〔§9-11〕が①〜③のイベントを観測せずdrain不発。製品コードは正しい挙動で、agent3申告のl5=proposed期待は常設worker稼働中の個別実行でworker側sweeper〔SystemClock・実時間tick〕が昇格させた**偽観察**と特定。期待を計画書当初どおりcandidateへ戻す。design §2.7の同tick昇格の実証は試験7〔実時間イベント経路〕が担い当初から合格)。報告書補足6は取り消し相当として経緯を報告書へ追記
+  - agent3の逸脱7件のうち#1〜#5・#7は妥当(計画書テスト側のタイポ・未使用import・インスタンス不整合・expires明示=時限爆弾回避・user_idのDB照会)。#5「D-08同時上限の集計はIntent単位」は_COUNT_OPEN_PROPOSED実装と整合する計画書誤りの正しい修正
+  - supervisorコードレビュー: sweeper.pyの1tick=1時刻・4処理順序(書き込み→観測→drain→last_tick)・_coerce_uuid・uuid[]bind規律・reset.pyの月初判定・main.py配線(§9-13)すべて計画§8どおり
+  - 検証最終値: 修正後worktree test-ci **1301 passed**(独立実行・exit 0)・**マージ後main test-ci 1301 passed**(api再ビルド後・368秒)・unit 1100 passed・lint緑(237 files)・残存ゼロ(m3ws2-・5テーブル)・alembic head=0005不変・依存追加なし・変更15ファイル=計画§4どおり
+  - **02#4本体(G1引継ぎ)を試験1で実施**(Intent期限切れexpired遷移+expiredイベント発行のci統合試験=G1裁定(a)の履行)
 
 ## G2判定資料(2026-09-30・承認済み)
 
