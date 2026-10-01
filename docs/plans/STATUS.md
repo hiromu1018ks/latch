@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **M3 ws-3∥ws-4並行実装中**(2026-10-01ユーザーGoサイン。設計・計画まで完了しagent3が2 worktreeで並走。どちらも完了後にスーパーバイザー検証→直列マージ。次はws-5)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
+- 次の着手: **M3 ws-5(ブロック・通報)から**(ws-3∥ws-4完了〔2026-10-01並行実装・直列マージ〕・着手はユーザーGoサイン待ち。単位表は2026-09-30ユーザーGoサインで確定・ws-1〜ws-9)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -311,6 +311,17 @@
 - ws-4 / 設計 5333a6f(supervisor承認: design §5の7件=①attendanceはLATCH単位先着1名確定〔calibration_records構造からの必然・G3時確認候補〕②CHAT_READONLYをcompleted/cancelled後へ拡大〔03 §6・08 §2.5読取専用の統一〕③messages本文1〜1000字・空白のみ422④未completedへのattendanceは409 LATCH_CLOSED⑤calibration行不在は503+構造化ログ⑥マイグレーション0006=Index 2本〔05 §3規定なしは設計判断〕⑦POST messagesは201。ブロック409分岐は先行実装しws-5へstore.select_block_betweenを明け渡し。**ws-3並走・マイグレーション追加はws-4のみ0006・ws-3はhead=0005不変のため番号衝突なし。両worktreeのtest-ci同時実行禁止〔運用ルール1〕**)/ 2026-10-01
 - ws-3 / 計画 0481f9d(3,137行・Task 1〜11・実コード全文記載。機械チェック合格: basename一意〔新規4ファイル既存ゼロ・supervisor再実行で確認〕・ピン試験追随访問〔test_settings=push_2項目・test_latch_engine/test_sweeper=ヘルパー拡張+追記4/2件・test_llm_factoryはstartswith機械検査で無干渉〕・DB干渉対抗策〔m3ws3-プレフィックス・FK順teardown〕・試験数整合〔unit 29新規=1129・test-ci 1342=1301+41〕)/ 2026-10-01実装着手
 - ws-4 / 計画 c3dbafa(2,571行・Task 1〜10・実コード全文記載。機械チェック合格: basename一意〔test_chat*既存ゼロ〕・ピン試験追随访問〔settings無変更・test_latches_store_sql走査対象拡大の影響分析込み〕・DB干渉対抗策〔m3ws4-プレフィックス・messages/blocks掃除追加・時間値now相対〕・試験数整合〔unit 19新規=1119・test-ci 1337=1301+36〕。supervisor修正: §7検証手順2の期待値タイポ1118→1119)/ 2026-10-01実装着手(worktree w6・a3-ws4)
+- ws-3 / マージ 58e5a83(実装はf5b54f3まで・11コミット+supervisor検証fix 2件 9e6e498・9b2c9ac)/ docs/plans/M3/ws-3-report.md / 2026-10-01
+  - agent3実装(19分46秒・11コミット・申告unit 1129 passed=期待どおり・lint緑)。integrationは§0規律どおりcollect-onlyのみだったため実行時欠陥はsupervisor検証で検出
+  - supervisor独立検験(test-ci初回)で**11件失敗** → 直接修正2件(実装コードは無欠陥・すべて計画書integration部のテストコード欠陥):
+    (1) _userヘルパーが計画書内で矛盾(定義はheaders 1要素return・呼び出し22箇所は2要素unpackでValueError)→ 1要素受けへ統一(9e6e498)
+    (2) test_1のlatch_id比較がUUID変換入り(両辺とも文字列で不要)・StubPushSender呼び出し4箇所が位置引数(実装は計画§9 IFどおりキーワード専用)→ 修正(9b2c9ac)
+  - 検証最終値: ws-3マージ後main test-ci **1342 passed**(api・worker再ビルド後)・残存ゼロ(m3ws3-・users/notifications/latches)
+- ws-4 / マージ 59746f8(実装は70bfd89まで・10コミット+supervisor検証fix 1件 d1b0060)/ docs/plans/M3/ws-4-report.md / 2026-10-01
+  - agent3実装(17分45秒・10コミット・申告unit 1119 passed=期待どおり)。逸脱3件は§0「毎コミットグリーン」へ合わせる機械的調整(最終状態は計画どおり・報告書に記録)。TDD中間コミットの unused import 調整など誠実
+  - supervisor独立検証: worktree unit 1119 passed再現・コードレビュー(submit_attendance手順1〜7・_SELECT_BLOCK_BETWEEN双方向CAST・0006 Index 2本・CHAT_READONLY単一条件)すべて計画§2どおり
+  - マージ後main test-ci初回で1失敗(test_geo headピン0005のまま)→ **d1b0060で機械的追随**(ws-4計画§9-2の追随访問対象からtest_geoが漏れていた。M2 ws-6と同型)
+  - 検証最終値: **マージ後main test-ci 1378 passed**(api再ビルド後・0006適用・=1301+41+36)・unit 1148 passed(=1100+29+19)・lint緑(254 files)・basename一意・alembic head=0006・依存追加なし・**残存ゼロ**(m3ws3-/m3ws4-・users/messages/blocks/calibration_records)・geo復旧実施(test-ci後のfixtureリロード対応)
 
 ## G2判定資料(2026-09-30・承認済み)
 
