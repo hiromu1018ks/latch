@@ -214,12 +214,13 @@ class RecordingLatch:
         self.drains += 1
 
 
-def _sweeper(engine=None, clock=None, latch=None, batch_limit=50):
+def _sweeper(engine=None, clock=None, latch=None, batch_limit=50, push=None):
     return ExpirySweeper(
         engine=engine or object(),  # 抽出関数はmonkeypatchで差し替え
         clock=clock or FakeClock(NOW),
         latch=latch or RecordingLatch(),
         batch_limit=batch_limit,
+        push=push,
     )
 
 
@@ -331,6 +332,49 @@ async def test_complete_latch_no_row_no_side_effects():
     sw = _sweeper(engine=FakeEngine(conn))
     assert await sw._complete_latch(LATCH1, NOW) is False
     assert len(conn.calls) == 1
+
+
+class _RecordingPush:
+    """送信呼び出しを記録するスタブ(M3 ws-3・design §4.1)。"""
+
+    name = "fake"
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    async def send(self, *, user_id, notification_type, latch_id):
+        self.calls.append((user_id, notification_type, latch_id))
+
+
+async def test_complete_latch_sends_attendance_push_after_commit():
+    """tx後・参加者全員へattendanceプッシュ(第二汎用文・design §2.1案A)。"""
+    conn = FakeConn(
+        {
+            _COMPLETE_LATCH: [([INTENT1, INTENT2],)],
+            _SELECT_LATCH_PARTICIPANT_USERS: [(USER1,), (USER2,)],
+        }
+    )
+    push = _RecordingPush()
+    sw = _sweeper(engine=FakeEngine(conn), push=push)
+    assert await sw._complete_latch(LATCH1, NOW) is True
+    assert push.calls == [
+        (USER1, sweeper_mod.NOTIFICATION_ATTENDANCE_REQUEST, LATCH1),
+        (USER2, sweeper_mod.NOTIFICATION_ATTENDANCE_REQUEST, LATCH1),
+    ]
+
+
+async def test_complete_latch_push_not_injected_is_noop():
+    """push未注入(既存試験構成)→通知書き込みは通常どおり・送信なし。"""
+    conn = FakeConn(
+        {
+            _COMPLETE_LATCH: [([INTENT1],)],
+            _SELECT_LATCH_PARTICIPANT_USERS: [(USER1,)],
+        }
+    )
+    sw = _sweeper(engine=FakeEngine(conn))  # push未渡し=None
+    assert await sw._complete_latch(LATCH1, NOW) is True
+    notified = [c for c in conn.calls if c[0] is _INSERT_ATTENDANCE_NOTIFICATION]
+    assert len(notified) == 1  # 通知書き込み(tx内)は影響なし
 
 
 # --- 10. run_once: 処理順序(書き込み→観測→drain)・クローズ分岐・last_tick ---
