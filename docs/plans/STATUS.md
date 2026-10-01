@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **M3 ws-3(通知)から**(ws-2完了・着手はユーザーGoサイン待ち。単位表は2026-09-30ユーザーGoサインで確定・ws-1〜ws-9)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
+- 次の着手: **M3 ws-3∥ws-4並行実装中**(2026-10-01ユーザーGoサイン。設計・計画まで完了しagent3が2 worktreeで並走。どちらも完了後にスーパーバイザー検証→直列マージ。次はws-5)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -309,6 +309,8 @@
 - 学習資産追従: ws-2分 22c57f3(第18章「時間が状態を閉じる: 期限切れバッチとリセットジョブ」+Lab 6〔期限を過去へ書き換えてsweeperを観察〕新設・既存8ファイル更新〔README順路・00-environment・第7/12/14/15/17章・Lab 5〕。Lab 6は全手順実測・agent4がmake test 1100 passedとnatural-japanese lint全10ファイル収束を確認。クローズ検知drainのLab体験は大がかりのため第18章18.7の説明で担保・ws-3後に保留キューラボへ再候補)/ 2026-10-01
 - ws-3 / 設計 eba8d09(supervisor承認: design §5の6件=①attendance等の第二汎用文PUSH_BODY_NOTICE〔文言規定なし・G3時確認候補〕②nearby本文も提案同一文言〔文面分離で閾値未満がOS経路に漏れる〕③送信はtxコミット直後・失敗再送なし〔outboxはG3後再検討〕④お知らせ一覧へlatch要素LEFT JOIN埋め込み・文言はクライアント組立。解釈記録2件=成立matched通知は作らない〔05 §6遷移表に規定なし〕・attendance_requestはD-08上限不消費はG3時確認事項へ。FCM Admin SDKのIFはcontext7一次確認済み・スタブはsend_each_async/dry_run形を模倣)/ 2026-10-01
 - ws-4 / 設計 5333a6f(supervisor承認: design §5の7件=①attendanceはLATCH単位先着1名確定〔calibration_records構造からの必然・G3時確認候補〕②CHAT_READONLYをcompleted/cancelled後へ拡大〔03 §6・08 §2.5読取専用の統一〕③messages本文1〜1000字・空白のみ422④未completedへのattendanceは409 LATCH_CLOSED⑤calibration行不在は503+構造化ログ⑥マイグレーション0006=Index 2本〔05 §3規定なしは設計判断〕⑦POST messagesは201。ブロック409分岐は先行実装しws-5へstore.select_block_betweenを明け渡し。**ws-3並走・マイグレーション追加はws-4のみ0006・ws-3はhead=0005不変のため番号衝突なし。両worktreeのtest-ci同時実行禁止〔運用ルール1〕**)/ 2026-10-01
+- ws-3 / 計画 0481f9d(3,137行・Task 1〜11・実コード全文記載。機械チェック合格: basename一意〔新規4ファイル既存ゼロ・supervisor再実行で確認〕・ピン試験追随访問〔test_settings=push_2項目・test_latch_engine/test_sweeper=ヘルパー拡張+追記4/2件・test_llm_factoryはstartswith機械検査で無干渉〕・DB干渉対抗策〔m3ws3-プレフィックス・FK順teardown〕・試験数整合〔unit 29新規=1129・test-ci 1342=1301+41〕)/ 2026-10-01実装着手
+- ws-4 / 計画 c3dbafa(2,571行・Task 1〜10・実コード全文記載。機械チェック合格: basename一意〔test_chat*既存ゼロ〕・ピン試験追随访問〔settings無変更・test_latches_store_sql走査対象拡大の影響分析込み〕・DB干渉対抗策〔m3ws4-プレフィックス・messages/blocks掃除追加・時間値now相対〕・試験数整合〔unit 19新規=1119・test-ci 1337=1301+36〕。supervisor修正: §7検証手順2の期待値タイポ1118→1119)/ 2026-10-01実装着手(worktree w6・a3-ws4)
 
 ## G2判定資料(2026-09-30・承認済み)
 
