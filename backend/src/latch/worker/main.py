@@ -33,6 +33,7 @@ from latch.worker.matching.group_engine import GroupEngine
 from latch.worker.matching.latch_engine import LatchEngine
 from latch.worker.reeval import ReevalRunner
 from latch.worker.reset import ResetJob
+from latch.worker.retention import RetentionJob
 from latch.worker.stage1 import Stage1
 from latch.worker.sweeper import ExpirySweeper
 
@@ -227,6 +228,9 @@ class Worker:
                     latch=self._latch,
                     retry_sec=self.settings.reset_retry_sec,
                 )
+            # RetentionJob DI(M3 ws-6・design §2.5案A): 30日定期削除。
+            # engineのみで動く(redis不要)のためResetJobと違い無条件構築
+            retention_job = RetentionJob(engine=engine, clock=self.clock)
             await bus.ensure()
             self._subscription = await bus.subscribe(self._dispatch)
             debouncer_task = asyncio.create_task(debouncer.run(stop=self._stop))
@@ -237,6 +241,7 @@ class Worker:
             reset_task = None
             if reset_job is not None:
                 reset_task = asyncio.create_task(reset_job.run(stop=self._stop))
+            retention_task = asyncio.create_task(retention_job.run(stop=self._stop))
             logger.info("worker started (app_env=%s)", self.settings.app_env)
             await self._stop.wait()
             # graceful shutdown: 窓内entryは解放せず未ack再配信へ(design §2.3)
@@ -248,6 +253,7 @@ class Worker:
                 await reeval_task
             if reset_job is not None:
                 await reset_task
+            await retention_task
             logger.info("worker stopped")
         finally:
             if owns_engine and engine is not None:
