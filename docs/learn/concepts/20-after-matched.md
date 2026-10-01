@@ -119,7 +119,13 @@ async def send_message(self, *, auth_provider, auth_subject, latch_id, body):
                 raise ChatReadonlyError("chat readonly")
             user_ids = await store.fetch_participant_user_ids(conn, row.intent_ids)
             others = [u for u in user_ids if u != user_id]
-            if await store.select_block_between(conn, user_id, others):
+            if self._block_cache is not None:
+                blocked = await self._block_cache.is_blocked_between(
+                    user_id, others
+                )
+            else:
+                blocked = await store.select_block_between(conn, user_id, others)
+            if blocked:
                 raise ChatReadonlyError("chat readonly")
             return await store.insert_message(
                 conn, latch_id=row.id, sender_id=user_id, body=body, now=now
@@ -130,7 +136,8 @@ async def send_message(self, *, auth_provider, auth_subject, latch_id, body):
         raise _wrap_unexpected(exc) from exc
 ```
 
-(`backend/src/latch/latches/service.py:232-271`。docstringは省略)
+(`backend/src/latch/latches/service.py:235-280`。docstringは省略。
+`if self._block_cache is not None:` の分岐は第21章のマージで加わりました)
 
 手順を番号で言えば、次の6段階です。①本人の解決(未登録は404)。②**FOR
 UPDATE**でlatches行を行ロックして読む(不在は404)。③参加者かどうか
@@ -212,11 +219,14 @@ _SELECT_BLOCK_BETWEEN = text("""
 つまり、matchedであってもblocks行があれば送信は409 CHAT_READONLY——
 20.2の「matched単一条件」に、blocks判定だけが並列に加わる形です。
 
-ブロックを登録するAPI(POST /v1/users/{id}/block)は次の単位の実装なので、
-この章のLabではblocks行をfixtureとして直接INSERTして試験します(第5章・
-第17章でlatches行を直接INSERTしたのと同じ作法です)。判定関数
-`store.select_block_between` は、後続の単位がRedisキャッシュ版へ差し替える
-**差し替え点**として、この1関数に隔離してあります。
+ブロックを登録するAPI(POST /v1/users/{id}/block)と、登録と同時に進行中の
+提案を閉じる処理は、第21章で読みます。この章のLab(Lab 7 §4)では、その
+登録APIをそのまま叩いてblocks行の効果を確かめます。判定は、第21章のマージで
+Redisのキャッシュ(BlockCache)を経由するよう差し替わりました。20.3の
+`if self._block_cache is not None:` の分岐がそれで、else側の
+`store.select_block_between`(DB直読み)はキャッシュが使えないときの退路と
+して今も残っています。キャッシュの中身と「消して読み直す」更新のしくみは、
+第21章21.4で扱います。
 
 ## 20.5 申告は、最初の1人がLATCHの記録を確定する
 

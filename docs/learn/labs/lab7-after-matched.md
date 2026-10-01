@@ -12,7 +12,8 @@
   (403)、時間の経過による完了(completed)とプッシュのドライラン記録、
   完了後に読めるけれど書けないこと(409)、実施自己申告の受理(200)と二重回答
   (409)・3日窓(409)、そしてお知らせ一覧(LEFT JOIN)と既読(204)まで
-- 次に読むもの: なし(ここまでが、いま実装済みの最先端です)
+- 次に読むもの: `concepts/21-safety.md`(第21章)。§4で叩いたブロックのAPIが、
+  どんなしくみで「即時に」効くのか(キャッシュとD-23)を読みます
 
 ## 0. このLabで何をするか
 
@@ -209,8 +210,7 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST http://127.0.0.1:8000/v1/latches/$LAT
   -d '{"body":"19時の天文館の改札で会いましょう!"}'
 ```
 
-期待される出力(uuidと時刻は環境ごとに違います。**この応答の sender_id は§4で
-使うので、書き留めておいてください**):
+期待される出力(uuidと時刻は環境ごとに違います):
 
 ```
 {"message":{"id":"39238a61-1ab8-4d4e-adcf-a06d4748d065","latch_id":"adf10b0b-ad45-46db-b158-4411b01ded12","sender_id":"de3386ad-aa13-40d2-9396-8b51eda97fe3","body":"19時の天文館の改札で会いましょう!","created_at":"2026-10-01T06:47:04.038905Z"}}
@@ -233,7 +233,8 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST http://127.0.0.1:8000/v1/latches/$LAT
   -d '{"body":"了解です!ちょっと遅れていくかもしれません。"}'
 ```
 
-期待される出力:
+期待される出力(**この応答の sender_id はBさんのもので、§4でブロックの相手に
+指定するので、書き留めておいてください**):
 
 ```
 {"message":{"id":"36919826-f0c5-490c-a6a3-1a0faf9e9e27","latch_id":"adf10b0b-…","sender_id":"e589418d-69a3-4b99-9670-34bd1e1a7e18","body":"了解です!ちょっと遅れていくかもしれません。","created_at":"2026-10-01T06:47:05.079230Z"}}
@@ -306,28 +307,25 @@ items: 1 / body: 了解です!ちょっと遅れていくかもしれません�
 
 ## 4. ブロックで、書く道だけが閉じる
 
-第20章20.4を読んだら予想がつくはずです。blocksに行を1本入れると、
+第20章20.4を読んだら予想がつくはずです。ブロックを登録すると、
 **双方向**の送信が409になり、**読む方は200のまま**。これを確かめます。
-ブロックを登録するAPIはまだ実装されていないので、Lab 5・6と同じく
-fixtureとして直接INSERTします。
+ブロックの登録は、第21章で実装されたAPI(POST /v1/users/{id}/block)を
+そのまま使います。
 
-§3の1通目の応答にあった sender_id(Aさん)と、2通目の sender_id(Bさん)を
-使います。AがBをブロックした、という1行です(単方向の記録)。
+§3の2通目の応答にあった sender_id(Bさん)を使います。AがBをブロックする、
+という頼み方です(記録は単方向。A→Bの1行だけが生まれます)。
 
 ```bash
-docker compose exec -T db psql -U latch -d latch -c "
-INSERT INTO blocks (blocker_id, blocked_id, created_at)
-VALUES ('<Aのsender_id>'::uuid, '<Bのsender_id>'::uuid, now())
-RETURNING blocker_id, blocked_id;"
+ACCESS=$(cat /tmp/lab7-access-a.txt)
+curl -s -w "\nHTTP %{http_code}\n" -X POST http://127.0.0.1:8000/v1/users/<Bのsender_id>/block \
+  -H "Authorization: Bearer $ACCESS"
 ```
 
 期待される出力:
 
 ```
-              blocker_id              |              blocked_id
---------------------------------------+--------------------------------------
- de3386ad-aa13-40d2-9396-8b51eda97fe3 | e589418d-69a3-4b99-9670-34bd1e1a7e18
-(1 row)
+{"blocked_id":"e589418d-69a3-4b99-9670-34bd1e1a7e18"}
+HTTP 201
 ```
 
 **予測してから**、Aさん(Bをブロックした側)が送ってみます。
@@ -362,9 +360,11 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST http://127.0.0.1:8000/v1/latches/$LAT
 HTTP 409
 ```
 
-blocksは単方向の記録なのに、**どちら向きも409**。判定SQLが「私→誰か」と
-「誰か→私」のORで書かれていたこと(第20章20.4)の実演です。読む方はどう
-でしょう。
+blocksは単方向の記録なのに、**どちら向きも409**。「私→誰か」と「誰か→私」
+の両方向を見る判定(第20章20.4)の実演です。なお、登録APIはDBへの書き込みが
+決まったあとで、ブロック一覧のキャッシュ(Redisの覚え)を消しています。この
+送信では、消された覚えが新しい一覧で読み直されたうえで、409になりました
+(キャッシュの中身をのぞくのはLab 8でやります)。読む方はどうでしょう。
 
 ```bash
 curl -s -o /dev/null -w "GET: %{http_code}\n" "http://127.0.0.1:8000/v1/latches/$LATCH/messages" \
@@ -378,11 +378,12 @@ GET: 200
 ```
 
 読める。書く道だけが閉じました。ブロックを外すと書けるようにもどります。
+解除もAPIです(DELETE /v1/users/{id}/block)。
 
 ```bash
-docker compose exec -T db psql -U latch -d latch -c "
-DELETE FROM blocks WHERE blocker_id='<Aのsender_id>'::uuid AND blocked_id='<Bのsender_id>'::uuid;"
 ACCESS=$(cat /tmp/lab7-access-a.txt)
+curl -s -o /dev/null -w "DELETE: %{http_code}\n" -X DELETE http://127.0.0.1:8000/v1/users/<Bのsender_id>/block \
+  -H "Authorization: Bearer $ACCESS"
 curl -s -o /dev/null -w "POST: %{http_code}\n" -X POST http://127.0.0.1:8000/v1/latches/$LATCH/messages \
   -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS" \
   -d '{"body":"ブロックを外したら戻りました"}'
@@ -391,7 +392,7 @@ curl -s -o /dev/null -w "POST: %{http_code}\n" -X POST http://127.0.0.1:8000/v1/
 期待される出力:
 
 ```
-DELETE 1
+DELETE: 204
 POST: 201
 ```
 
@@ -739,15 +740,17 @@ DELETE 3
    お知らせ一覧(DB+LEFT JOIN)の2経路で観察できた。それぞれの役割の違いを
    第19章の2層(事実の行と届け方)で説明する
 
-疑問が残ったら、それもノートに書いてください。ブロックの登録API・お知らせの
-画面・30日の定期削除は、次の実装単位以降の題材です。
+疑問が残ったら、それもノートに書いてください。§4で使ったブロックのAPIの
+中身(キャッシュとD-23)は第21章とLab 8で、お知らせの画面・30日の定期削除は
+次の実装単位以降の題材です。
 
 ## 12. このLabの対象になったコード
 
 - `backend/src/latch/latches/routes.py` — POST/GET messages・POST attendanceの
   3エンドポイント(latches_routerへの追記)
 - `backend/src/latch/latches/service.py` — send_message・list_messages・
-  submit_attendance(FOR UPDATE→検査→INSERT・条件付きUPDATE)
+  submit_attendance(FOR UPDATE→検査→INSERT・条件付きUPDATE)。send_messageの
+  ブロック判定は第21章のBlockCache経由に差し替わっています(§4)
 - `backend/src/latch/latches/store.py` — messages挿入・改頁選択・blocks双方向
   判定・calibrationの条件付きUPDATE
 - `backend/src/latch/notifications/` — GET /v1/notifications・既読(§9)
