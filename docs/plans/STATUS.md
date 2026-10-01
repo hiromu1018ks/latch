@@ -62,6 +62,10 @@
 4. ws-3: **attendance_requestのプッシュ文言は第二汎用文「LATCHからのお知らせがあります」・D-08日次上限は消費しない**(文言規定なしは08 §2.6趣旨の準用として設計確定。上限対象は03 §4「提案通知」でカウントSQLどおり。ws-3 design §5-1・§5-6)
 5. ws-4: **attendanceの回答単位はLATCH単位・先着1名で確定**(05 §5「初回のみ受理」とcalibration_records構造〔参加者別の回答保持場所なし〕からの演繹。2人目以降は409 ATTENDANCE_ALREADY_SUBMITTED。参加者別集約の将来導入はschema拡張を伴うdocs改版が必要。ws-4 design §5-1)
 6. ws-4: **status != completedへのattendanceは409 LATCH_CLOSED**(LATCH_CLOSEDの語義を「競合クローズ後」から「受付可能状態でない閉状態」へ拡大。CHAT_READONLYも同様に拡大〔completed/cancelled後の送信に使用〕。ws-4 design §5-2・§5-4)
+7. ws-5: **Layer 1(worker側)のblocks参照はSQL直読みのまま**(08 §5.1「Layer 1の参照はRedisキャッシュから」との文言差分を明示残置。fail-open回避・Layer 1判定頻度はバッチ周期のみ・M2資産の広範再構成回避。性能面の将来課題として先送り。ws-5 design §5-1)
+8. ws-5: **D-23 cancelled化の対象にcandidateを含める**(05 §6遷移表にcandidate→cancelled行なし。try_promoteが提示時にblocks再検査を持たないため放置するとブロック済み相手への提示が起こる。競合クローズ(ws-1)と同じcandidate含み。ws-5 design §5-2)
+9. ws-5: **ブロック解除後はチャット送信が可能に戻る(現物参照)**(08 §5.1「読み取り専用化を取り消さない」を「過去の状態変化を戻さない」の意と読む。誤ブロック→即解除の救済を担保。ws-5 design §5-3)
+10. ws-5: **1対1ブロックでセッション失効リストを使わない**(08 §5.3の「ブロック」を判定経路の即時性+cancelled化の同期実行で担うと読む。相手JWT失効は再ログイン強制=ブロックされた事実の通知と衝突するため。失効リストはlogout・退会・運用者停止へ。ws-5 design §5-4)
 
 ## M2 作業単位
 
@@ -323,6 +327,7 @@
   - マージ後main test-ci初回で1失敗(test_geo headピン0005のまま)→ **d1b0060で機械的追随**(ws-4計画§9-2の追随访問対象からtest_geoが漏れていた。M2 ws-6と同型)
   - 検証最終値: **マージ後main test-ci 1378 passed**(api再ビルド後・0006適用・=1301+41+36)・unit 1148 passed(=1100+29+19)・lint緑(254 files)・basename一意・alembic head=0006・依存追加なし・**残存ゼロ**(m3ws3-/m3ws4-・users/messages/blocks/calibration_records)・geo復旧実施(test-ci後のfixtureリロード対応)
 - 学習資産追従: ws-3/ws-4分 5e2766f(第19章「届ける: 通知の媒体と配信」・第20章「成立のあと: チャットと実施自己申告」+Lab 7〔成立のあとを一巡する〕新設・既存5ファイル更新〔README順路・00-environment〔件数1148/1378・notifications/追加〕・第14・18章・Lab 6〕。Lab 7は全手順実行検証・残存0確認。agent4がコード側瑕疵〔errors.py docstringの「关闭」混入〕を発見・supervisorが修正。make test 1148 passed・lint収束確認)/ 2026-10-01
+- ws-5 / 設計 3554fc9(supervisor承認: design §5の5件=①Layer 1はSQL直読みのまま〔08 §5.1との文言差分を明示残置〕②D-23対象にcandidate含み③解除後は現物参照④1対1ブロックでセッション失効不使用⑤display_name・reason英語コード・status値域は設計判断。解釈記録4件=⑦〜⑩はG3時確認事項へ追記済み。キャッシュ=blk:u:{user_id} JSON一覧read-through・TTL3600・コミット後DEL両者・Redis断はDBフォールバック)/ 2026-10-01
 
 ## G2判定資料(2026-09-30・承認済み)
 
