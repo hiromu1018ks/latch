@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **M3 ws-8(フロント周辺2画面)から**(ws-6∥ws-7完了〔2026-10-02・test-ci 1469 passed〕・着手はユーザーGoサイン待ち。実行wave: ws-8 → ws-9/G3)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
+- 次の着手: **M3 ws-8 進行中**(2026-10-02ユーザーGoサイン・設計完了 4ceb5df → 計画〔agent2〕へ。実行wave: ws-8 → ws-9/G3)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -66,6 +66,12 @@
 8. ws-5: **D-23 cancelled化の対象にcandidateを含める**(05 §6遷移表にcandidate→cancelled行なし。try_promoteが提示時にblocks再検査を持たないため放置するとブロック済み相手への提示が起こる。競合クローズ(ws-1)と同じcandidate含み。ws-5 design §5-2)
 9. ws-5: **ブロック解除後はチャット送信が可能に戻る(現物参照)**(08 §5.1「読み取り専用化を取り消さない」を「過去の状態変化を戻さない」の意と読む。誤ブロック→即解除の救済を担保。ws-5 design §5-3)
 10. ws-5: **1対1ブロックでセッション失効リストを使わない**(08 §5.3の「ブロック」を判定経路の即時性+cancelled化の同期実行で担うと読む。相手JWT失効は再ログイン強制=ブロックされた事実の通知と衝突するため。失効リストはlogout・退会・運用者停止へ。ws-5 design §5-4)
+11. ws-8: **お知らせ行のnearby文言は「近い条件の候補があるようです。」**(03 §4様式にnearby行の文面規定なし。「その発生(存在)の通知のみ」という規定(03 §2)の範囲内での設計判断。サマリ・相手情報は出さない。ws-8 design §5-2-1)
+12. ws-8: **お知らせ終了行は一律CLOSED_TEXT(自分の操作履歴を表示しない)**(notifications応答にmy_responseがなく(実装構造)フロントで二値化できないため、自分でno/deferで閉じた提案も統一文言。理由開示禁止(03 §7)の精神を満たす。二値化の主戦場は詳細画面(ws-7実装)が担う。ws-8 design §5-2-2)
+13. ws-8: **matched/completed後のproposal通知行はバッジ「成立済み」表示**(成立通知を作らない(ws-3解釈③)ため通知行は増えないが、JOINの現在statusがmatched/completedに変わった行で回答催促が不当になるのを防止。文言はSTATUS_TEXT流用。ws-8 design §5-2-3)
+14. ws-8: **ブロック解除に確認モーダルを挟む**(再登録導線が成立済み詳細(⑯採用)しかなく誤解除の回復コストが高いため。docs規定なしのUI判断。ws-8 design §5-2-4)
+15. ws-8: **提案詳細(proposed)にブロック導線を置かない**(参加者非開示のため対象を指定できず、blockには通報案Xのようなreportee_id省略解決の契約がない。08 §5.2の「提案画面から常に可能」は通報のみを規定。ws-8 design §5-2-5)
+16. ws-8: **ブロック登録導線を成立済み詳細に置く**(08 §5.1・03 §6に画面導線規定なし。ws-7 §5-2引継ぎ事項。ブロックAPI実装済みだが導線が皆無でD-23体験の入口が存在しないため、通報と同型の導線を成立済み詳細へ置く。フロントのみの追加。08 §5.1への導線追記はdocs改版候補。ws-8 design §5-1・§2-7)
 
 ## M2 作業単位
 
@@ -354,6 +360,7 @@
   - supervisor独立検証(test-ci初回)で1件失敗 → b0bc437: test_10のグループfixtureが存在しないランダムuuidをgroup_candidate_idへ渡すFK違反=テストコードの誤り(group_candidates実INSERTへ)。実装コードは無欠陥。test_safety_api test_6の単体実行失敗は試験間依存ノイズ(test-ci全体で安定グリーン)
   - 検証最終値: **マージ後main test-ci 1469 passed**(=1460+9)・lint緑・残存ゼロ(m3ws7-・reports・Redis blk:u:24キー掃除)・head=0006不変・依存追加なし
 - 学習資産追従: ws-6/ws-7分 8a17dd4(第22章「消すことの設計: カスケードと匿名化」+Lab 9〔フロント3画面を動かす・preview実機〕新設・既存6ファイル更新〔README・00-environment〔unit 1215・frontend 170・test-ci 1469〕・第6章〔DELETEの2段構え〕・第8章〔170件〕・第20章〔画面から使える〕・第21章〔案X拡張〕〕。make test 1215 passed・frontend 170 passed確認)/ 2026-10-02
+- ws-8 / 設計 4ceb5df(supervisor承認: **§5-1ブロック登録導線=成立済み詳細へ採用**〔ws-7 §5-2引継ぎ・導線皆無でD-23体験の入口が存在しないため・通報と同型・backend変更ゼロ・不採用時除外手順つき〕。引用確定値24件はdocs・実装と突合済み=03 §2/§4/§7/§8・05 §5・ws-3通知応答〔my_responseなし・latch LEFT JOIN・read 204冪等/404〕・ws-5 blocks〔display_name・DELETE 404〕・nearbyはcandidateのまま〔latch_engine〕・frontend現状〔CLOSED_TEXT・noticePopover・notification-dot常時表示〕。§5-2解釈5件はG3時確認事項⑪〜⑯へ追記)/ 2026-10-02
 
 ## G2判定資料(2026-09-30・承認済み)
 
