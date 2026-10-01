@@ -47,6 +47,7 @@ class StubUserService:
         self.registered: list[dict] = []
         self.register_error: Exception | None = None
         self.me: UserMe | None = ME
+        self.deleted: list = []
 
     async def register(self, *, claims, display_name, birth_date, profile):
         self.registered.append(
@@ -65,6 +66,9 @@ class StubUserService:
         if self.me is None:
             raise UserNotFoundError("user not found")
         return self.me
+
+    async def delete_account(self, *, claims):
+        self.deleted.append(claims)
 
 
 @pytest.fixture
@@ -221,3 +225,11 @@ async def test_malformed_json_400(client):
     )
     assert resp.status_code == 400
     _assert_envelope(resp.json(), "MALFORMED_REQUEST")
+
+
+async def test_delete_users_me_returns_204(client, stub):
+    """退会DELETE /v1/users/me(M3 ws-6・design §2.3)。"""
+    resp = await client.delete("/v1/users/me")
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert stub.deleted == [CLAIMS]
