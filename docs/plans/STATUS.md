@@ -338,6 +338,11 @@
 - ws-6∥ws-7着手 / 2026-10-01ユーザーGoサイン(並行・実行waveどおり)
 - ws-7 / 設計 a95378b(supervisor承認・**QUESTIONS 1件をsupervisor裁定**: 提案詳細からの通報は08 §5.2「提案画面から常に可能」と05のparticipants=matched以降/ws-5のreportee_id必須の契約空白。**案X=reportee_id省略可+latch_idからサーバ解決**(1対1一意・グループ提案は参加者非開示のため422・成立後は明示)をbackend付帯変更としてws-7ブランチで実施。02#21がG3受け入れ条件のため先送り利益なし。05 §5・08 §5.2への追記はdocs改版候補。設計要点: hashルーター自作・1画面3姿のstatus分岐・visibility分岐=time_summaryキー有無・チャット30秒ポーリング+初回複数頁取得・texts.js文言集約・ブロック導線はws-8)/ 2026-10-01
 - ws-6 / 設計 d1df28e(supervisor承認: 削除カスケード一元化=intents/deletion.py〔単発=Event経由/退会=同期txの2経路が1実体を共有〕・DELETE受理status全拡張〔matchedはFR-19の経路不通解消・05 §6追記はdocs改版候補〕・退会DELETE /v1/users/me新設〔同期tx完結・表示名置換はusers行UPDATE・auth_subject=deleted:idで認証切断・マイグレーションなし〕・RetentionJob=ResetJob同型の独立task・D-13第一段=ID系NULL化+actual_responsesのuser_id除去〔anonymized_atは第二段〕・blocks/reports残置〔削除リスト外+reportsは運用対応途中〕。**birth_date残存はオーナー確認候補〔退会後もDBに生年月日が残る点〕**)/ 2026-10-01
+- **API応答のcompleted_at欠陥修正** / 89bad27 / 2026-10-01
+  - a2-ws7(計画)が§9-6で発見: GET /v1/latches一覧・詳細応答のcompleted_atが常にnull(_summary_from_pageのNone固定+「completed遷移はws-2」コメントの更新漏れ・_page_view_ofも伝達漏れ。ws-1由来でws-2実装後に追随されず。ws-4のattendance実装はLatchRow直接参照のため無関係で検出不能だった)
+  - supervisor直接修正: 2箇所のcompleted_at=row.completed_at化+回帰ピン1件(test_summary_completed_at_flows_from_row)。unit 1188・test-ci 1427 passed。ws-6/ws-7計画書の基準値も機械的追随済み
+- ws-6 / 計画 aabc60d(ws-7計画と同時コミット・Task 1〜8・実コード全文記載。機械チェック合格: basename新規6ファイル既存ゼロ・ピン追従〔test_worker_stage1 2試験書き換え・groupengine test_8のみ特定〕・試験数整合〔unit 19+integration 15新規=1207/1461〕)/ 2026-10-01実装着手(worktree w9・a3-ws6)
+- ws-7 / 計画 aabc60d(3,762行超・Task 1〜15〔backend案X→frontend一式〕・機械チェック合格: frontend新規10テストファイル既存9と衝突なし・81件無傷の構造保証・§9-6適合措置2件〔attendanceの窓判定はサーバ409へ一本化〕・試験数整合〔backend unit 8+integration 1=1196/1436・frontend 81+86=167〕)/ 2026-10-01実装着手(worktree wA・a3-ws7)
 
 ## G2判定資料(2026-09-30・承認済み)
 
