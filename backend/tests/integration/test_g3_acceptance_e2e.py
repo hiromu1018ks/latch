@@ -24,6 +24,7 @@ from latch.core.clock import FakeClock, SystemClock
 from latch.geo.service import GeoService
 from latch.notifications.records import LOGGER_NAME
 from latch.notifications.sender import StubPushSender
+from latch.worker.matching.group_engine import GroupEngine
 from latch.worker.matching.latch_engine import LatchEngine
 from latch.worker.matching.runner import run_candidate_retrieval
 from latch.worker.sweeper import ExpirySweeper
@@ -746,3 +747,70 @@ async def test_5_group_defer_rejects(api_client, db_engine, field):
     row = await _latch_row(db_engine, latch)
     assert row["status"] == "rejected"
     assert row["responses"][-1]["response"] == "defer"  # 区別保持
+
+
+async def test_6_self_duplicate_group_excluded(api_client, db_engine, field):
+    """FR-17(10 §3)自己重複集合の除外・統合配置ケース(G3条件3・design §2.3試験6)。
+
+    同一ユーザーUのIntent 2つ(s・s2)+別ユーザーV・WのIntent各1を同一条件
+    (時間Bucket・地域・カテゴリ)で配置しGroupEngine.handle(s)を実行:
+    ①{s,s2}を同時に含くgroup_candidates行==0件(同一ユーザーのIntentを2つ
+    含む集合が生成されない)②対照: {s,V,W}は生成される(検証環境が通過状態
+    であることの保証)③s×s2のペア行(match_candidates)なし。多層防御=
+    Pool検索のLAYER1_WHERE_BASE(i.user_id <> :origin_user_id・§10-7)が
+    前段でs2をPoolから除外し、_PAIR_COMPAT(i1.user_id <> i2.user_id)・
+    貪欲法のuser相異(group_calc.build_groups・§10-8)・INSERT前user相異検査
+    が続く。1対1側(hardfilter test_10)と対のグループ経路確認。
+    """
+    clock = _clock()
+    start = _future(BASE_HOURS)
+    expires = _future(FAR_EXPIRES_H)
+    hu = await _user(api_client, field)  # ユーザーU(2 Intent)
+    s = await _intent(
+        api_client,
+        db_engine,
+        hu,
+        _structured(start=start, expires=expires, participants=(2, 4)),
+    )
+    s2 = await _intent(
+        api_client,
+        db_engine,
+        hu,
+        _structured(start=start, expires=expires, participants=(2, 4)),
+    )
+    hv = await _user(api_client, field)
+    v = await _intent(
+        api_client,
+        db_engine,
+        hv,
+        _structured(start=start, expires=expires, participants=(2, 4)),
+    )
+    hw = await _user(api_client, field)
+    w = await _intent(
+        api_client,
+        db_engine,
+        hw,
+        _structured(start=start, expires=expires, participants=(2, 4)),
+    )
+    group = GroupEngine(engine=db_engine, clock=clock)
+    ctx = await group.handle(uuid_mod.UUID(s["id"]))
+    assert ctx is not None  # handle自体は集合を生成する(対照の前提)
+    # ①{s,s2}を同時に含む集合行==0件
+    async with db_engine.connect() as conn:
+        n_bad = (
+            await conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM group_candidates"
+                    " WHERE intent_ids @>"
+                    " ARRAY[CAST(:s AS uuid), CAST(:s2 AS uuid)]"
+                ),
+                {"s": s["id"], "s2": s2["id"]},
+            )
+        ).scalar_one()
+    assert n_bad == 0
+    # ②対照: {s,V,W}(Uの2つ目を含まない3人集合)は生成される
+    # (全員の[min,max]に3が∈のため成立・偽陰性の対抗)
+    gc = await _group_of(db_engine, [s["id"], v["id"], w["id"]])
+    assert gc is not None and gc[1] == "candidate"
+    # ③s×s2のペア行なし(Pool×起点UPSERTの対象外=自己除外の実効)
+    assert await _pair_row(db_engine, s["id"], s2["id"]) is None
