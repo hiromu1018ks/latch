@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import text
@@ -28,7 +28,7 @@ _SELECT_USER_ID = text("""
 _SELECT_NOTIFICATIONS_PAGE = text("""
     SELECT n.id, n.type, n.payload->>'latch_id', n.read_at, n.created_at,
            l.id, l.status, l.response_deadline, l.expires_at, l.completed_at,
-           l.proposal
+           l.proposal, l.responses
     FROM notifications n
     LEFT JOIN latches l
       ON n.payload->>'latch_id'
@@ -81,6 +81,9 @@ class LatchJoinedRow:
     expires_at: datetime
     completed_at: datetime | None
     proposal: dict
+    # 本人の回答抽出用(m3-g3fix design §2.1・latches一覧と同一構造)。
+    # default_factory=list=既存fixture(未指定)互換
+    responses: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -140,6 +143,7 @@ async def select_notifications_page(
                 expires_at=r[8],
                 completed_at=r[9],
                 proposal=dict(_jsonb(r[10]) or {}),
+                responses=list(_jsonb(r[11]) or []),
             )
         out.append(
             NotificationPageRow(

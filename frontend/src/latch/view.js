@@ -11,8 +11,10 @@ import {
   DEADLINE_SOON_TEXT,
   HIDDEN_PROPOSAL_TEXT,
   MATCH_NOTICE_TEXT,
+  MATCHED_NOTICE_TITLE,
   MATCH_LEVEL_TEXT,
   NEARBY_NOTICE_TEXT,
+  NEXT_ACTION_TEXT,
   NOTICE_FALLBACK_TEXT,
   PROPOSAL_NOTICE_TITLE,
   STATUS_TEXT,
@@ -114,15 +116,25 @@ export const noticeTimeText = (iso) => {
 const CLOSED_STATUSES = new Set(["expired", "rejected", "cancelled"]);
 const MATCHED_NOTICE_STATUSES = new Set(["matched", "completed"]);
 
-// お知らせ行の文言(type×latch.statusのマトリクス・design §2.3)。
-// notifications応答にmy_responseがないため終了行は一律CLOSED_TEXT
-// (自分の操作履歴を表示しない・§5-2②)。nearbyは存在通知のみ。
+// お知らせ行の文言(type×latch.statusのマトリクス・design §2.3・m3-g3fix §2.5)。
+// 終了行はclosedText(latch)で自分の操作履歴(no/defer)へ分岐(03 §7・⑫)。
+// nearbyは存在通知のみ。latch_matchedは見出し+導線+バッジ(条件サマリ不含)。
 export const notificationLines = (item, nowIso) => {
   if (item.type === "nearby_candidate") return [NEARBY_NOTICE_TEXT];
   if (item.type === "attendance_request") return [ATTENDANCE_QUESTION];
   const latch = item.latch;
   if (!latch) return [NOTICE_FALLBACK_TEXT]; // 防御(全type)
-  if (CLOSED_STATUSES.has(latch.status)) return [CLOSED_TEXT]; // 一文統一
+  if (item.type === "latch_matched") {
+    // 解散後(statusがexpired等)は一文統一(03 §7)。条件サマリは成立通知行に
+    // 含めない(hidden_until_match提案は最小構造のままで表示可否が分かれる)
+    if (CLOSED_STATUSES.has(latch.status)) return [CLOSED_TEXT];
+    return [
+      MATCHED_NOTICE_TITLE,
+      NEXT_ACTION_TEXT, // 成立後詳細と同一の導線文言(文言単一ソース)
+      STATUS_TEXT[latch.status] ?? latch.status, // バッジ(成立済み/完了)
+    ];
+  }
+  if (CLOSED_STATUSES.has(latch.status)) return [closedText(latch)]; // 操作履歴へ分岐
   if (MATCHED_NOTICE_STATUSES.has(latch.status)) {
     const title = isMinimalProposal(latch)
       ? HIDDEN_PROPOSAL_TEXT

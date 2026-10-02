@@ -114,6 +114,25 @@ async def _user(api_client, prefix: str, birth_date: str = "1990-04-01"):
     return headers
 
 
+async def _user_with_subject(api_client, prefix: str) -> tuple[dict, str]:
+    """_userのsubjectつき版(m3-g3fix): LatchesService.respondをテスト
+    プロセス内で直接呼ぶためにauth_subjectが必要(JWT不要・DB解決)。"""
+    subject = f"{prefix}{uuid_mod.uuid4().hex[:8]}"
+    idp = await _cli_idp_token("google", subject)
+    tok = await api_client.post(
+        "/v1/auth/token", json={"provider": "google", "idp_token": idp}
+    )
+    assert tok.status_code == 200, tok.text
+    headers = {"Authorization": f"Bearer {tok.json()['access_token']}"}
+    created = await api_client.post(
+        "/v1/users",
+        headers=headers,
+        json={"display_name": "m3g3fix", "birth_date": "1990-04-01", "profile": {}},
+    )
+    assert created.status_code == 201, created.text
+    return headers, subject
+
+
 def _future(hours: float) -> str:
     return (SystemClock().now() + timedelta(hours=hours)).isoformat()
 
@@ -171,11 +190,22 @@ async def _intent(api_client, db_engine, headers, structured) -> dict:
 
 
 async def _seed_jev(db_engine, a_id: str, b_id: str, wa: float, wb: float) -> None:
-    """match_candidatesへjev_result付きevaluatedを直接投入。"""
+    """match_candidatesへjev_result付きevaluatedを直接投入。
+
+    jev_5axisはCalibrationのbuild_prediction(latches/calibration.py)が要求する
+    完全形(test_latches_api._seed_jevと同型。回答→matched経路のtest_9で必要)。
+    """
     jev = json.dumps(
         {
             "would_a_accept_b": wa,
             "would_b_accept_a": wb,
+            "jev_5axis": {
+                "purpose_fit": {"value": 0.5, "confidence": 0.9},
+                "mood_fit": {"value": 0.5, "confidence": 0.8},
+                "timing_fit": {"value": 0.5, "confidence": 0.7},
+                "social_fit": {"value": 0.5, "confidence": 0.6},
+                "latent_yes": {"value": 0.5, "confidence": None},
+            },
             "provider": "fixture",
             "model": None,
         }
@@ -714,3 +744,99 @@ async def test_8_unauthenticated_401(api_client, db_engine, field):
     assert resp.status_code == 401, resp.text
     resp2 = await api_client.post(f"/v1/notifications/{uuid_mod.uuid4()}/read")
     assert resp2.status_code == 401, resp2.text
+
+
+async def test_9_matched_notification_e2e(api_client, db_engine, field, caplog):
+    """1対1成立E2E(m3-g3fix design §4新設4): 両者yes→matched→
+    ①双方のnotificationsへtype=latch_matched行(payload={latch_id})
+    ②プッシュドライラン記録2件(第三汎用文のbyte比較・参加者全員=本人含む)
+    ③GET /v1/notificationsのlatch.my_responseが回答者視点で正しい値(yes)。
+
+    回答はテストプロセス内のLatchesService(push=StubPushSender)で直接実行
+    (test_6のsweeper直接構成と同型・api常設プロセスのpush記録はcaplogへ
+    出ないため)。③はapi常設プロセスが新コード(docker compose build api後)
+    であることを要する=スーパーバイザー検証時のtest-ciで有効になる検証。
+    """
+    from latch.latches.service import LatchesService
+    from latch.notifications.templates import PUSH_BODY_MATCHED
+
+    clock = _clock()
+    start = _future(BASE_HOURS)
+    expires = _future(FAR_EXPIRES_H)
+    ha, subject_a = await _user_with_subject(api_client, field)
+    a = await _intent(
+        api_client, db_engine, ha, _structured(start=start, expires=expires)
+    )
+    hb, subject_b = await _user_with_subject(api_client, field)
+    b = await _intent(
+        api_client, db_engine, hb, _structured(start=start, expires=expires)
+    )
+    async with db_engine.begin() as conn:
+        await run_candidate_retrieval(conn, clock, uuid_mod.UUID(a["id"]))
+    await _seed_jev(db_engine, a["id"], b["id"], 0.9, 0.9)
+    await _handle(db_engine, clock, a["id"])  # 提案化(pushなし)
+    uid_a = await _user_id_of(db_engine, a["id"])
+    uid_b = await _user_id_of(db_engine, b["id"])
+    async with db_engine.connect() as conn:
+        latch_id = (
+            await conn.execute(
+                text(
+                    "SELECT id FROM latches WHERE intent_ids && ARRAY["
+                    " CAST(:a AS uuid), CAST(:b AS uuid)]"
+                ),
+                {"a": a["id"], "b": b["id"]},
+            )
+        ).scalar_one()
+    # 回答はテストプロセス内のLatchesService(2人目yesでmatched)
+    svc = LatchesService(
+        clock=clock, engine=db_engine, push=StubPushSender(clock=clock)
+    )
+    out1 = await svc.respond(
+        auth_provider="google",
+        auth_subject=subject_a,
+        latch_id=latch_id,
+        response="yes",
+    )
+    assert out1.status == "partial_accept"
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        out2 = await svc.respond(
+            auth_provider="google",
+            auth_subject=subject_b,
+            latch_id=latch_id,
+            response="yes",
+        )
+    assert out2.status == "matched"
+    # ①双方のnotificationsへlatch_matched行(payload={latch_id})
+    async with db_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    "SELECT user_id, payload->>'latch_id' FROM notifications"
+                    " WHERE type = 'latch_matched'"
+                    " AND user_id IN (CAST(:a AS uuid), CAST(:b AS uuid))"
+                ),
+                {"a": uid_a, "b": uid_b},
+            )
+        ).fetchall()
+    assert {str(r[0]) for r in rows} == {uid_a, uid_b}
+    assert all(r[1] == str(latch_id) for r in rows)
+    # ②プッシュ記録2件(第三汎用文のbyte比較・D-20同時送信)
+    recs = [
+        r for r in _push_records(caplog) if r["notification_type"] == "latch_matched"
+    ]
+    assert len(recs) == 2
+    assert {r["user_id"] for r in recs} == {uid_a, uid_b}
+    for r in recs:
+        assert r["status"] == "ok"
+        assert r["title"] == "LATCH"
+        assert r["body"] == PUSH_BODY_MATCHED
+        assert r["latch_id"] == str(latch_id)
+    # ③お知らせ一覧のlatch.my_response(回答者視点・双方yesで成立)
+    resp = await api_client.get("/v1/notifications", headers=ha)
+    assert resp.status_code == 200, resp.text
+    matched_a = next(i for i in resp.json()["items"] if i["type"] == "latch_matched")
+    assert matched_a["latch"]["my_response"] == "yes"
+    assert matched_a["latch"]["status"] == "matched"
+    resp_b = await api_client.get("/v1/notifications", headers=hb)
+    matched_b = next(i for i in resp_b.json()["items"] if i["type"] == "latch_matched")
+    assert matched_b["latch"]["my_response"] == "yes"

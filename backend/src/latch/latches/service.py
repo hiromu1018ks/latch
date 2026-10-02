@@ -36,6 +36,8 @@ from latch.latches.schemas import (
     LatchSummaryOut,
     ParticipantOut,
 )
+from latch.notifications.sender import PushSender
+from latch.notifications.types import NOTIFICATION_MATCHED
 
 logger = logging.getLogger("latch.latches")
 
@@ -66,12 +68,19 @@ class LatchesService:
     """回答・一覧・詳細のユースケース(design §2.2・§2.8)。"""
 
     def __init__(
-        self, *, clock: Clock, engine: AsyncEngine, geo=None, block_cache=None
+        self,
+        *,
+        clock: Clock,
+        engine: AsyncEngine,
+        geo=None,
+        block_cache=None,
+        push: PushSender | None = None,
     ) -> None:
         self._clock = clock
         self._engine = engine
         self._geo = geo  # GeoService | None(Noneならarea_name=None)
         self._block_cache = block_cache  # BlockCache | None(NoneならDB直読み)
+        self._push = push  # PushSender | None(Noneなら成立通知pushはno-op)
 
     # -- 回答(design §2.2手順0〜6) --
 
@@ -83,6 +92,7 @@ class LatchesService:
         latch_id: uuid.UUID,
         response: str,
     ) -> LatchSummaryOut:
+        matched_user_ids: list[uuid.UUID] = []
         try:
             async with self._engine.begin() as conn:
                 user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
@@ -129,6 +139,16 @@ class LatchesService:
                 )
                 if new_status == "matched":
                     await self._on_matched(conn, row, now)
+                    # 成立通知の先行書き込み(参加者全員・m3-g3fix design §2.4)。
+                    # matched遷移を書く経路は現在respondのみ(05 §6遷移表・
+                    # sweeper/latch_engine/deletionはmatchedを書かない)。
+                    # 今後経路が増えた場合は通知挿入の追随が必要(design §6裁定6)
+                    matched_user_ids = await store.fetch_participant_user_ids(
+                        conn, row.intent_ids
+                    )
+                    await store.insert_matched_notifications(
+                        conn, latch_id=row.id, user_ids=matched_user_ids, now=now
+                    )
                 if new_status in _TERMINAL_FOR_CALIBRATION:
                     await self._create_calibration(
                         conn,
@@ -137,12 +157,17 @@ class LatchesService:
                         matched=new_status == "matched",
                         now=now,
                     )
-                return _summary(
+                out = _summary(
                     row=row,
                     status=new_status,
                     my_response=response,
                     after=after,
                 )
+            # txコミット後の成立通知プッシュ(ws-3 design §2.1案Aと同型・
+            # m3-g3fix design §2.4)。未注入(None)は_send_matched_pushes内でno-op
+            if matched_user_ids:
+                await self._send_matched_pushes(row.id, matched_user_ids)
+            return out
         except LatchesError:
             raise
         except Exception as exc:
@@ -391,6 +416,23 @@ class LatchesService:
                     conn, latch_id, from_status, "cancelled", None, now
                 )
 
+    async def _send_matched_pushes(
+        self, latch_id: uuid.UUID, targets: list[uuid.UUID]
+    ) -> None:
+        """txコミット後の成立通知プッシュ送信(m3-g3fix design §2.4)。
+
+        未注入(既存試験構成)はno-op。送信例外はsender側で握る(ws-3 §2.7)。
+        本文はbuild_pushの第三汎用文(条件サマリなし・08 §2.6)。
+        """
+        if self._push is None:
+            return
+        for user_id in targets:
+            await self._push.send(
+                user_id=user_id,
+                notification_type=NOTIFICATION_MATCHED,
+                latch_id=latch_id,
+            )
+
     async def _create_calibration(
         self, conn, *, row, after: list[dict], matched: bool, now
     ) -> None:
@@ -583,11 +625,15 @@ def _page_view_of(row):
 
 
 def make_latches_service(
-    *, clock: Clock, engine: AsyncEngine, block_cache=None
+    *, clock: Clock, engine: AsyncEngine, block_cache=None, push=None
 ) -> LatchesService:
     """main.py lifespan用の構築(GeoServiceはengineから作る)。"""
     from latch.geo.service import GeoService
 
     return LatchesService(
-        clock=clock, engine=engine, geo=GeoService(engine), block_cache=block_cache
+        clock=clock,
+        engine=engine,
+        geo=GeoService(engine),
+        block_cache=block_cache,
+        push=push,
     )

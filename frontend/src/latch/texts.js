@@ -66,6 +66,7 @@ export const PROPOSAL_NOTICE_TITLE = "LATCH候補があります。"; // 03 §4�
 export const MATCH_NOTICE_TEXT = "一致度が高い候補です。"; // 03 §4の様式
 export const NEARBY_NOTICE_TEXT = "近い条件の候補があるようです。"; // §5-2①(設計判断)
 export const NOTICE_FALLBACK_TEXT = "LATCHからのお知らせがあります。"; // latch=null防御
+export const MATCHED_NOTICE_TITLE = "LATCHが成立しました。"; // 成立通知行(m3-g3fix裁定2)
 
 // 通知許可(design §2.5・D-18のM3での範囲=ブラウザ許可状態のみ)
 export const PERMISSION_GRANTED_TEXT = "通知は許可されています";
