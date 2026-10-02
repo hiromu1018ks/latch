@@ -367,6 +367,7 @@
   - スーパーバイザー独立検証: **一発グリーン**(worktree・マージ後mainともfrontend 217 passed・build成功)。コードレビューで表示規制の遵守を確認(nearby行=リンクなしdiv+文言1行・hidden行=条件サマリなし・終了3種=CLOSED_TEXT定数参照〔完了条件6〕・matched行=回答促しなしバッジ・escapeHtml全面適用・detail.jsはrenderMatched追記のみで提案姿に導線なし・Notification API DI注入・preload失敗はmain.jsでcatch)。変更18ファイル=§4どおり・basename一意・backend/prototype差分ゼロ
   - **マージ後main test-ci 1469 passed**(376秒・frontendのみのためbackend試験数不変)・frontend 217 passed・build成功・worktree wB・ブランチ削除済み
   - **G3完了条件の「プロトタイプ6画面」が揃った**(ホーム・提案詳細・成立済み詳細〔ws-7〕+お知らせ一覧・設定〔ws-8〕+Intent入力〔M1〕。実装基準はprototype/)
+- 学習資産追従: ws-8分 d813830(第23章「お知らせと設定: 文言は表で決め、一箇所に置く」+Lab 10〔お知らせと設定を動かす・5種通知fixture→notificationLines実測→ドット→既読化→設定→ブロック登録/解除/404まで全手順実行検証〕新設・既存7ファイル更新〔README順路・00-environment〔frontend 217〕・第8章〔文言集約の復習接続〕・第19章〔通知の断面〕・第21章・第22章〔次に読むもの→第23章〕・Lab 9〔6画面完結の接続〕〕。agent4がmake test 1215 passed・frontend 217 passed・natural-japanese lint収束・latch-ci環境返却〔notifications/latches/lab10ユーザー0・preview停止〕を確認)/ 2026-10-02
 
 ## G2判定資料(2026-09-30・承認済み)
 
