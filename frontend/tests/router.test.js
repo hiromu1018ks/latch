@@ -32,6 +32,15 @@ describe("parseHash(design §2.1)", () => {
     expect(parseHash("#/latches/11111111-1111-1111-1111-111111111111").name)
       .toBe("home"); // 4が無くuuid形式として不正
   });
+
+  it("#/settings をsettingsへ解析する(厳密一致・ws-8 design §2.4)", () => {
+    expect(parseHash("#/settings")).toEqual({ name: "settings", id: null });
+  });
+
+  it("#/settings/ など末尾に追加がある場合は未知hashとしてホームへ", () => {
+    expect(parseHash("#/settings/")).toEqual({ name: "home", id: null });
+    expect(parseHash("#/settings/x")).toEqual({ name: "home", id: null });
+  });
 });
 
 describe("createRouter(hashchangeで画面section切替)", () => {
@@ -77,5 +86,24 @@ describe("createRouter(hashchangeで画面section切替)", () => {
     window.location.hash = `#/latches/${UUID}`;
     window.dispatchEvent(new Event("hashchange"));
     expect(onRoute).not.toHaveBeenCalled();
+  });
+
+  it("hashchangeでsettings画面へ切替(home・latchは隠す)", () => {
+    const screens = {
+      home: document.createElement("div"),
+      latch: document.createElement("div"),
+      settings: document.createElement("div"),
+    };
+    const onRoute = vi.fn();
+    const router = createRouter({ screens, onRoute });
+    window.location.hash = "#/";
+    router.start();
+    window.location.hash = "#/settings";
+    window.dispatchEvent(new Event("hashchange"));
+    expect(screens.settings.hidden).toBe(false);
+    expect(screens.home.hidden).toBe(true);
+    expect(screens.latch.hidden).toBe(true);
+    expect(onRoute).toHaveBeenLastCalledWith({ name: "settings", id: null });
+    router.stop();
   });
 });

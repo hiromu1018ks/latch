@@ -2,13 +2,20 @@
 // フロントで新たな計算をしない — 一致度はmatch_level・残時間は
 // response_deadlineの書式変換のみ・visibility分岐はproposalの
 // time_summaryキー有無(生成側の2形と1:1)。
-import { formatCategory } from "../intent/format.js";
+import { formatCategory, jstParts } from "../intent/format.js";
 import {
   ANSWERED_TEXT,
+  ATTENDANCE_QUESTION,
   CLOSED_TEXT,
   DEADLINE_CLOSED_TEXT,
   DEADLINE_SOON_TEXT,
+  HIDDEN_PROPOSAL_TEXT,
+  MATCH_NOTICE_TEXT,
   MATCH_LEVEL_TEXT,
+  NEARBY_NOTICE_TEXT,
+  NOTICE_FALLBACK_TEXT,
+  PROPOSAL_NOTICE_TITLE,
+  STATUS_TEXT,
 } from "./texts.js";
 
 const PROPOSAL_STATUSES = new Set(["proposed", "partial_accept"]);
@@ -95,3 +102,57 @@ export const escapeHtml = (value) =>
   String(value).replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
+
+// --- M3 ws-8追記: お知らせ行の純関数(design §2.3) ---------------------------
+
+// created_atのJST書式(お知らせ行・ブロック日の日付表示。年は出さない)
+export const noticeTimeText = (iso) => {
+  const p = jstParts(iso);
+  return `${p.month}月${p.day}日 ${p.hour}:${p.minute}`;
+};
+
+const CLOSED_STATUSES = new Set(["expired", "rejected", "cancelled"]);
+const MATCHED_NOTICE_STATUSES = new Set(["matched", "completed"]);
+
+// お知らせ行の文言(type×latch.statusのマトリクス・design §2.3)。
+// notifications応答にmy_responseがないため終了行は一律CLOSED_TEXT
+// (自分の操作履歴を表示しない・§5-2②)。nearbyは存在通知のみ。
+export const notificationLines = (item, nowIso) => {
+  if (item.type === "nearby_candidate") return [NEARBY_NOTICE_TEXT];
+  if (item.type === "attendance_request") return [ATTENDANCE_QUESTION];
+  const latch = item.latch;
+  if (!latch) return [NOTICE_FALLBACK_TEXT]; // 防御(全type)
+  if (CLOSED_STATUSES.has(latch.status)) return [CLOSED_TEXT]; // 一文統一
+  if (MATCHED_NOTICE_STATUSES.has(latch.status)) {
+    const title = isMinimalProposal(latch)
+      ? HIDDEN_PROPOSAL_TEXT
+      : [latch.proposal.time_summary, latch.proposal.area_name]
+          .filter(Boolean)
+          .join(" ");
+    return [
+      title,
+      ...(conditionSummaryLines(latch) ?? []),
+      STATUS_TEXT[latch.status] ?? latch.status, // バッジ(回答促しは出さない)
+    ];
+  }
+  // proposed / partial_accept
+  if (isMinimalProposal(latch)) {
+    return [
+      HIDDEN_PROPOSAL_TEXT,
+      MATCH_NOTICE_TEXT,
+      remainingTimeText(latch.response_deadline, nowIso),
+    ];
+  }
+  return [
+    PROPOSAL_NOTICE_TITLE,
+    ...(conditionSummaryLines(latch) ?? []),
+    MATCH_NOTICE_TEXT,
+  ];
+};
+
+// タップ先(nearbyとlatch=nullはリンクなし・引用#20)
+export const notificationHref = (item) => {
+  if (item.type === "nearby_candidate") return null;
+  if (!item.latch) return null;
+  return `#/latches/${item.latch.id}`;
+};

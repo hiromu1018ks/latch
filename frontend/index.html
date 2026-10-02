@@ -36,12 +36,12 @@
           <div class="popover-wrap">
             <button class="icon-button notification-button" id="noticeButton" type="button" aria-label="お知らせ" aria-expanded="false">
               <i class="ph ph-bell" aria-hidden="true"></i>
-              <span class="notification-dot"></span>
+              <span class="notification-dot" id="notificationDot" hidden></span>
             </button>
             <div class="popover notification-popover" id="noticePopover" role="status" hidden>
               <p class="popover-kicker">お知らせ</p>
-              <strong>まだ新しい候補はありません</strong>
-              <span>条件が合うと、ここに静かに届きます。</span>
+              <div class="notice-list" id="noticeList"></div>
+              <button class="more-button notice-more" id="noticeMoreButton" type="button" hidden>もっと見る</button>
             </div>
           </div>
           <span class="topbar-divider topbar-divider-short" aria-hidden="true"></span>
@@ -52,7 +52,7 @@
             </button>
             <div class="popover account-popover" id="accountPopover" hidden>
               <button type="button">プロフィール</button>
-              <button type="button">設定</button>
+              <button type="button" id="settingsButton">設定</button>
               <button type="button">ログアウト</button>
             </div>
           </div>
@@ -178,6 +178,21 @@
           </section>
         </div>
         <section class="detail-view" id="detailScreen" hidden></section>
+        <section class="settings-view" id="settingsScreen" hidden>
+          <div class="settings-inner">
+            <p class="section-kicker"><span></span>SETTINGS</p>
+            <h1>設定</h1>
+            <section class="settings-section" aria-labelledby="notificationSettingsTitle">
+              <div class="section-heading"><span aria-hidden="true"></span><h2 id="notificationSettingsTitle">通知</h2></div>
+              <div id="permissionControl"></div>
+            </section>
+            <section class="settings-section" aria-labelledby="blockSettingsTitle">
+              <div class="section-heading"><span aria-hidden="true"></span><h2 id="blockSettingsTitle">ブロック管理</h2></div>
+              <div class="block-list" id="blockList"></div>
+              <button class="more-button" id="blockMoreButton" type="button" hidden>もっと見る</button>
+            </section>
+          </div>
+        </section>
       </main>
 
       <div class="toast" id="toast" role="status" hidden>
@@ -199,6 +214,8 @@
         </section>
       </div>
       <div class="modal-backdrop" id="reportModal" role="presentation" hidden></div>
+      <div class="modal-backdrop" id="unblockModal" role="presentation" hidden></div>
+      <div class="modal-backdrop" id="blockModal" role="presentation" hidden></div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

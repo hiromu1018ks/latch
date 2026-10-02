@@ -56,3 +56,35 @@ export const REPORT_REASON_OPTIONS = [
   ["suspected_impersonation", "なりすまし疑い"],
   ["other", "その他"],
 ];
+
+// --- M3 ws-8追記: お知らせ・設定(design §2.8) -----------------------------
+
+// お知らせpopover(03 §2・§4の様式・design §2.3)
+export const NOTICE_EMPTY_TITLE = "まだ新しい候補はありません";
+export const NOTICE_EMPTY_NOTE = "条件が合うと、ここに静かに届きます。";
+export const PROPOSAL_NOTICE_TITLE = "LATCH候補があります。"; // 03 §4の様式
+export const MATCH_NOTICE_TEXT = "一致度が高い候補です。"; // 03 §4の様式
+export const NEARBY_NOTICE_TEXT = "近い条件の候補があるようです。"; // §5-2①(設計判断)
+export const NOTICE_FALLBACK_TEXT = "LATCHからのお知らせがあります。"; // latch=null防御
+
+// 通知許可(design §2.5・D-18のM3での範囲=ブラウザ許可状態のみ)
+export const PERMISSION_GRANTED_TEXT = "通知は許可されています";
+export const PERMISSION_DEFAULT_TEXT = "通知は許可されていません";
+export const PERMISSION_DENIED_TEXT =
+  "通知はブラウザの設定でブロックされています。ブラウザの設定から変更できます。";
+export const PERMISSION_UNSUPPORTED_TEXT = "この環境では通知を利用できません。";
+export const PERMISSION_NOTE_TEXT = "許可しなくても、アプリ内のお知らせで確認できます。";
+export const PERMISSION_REQUEST_LABEL = "通知の許可を求める";
+
+// ブロック管理・登録(design §2.6〜§2.7)
+export const BLOCKS_EMPTY_TEXT = "ブロックしているユーザーはいません";
+export const BLOCK_UNBLOCK_LABEL = "解除する";
+export const BLOCK_CANCEL_LABEL = "やめる";
+export const BLOCK_CONFIRM_SUFFIX = "さんのブロックを解除しますか?"; // 前に表示名を結合
+export const BLOCK_ENTRY_TEXT = "このユーザーをブロックする"; // 成立済み詳細の導線
+export const BLOCK_CONFIRM_TEXT = "ブロックすると、このやりとりは利用できなくなります。";
+export const BLOCK_SUBMIT_LABEL = "ブロックする";
+export const BLOCK_SELECT_LABEL = "ブロックする相手";
+export const BLOCK_SELECT_ERROR_TEXT = "相手を選んでください。";
+export const BLOCK_TOAST_TEXT = "ブロックしました";
+export const BLOCK_ERROR_TEXT = "送信できませんでした。";
