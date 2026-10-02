@@ -8,24 +8,30 @@ import pytest
 
 from latch.notifications.templates import (
     PUSH_BODY_LATCH,
+    PUSH_BODY_MATCHED,
     PUSH_BODY_NOTICE,
     PUSH_TITLE,
     build_push,
 )
 from latch.notifications.types import (
     NOTIFICATION_ATTENDANCE_REQUEST,
+    NOTIFICATION_MATCHED,
     NOTIFICATION_NEARBY,
     NOTIFICATION_PROPOSAL,
 )
 
 
 def test_push_constants_full_text():
-    """3定数の全文ピン(design §2.4初期値・03 §4様式)。"""
+    """4定数の全文ピン(design §2.4初期値・03 §4様式・m3-g3fix裁定3)。"""
     assert PUSH_TITLE == "LATCH"
     assert PUSH_BODY_LATCH == "LATCH候補があります。\n詳細はアプリでご確認ください。"
     assert (
         PUSH_BODY_NOTICE
         == "LATCHからのお知らせがあります。\n詳細はアプリでご確認ください。"
+    )
+    assert (
+        PUSH_BODY_MATCHED
+        == "LATCHが成立しました。\nチャットでメッセージを確認しましょう。"
     )
 
 
@@ -38,6 +44,7 @@ def test_build_push_maps_all_types():
         PUSH_TITLE,
         PUSH_BODY_NOTICE,
     )
+    assert build_push(NOTIFICATION_MATCHED) == (PUSH_TITLE, PUSH_BODY_MATCHED)
 
 
 def test_build_push_unknown_type_raises():
@@ -71,6 +78,7 @@ def test_build_push_output_has_no_condition_summary():
         NOTIFICATION_PROPOSAL,
         NOTIFICATION_NEARBY,
         NOTIFICATION_ATTENDANCE_REQUEST,
+        NOTIFICATION_MATCHED,
     ):
         title, body = build_push(ntype)
         for word in forbidden:
