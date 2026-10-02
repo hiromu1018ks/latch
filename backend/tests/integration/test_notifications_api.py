@@ -190,11 +190,22 @@ async def _intent(api_client, db_engine, headers, structured) -> dict:
 
 
 async def _seed_jev(db_engine, a_id: str, b_id: str, wa: float, wb: float) -> None:
-    """match_candidatesへjev_result付きevaluatedを直接投入。"""
+    """match_candidatesへjev_result付きevaluatedを直接投入。
+
+    jev_5axisはCalibrationのbuild_prediction(latches/calibration.py)が要求する
+    完全形(test_latches_api._seed_jevと同型。回答→matched経路のtest_9で必要)。
+    """
     jev = json.dumps(
         {
             "would_a_accept_b": wa,
             "would_b_accept_a": wb,
+            "jev_5axis": {
+                "purpose_fit": {"value": 0.5, "confidence": 0.9},
+                "mood_fit": {"value": 0.5, "confidence": 0.8},
+                "timing_fit": {"value": 0.5, "confidence": 0.7},
+                "social_fit": {"value": 0.5, "confidence": 0.6},
+                "latent_yes": {"value": 0.5, "confidence": None},
+            },
             "provider": "fixture",
             "model": None,
         }
