@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **m3-g3fix(G3承認前の修正単位2件)**→G3ゲート判定(2026-10-02ユーザー裁定「B: 両方直す」: ⑫=お知らせAPIへmy_response追加+自分の操作履歴文言〔03 §7の理想へ届ける〕・③=成立(matched)通知の追加〔05 §6遷移表と01導入文の矛盾を通知あり側で解消〕。完了後にG3承認へ戻る。点1=ci実施判定・点2=FCM実機確認のM4繰越は同日ユーザー承認済み)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
+- 次の着手: **G3ゲート判定**(m3-g3fix完了〔2026-10-02・マージ後main test-ci 1480 passed・frontend 223 passed〕。点1=ci実施判定・点2=FCM実機確認のM4繰越はユーザー承認済み。G3時確認事項は⑫⑬がm3-g3fixで解消済みの状態で判定)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -58,7 +58,7 @@
 
 1. ws-1: **paused参加Intentを含む成立**(05 §6遷移表のmatched行は「active→matched」表記だがcancelled/expired行は「active・paused」のため、提示後にpauseされた提案も回答可能と読む。design §5-3)
 2. ws-1: **segmentフラグの計算時点=回答確定時の現行Intent文言**(09 §2.3「提案化時に判定し記録」を判定規則の定義と読み、レコード作成は07 §6の回答確定時。提案〜回答間にIntent更新がある場合のみ評価行〔バージョン固定〕とsegment〔現行文言〕の時点がずれうる。design §5-4)
-3. ws-3: **成立(matched)通知は作らない**(05 §6遷移表が通知を規定するのはcandidate→proposed〔提案〕とmatched→completed〔申告〕のみで、proposed→matchedの通知規定なし。01 第46行「成立時にだけ通知が来る」は導入文であり具体規定が優先。ws-3 design §5-5)
+3. ws-3: **成立(matched)通知は作らない**(05 §6遷移表が通知を規定するのはcandidate→proposed〔提案〕とmatched→completed〔申告〕のみで、proposed→matchedの通知規定なし。01 第46行「成立時にだけ通知が来る」は導入文であり具体規定が優先。ws-3 design §5-5)**→ m3-g3fix 4133227で解釈変更・成立通知を実装(type=latch_matched・G3承認前のユーザー裁定)**
 4. ws-3: **attendance_requestのプッシュ文言は第二汎用文「LATCHからのお知らせがあります」・D-08日次上限は消費しない**(文言規定なしは08 §2.6趣旨の準用として設計確定。上限対象は03 §4「提案通知」でカウントSQLどおり。ws-3 design §5-1・§5-6)
 5. ws-4: **attendanceの回答単位はLATCH単位・先着1名で確定**(05 §5「初回のみ受理」とcalibration_records構造〔参加者別の回答保持場所なし〕からの演繹。2人目以降は409 ATTENDANCE_ALREADY_SUBMITTED。参加者別集約の将来導入はschema拡張を伴うdocs改版が必要。ws-4 design §5-1)
 6. ws-4: **status != completedへのattendanceは409 LATCH_CLOSED**(LATCH_CLOSEDの語義を「競合クローズ後」から「受付可能状態でない閉状態」へ拡大。CHAT_READONLYも同様に拡大〔completed/cancelled後の送信に使用〕。ws-4 design §5-2・§5-4)
@@ -67,7 +67,7 @@
 9. ws-5: **ブロック解除後はチャット送信が可能に戻る(現物参照)**(08 §5.1「読み取り専用化を取り消さない」を「過去の状態変化を戻さない」の意と読む。誤ブロック→即解除の救済を担保。ws-5 design §5-3)
 10. ws-5: **1対1ブロックでセッション失効リストを使わない**(08 §5.3の「ブロック」を判定経路の即時性+cancelled化の同期実行で担うと読む。相手JWT失効は再ログイン強制=ブロックされた事実の通知と衝突するため。失効リストはlogout・退会・運用者停止へ。ws-5 design §5-4)
 11. ws-8: **お知らせ行のnearby文言は「近い条件の候補があるようです。」**(03 §4様式にnearby行の文面規定なし。「その発生(存在)の通知のみ」という規定(03 §2)の範囲内での設計判断。サマリ・相手情報は出さない。ws-8 design §5-2-1)
-12. ws-8: **お知らせ終了行は一律CLOSED_TEXT(自分の操作履歴を表示しない)**(notifications応答にmy_responseがなく(実装構造)フロントで二値化できないため、自分でno/deferで閉じた提案も統一文言。理由開示禁止(03 §7)の精神を満たす。二値化の主戦場は詳細画面(ws-7実装)が担う。ws-8 design §5-2-2)
+12. ws-8: **お知らせ終了行は一律CLOSED_TEXT(自分の操作履歴を表示しない)**(notifications応答にmy_responseがなく(実装構造)フロントで二値化できないため、自分でno/deferで閉じた提案も統一文言。理由開示禁止(03 §7)の精神を満たす。二値化の主戦場は詳細画面(ws-7実装)が担う。ws-8 design §5-2-2)**→ m3-g3fix 4133227で解消(my_response追加+操作履歴文言・G3承認前のユーザー裁定)**
 13. ws-8: **matched/completed後のproposal通知行はバッジ「成立済み」表示**(成立通知を作らない(ws-3解釈③)ため通知行は増えないが、JOINの現在statusがmatched/completedに変わった行で回答催促が不当になるのを防止。文言はSTATUS_TEXT流用。ws-8 design §5-2-3)
 14. ws-8: **ブロック解除に確認モーダルを挟む**(再登録導線が成立済み詳細(⑯採用)しかなく誤解除の回復コストが高いため。docs規定なしのUI判断。ws-8 design §5-2-4)
 15. ws-8: **提案詳細(proposed)にブロック導線を置かない**(参加者非開示のため対象を指定できず、blockには通報案Xのようなreportee_id省略解決の契約がない。08 §5.2の「提案画面から常に可能」は通報のみを規定。ws-8 design §5-2-5)
@@ -376,6 +376,13 @@
   - geo実データ復旧(test-ci後のfixtureリロード対応)
   - **M3の9単位(ws-1〜ws-9)すべて完了**
 - 学習資産追従: ws-9分 6efb0fd(第24章「『できた』を証明する: 受け入れ試験の設計」新設〔対応表→「ないことの証明」=完全列挙とキー集合一致→文言に忠実な配置=4人組3人YES→偽陰性と対照→teardown恒久対策を、6試験の実コード29箇所の行番号つき引用で読む。Labは共有ci-dbを消費するため不設置・24.8にcollect-only・unit・対応表精読の代替手段〕+既存2ファイル更新〔README順路34番・00-environment〔integration 260・計1475〕〕。agent4がmake test 1215 passedを編集前後2回・natural-japanese lint収束・フルモード検査〔並列レビュー3本・所見26件の判断台帳仕分け〕を確認。試験を個別実行して観察するLabはM4-1のstaging環境自立後に再候補)/ 2026-10-02
+- **m3-g3fix(G3承認前の修正単位)** / 設計 9f9e7cf・計画 3e82b06・マージ 4133227(実装は84e3b64まで・7コミット)/ docs/plans/M3/m3-g3fix-report.md / 2026-10-02
+  - 経緯: G3承認確認時にsupervisorが提示した気になる2点へユーザー裁定「B: 両方直す」→文言案6件のQUESTIONSへ「全部推奨で」→実装
+  - 修正A(⑫解消): notifications一覧SQLへl.responses追加+LatchJoinedRow拡張(default_factoryで既存fixture互換)・_my_response複製(latchesと同一規律)・NotificationLatchOut.my_response・フロント終了行はclosedText流用(文言単一ソース・「辞退しました」「今回は見送りました」)
+  - 修正B(③解消): NOTIFICATION_MATCHED='latch_matched'・第三汎用文PUSH_BODY_MATCHED(「LATCHが成立しました。\nチャットでメッセージを確認しましょう。」)・respond()のmatched分岐tx内でfetch_participant_user_ids+insert_matched_notifications(先行書き込み)→txコミット後_send_matched_pushes(push DI注入・Noneでno-op)・D-08不消費(_COUNT_DAILY_NOTIFICATIONS無変更)・全員同時送信(D-20準用)・main.py lifespan配線
+  - agent3実装(13分28秒)。逸脱は誠実(redの現れ方・ruff format・§6-6の表記ずれ指摘)。**supervisor検証(test-ci初回)で1失敗を検出→直接修正84e3b64**: test_notifications_api._seed_jevのjev_resultにjev_5axis不在=Calibrationのbuild_predictionがKeyError(test_9が回答→matched経路を初めて通過で顕在化したテストfixture欠陥・実装コードは無欠陥)
+  - 検証最終値: worktree lint緑・unit 1219・frontend 223・収集1480・**worktree test-ci 1480 passed(修正後)**・**マージ後main test-ci 1480 passed**(api・worker再ビルド後)・frontend 223・m3ws3残0件・head=0006不変
+  - G3時確認事項⑫⑬は本修正で解消(⑫=操作履歴文言を実装・⑬の成立済みバッジ表示はlatch_matched行で自然に実現)。③=成立通知は「作らない」から「作る」への解釈変更として実装
 
 ## G2判定資料(2026-09-30・承認済み)
 
@@ -396,13 +403,13 @@
 
 ## G3判定資料(2026-10-02・承認待ち)
 
-- **①02#13〜#23がci環境でグリーン**(12 M3完了条件①): ws-9 design §2.1表1の対応(詳細はdesign.md)。既存試験対応付け14項目(回答・成立・期限・グループ・チャット・ブロック・通報)+新設 — 試験1(#13 muted含むドライラン+ホームのLATCH候補から回答可能チェーン)・試験2(#22 公開設定2値A/B比較+#23 座標非開示=応答キー13個規定集合ピン)。**マージ後main test-ci 1475 passed**(2026-10-02・24f88f6)
+- **①02#13〜#23がci環境でグリーン**(12 M3完了条件①): ws-9 design §2.1表1の対応(詳細はdesign.md)。既存試験対応付け14項目(回答・成立・期限・グループ・チャット・ブロック・通報)+新設 — 試験1(#13 muted含むドライラン+ホームのLATCH候補から回答可能チェーン)・試験2(#22 公開設定2値A/B比較+#23 座標非開示=応答キー13個規定集合ピン)。**マージ後main test-ci 1480 passed**(2026-10-02・m3-g3fix込み・#17の解放比較はmy_response追加でより強化)
 - **②グループLATCH 6検証がグリーン**(09 §3): design §2.1表2。集合生成=groupengine test_1/5/11・全員YES=latches test_9/10+chat test_1・部分成立禁止(no側)=latches test_9+**試験5(defer側)**・**期限確定=試験3(4人組3人YES→deadline経過→expired)**・通知順序=groupengine test_6(D-06上位1集合)・**競合クローズ=試験4(グループ成立×共有Intentの1対1閉塞)**+latches test_5/11(1対1側)
-- **③追加試験がグリーン**(10 §3): D-10年齢制限=intents test_4b(422 UNDER_AGE)+hardfilter test_7/8(Layer 1)・D-23成立後ブロック=safety test_4〜7+frontend latch-chat(CHAT_UNAVAILABLE_TEXT)・プッシュ表示規制FR-21=notifications test_2(3ケースbyte同一・汎用文)+test_4c(hidden最小構造)+latchengine test_2・自己ペア除外FR-17=hardfilter test_10(1対1)+**試験6(自己重複集合=グループ側+対照assert)**
-- **④プロトタイプ6画面**: 完了(ws-8マージ 97a87fe・実装基準はprototype/)。frontend vitest **217 passed**再実行(2026-10-02)
-- **実施環境の解釈**: 10 §3は#13・#15〜#19等をstaging割り当てだがstaging構築はM4-1のためM3時点で存在しない — G2解釈④と同型に**ci環境(compose常設・スタブLLM)で実施**(待ち事項2としてG3承認時に確認。staging再実行はM4-3)
-- **FCM実送信**: スタブのドライラン記録(StubPushSender→`latch.notifications`構造化ログ)でFR-21を検証(待ち事項1・人間領域)
-- **G3時確認事項①〜⑯**(実装解釈16件)の承認を含む
+- **③追加試験がグリーン**(10 §3): D-10年齢制限=intents test_4b(422 UNDER_AGE)+hardfilter test_7/8(Layer 1)・D-23成立後ブロック=safety test_4〜7+frontend latch-chat(CHAT_UNAVAILABLE_TEXT)・プッシュ表示規制FR-21=notifications test_2(3ケースbyte同一・汎用文)+test_4c(hidden最小構造)+latchengine test_2+**m3-g3fixの第三汎用文ピン**・自己ペア除外FR-17=hardfilter test_10(1対1)+**試験6(自己重複集合=グループ側+対照assert)**
+- **④プロトタイプ6画面**: 完了(ws-8マージ 97a87fe・実装基準はprototype/)。frontend vitest **223 passed**再実行(2026-10-02・m3-g3fix込み)
+- **実施環境の解釈**: 10 §3は#13・#15〜#19等をstaging割り当てだがstaging構築はM4-1のためM3時点で存在しない — G2解釈④と同型に**ci環境(compose常設・スタブLLM)で実施**・**staging再実行はM4-3**(2026-10-02ユーザー承認済み)
+- **FCM実送信**: スタブのドライラン記録(StubPushSender→`latch.notifications`構造化ログ)でFR-21を検証・**実機送信確認はM4以降(Firebase資材準備後に実施)**(2026-10-02ユーザー承認済み)
+- **G3時確認事項①〜⑯**(実装解釈16件)の承認を含む — **うち⑫と③はm3-g3fix(4133227)で解消済み**(⑫=操作履歴文言を実装・③=成立通知を作るへ解釈変更して実装)。⑬のバッジ表示もlatch_matched行で実現
 
 ## 運用ルール(並列worktree × ci環境DB共有。ws-1レビューの引継ぎ事項より裁定)
 
