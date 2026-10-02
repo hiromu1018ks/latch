@@ -383,6 +383,7 @@
   - agent3実装(13分28秒)。逸脱は誠実(redの現れ方・ruff format・§6-6の表記ずれ指摘)。**supervisor検証(test-ci初回)で1失敗を検出→直接修正84e3b64**: test_notifications_api._seed_jevのjev_resultにjev_5axis不在=Calibrationのbuild_predictionがKeyError(test_9が回答→matched経路を初めて通過で顕在化したテストfixture欠陥・実装コードは無欠陥)
   - 検証最終値: worktree lint緑・unit 1219・frontend 223・収集1480・**worktree test-ci 1480 passed(修正後)**・**マージ後main test-ci 1480 passed**(api・worker再ビルド後)・frontend 223・m3ws3残0件・head=0006不変
   - G3時確認事項⑫⑬は本修正で解消(⑫=操作履歴文言を実装・⑬の成立済みバッジ表示はlatch_matched行で自然に実現)。③=成立通知は「作らない」から「作る」への解釈変更として実装
+- 学習資産追従: m3-g3fix分 fa4616a(既存7ファイル更新・新章なし=ミニ単位方針。第23章=my_response分岐とlatch_matched行の追記〔文言はview.jsをnode実行で確認〕・第19章〔type 4値〕・第24章・第8章・Lab 10〔成立通知の実行検証はDB不可のため次回拡張候補の注記〕・README・00-environment〔1219/223/1480〕。agent4がmake test 1219・frontend 223・lint収束を確認)/ 2026-10-02
 
 ## G2判定資料(2026-09-30・承認済み)
 
