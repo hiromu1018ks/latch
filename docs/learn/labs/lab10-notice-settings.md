@@ -42,11 +42,19 @@
 curlとpsqlで仕込み、nodeで確かめ、ブラウザで見る。壊しません(データは
 最後に全部消します)。
 
+なお、通知typeは4つになりました(2026-10-02のm3-g3fixで成立通知
+latch_matchedが加わった・第23章23.2)。この4つ目は回答API(respond)が
+提案を成立させるときにだけ書かれるもので、直INSERTでは作りません。成立まで
+自分の手で歩く練習はLab 5に、成立通知の行の読み方は第23章23.2にあります。
+このLabの5種は、マトリクスの提案・近くの候補・問いかけの側を確かめます。
+
 ## 1. apiと画面を用意する
 
 Lab 9 §1〜2と同じです。apiが`(healthy)`であることを確認し、frontendを
-配信用にビルドしてpreviewで開きます(ws-8はbackendを1行も変えていないので、
-apiのビルドし直しはws-7以降行っていなければ不要です)。
+配信用にビルドしてpreviewで開きます。apiのビルドし直しは、このLabを動かす
+時点までにbackendへマージ済みの変更がなければ不要です。2026-10-02の
+m3-g3fix(お知らせの応答に my_response が加わる・§4)以降の初回実行では、
+`docker compose build api` から始めてください。
 
 ```bash
 cd /home/misty/Projects/latch
@@ -282,7 +290,8 @@ print('items数:', len(d['items']), '/ next_cursor:', d['next_cursor'])"
       "time_summary": "2026-10-09 19:00",
       "category_primary": "meal",
       "category_secondary": "焼肉"
-    }
+    },
+    "my_response": null
   }
 }
 items数: 5 / next_cursor: None
@@ -290,8 +299,12 @@ items数: 5 / next_cursor: None
 
 第19章19.5の応答例と、形が同じであることを確認してください。`read_at` が
 全部null(未読)であること・payloadに書いたlatch_idだけでなくlatchの塊が
-埋め込まれていること(LEFT JOIN)・`my_response` という鍵が**ない**こと
-(第23章23.2の終了行が一律一文になる理由)。
+埋め込まれていること(LEFT JOIN)・latchブロックに `my_response` という鍵が
+乗っていること。`my_response` は2026-10-02のm3-g3fixで応答に加わった欄で、
+「あなたがこのLATCHに答えていれば何と答えたか」が入ります(第23章23.2)。
+まだ誰も答えていないproposedの行なので null です。答えたあとの行で値が乗る
+様子は、integration試験 `test_notifications_api.py` のtest_9(成立のE2E)が
+回答者視点で検証しています。
 
 ## 5. 実API応答を、本物の純関数に通す
 
@@ -341,12 +354,14 @@ node /tmp/lab10-view.mjs /tmp/lab10-notifications.json
 
 第23章23.2の表が、そのまま出ました。2行目はproposalが最小構成
 (`time_summary`がない)なので条件サマリが出ず、代わりに締切の残時間が
-並ぶ。3行目はcancelledなのでCLOSED_TEXTの1行。4行目のnearbyは文言が
+並ぶ。3行目はcancelledなのでCLOSED_TEXTの1行(直INSERTのlatches行は
+responsesが空のままなので my_response=null。第23章23.2の分岐が文言を変える
+のは、APIで答えたあとの行です)。4行目のnearbyは文言が
 存在の一文だけで、タップ先がない。5行目の申告は問いかけだけ。
 
 試験(`npm test`のlatch-notice.test.js)が検証している関数と、ブラウザが
 使っている関数と、このnode実行で呼んだ関数は**同じ1つ**です。この一致が、
-「217件がブラウザなしで走る」こと(第8章8.7)の実感になります。
+「223件がブラウザなしで走る」こと(第8章8.7)の実感になります。
 
 ## 6. ブラウザでドットの一生を見る
 

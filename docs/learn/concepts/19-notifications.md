@@ -32,7 +32,9 @@
 
 第14章と第18章で、notificationsテーブルへの**先行書き込み**を読みました。
 提案が出ればproposal・近くに候補がいればnearby_candidate(第14章)、
-会が終わればattendance_request(第18章)。いずれもpayloadは
+会が終わればattendance_request(第18章)。そして提案が成立すれば
+latch_matched(2026-10-02のマージm3-g3fixで加わりました。回答APIと同じ
+トランザクションで、参加者全員分の行が書かれます)。いずれもpayloadは
 `{"latch_id": "<uuid>"}` だけの、文言を一切持たない行でした。送るべき
 「事実」は、遷移と同じトランザクションで先にDBへ書かれている。
 この章はその続きです。溜まった行を、どう届けるか。
@@ -83,6 +85,7 @@ LATCHは2を選びました。`notifications/templates.py` の全体がこれで
 PUSH_TITLE = "LATCH"
 PUSH_BODY_LATCH = "LATCH候補があります。\n詳細はアプリでご確認ください。"
 PUSH_BODY_NOTICE = "LATCHからのお知らせがあります。\n詳細はアプリでご確認ください。"
+PUSH_BODY_MATCHED = "LATCHが成立しました。\nチャットでメッセージを確認しましょう。"
 
 
 def build_push(notification_type: str) -> tuple[str, str]:
@@ -90,16 +93,19 @@ def build_push(notification_type: str) -> tuple[str, str]:
         return PUSH_TITLE, PUSH_BODY_LATCH
     if notification_type == NOTIFICATION_ATTENDANCE_REQUEST:
         return PUSH_TITLE, PUSH_BODY_NOTICE
+    if notification_type == NOTIFICATION_MATCHED:
+        return PUSH_TITLE, PUSH_BODY_MATCHED
     raise ValueError(f"unknown notification_type: {notification_type!r}")
 ```
 
-(`backend/src/latch/notifications/templates.py:16-33`)
+(`backend/src/latch/notifications/templates.py:17-40`)
 
-読み方が3つあります。
+読み方が4つあります。
 
 1つめ。`build_push`(文面を作る)に渡せるのは、通知の種類を表すtype文字列
 だけです。proposal(提案)なのかnearby_candidate(近くの候補)なのか
-attendance_request(実施のお知らせ)なのか。時間も場所も人数も、この関数は
+attendance_request(実施のお知らせ)なのかlatch_matched(成立の連絡)なのか。
+時間も場所も人数も、この関数は
 **知りようがありません**。「引数に条件サマリを混ぜてしまう」ような間違いは、
 先の1案ではコードレビューで見つけるしかありませんでした。2案では
 **型の上で存在しない経路**です。規定を破るには、まず関数の形を変えなければ
@@ -117,7 +123,14 @@ attendance_request(実施のお知らせ)なのか。時間も場所も人数も
 から、文案だけ別にしました。どちらの文面も、条件サマリを一切含まないことは
 同じです(設計判断の経緯はws-3設計§2.4と§5-1にあります)。
 
-なお、この3つの定数はunit試験で**全文がそのまま固定**されています
+4つめ。成立通知(latch_matched)は、第三の汎用文「LATCHが成立しました。\n
+チャットでメッセージを確認しましょう。」です(2026-10-02のマージm3-g3fixで
+追加)。成立の連絡に「どんな提案が」を付けないのは、FR-21と同じ構えです。
+文面が伝えるのは成立という事実と、次に何をするか(チャット)だけで、条件
+サマリは乗りません。これで汎用文は3つ。関数の形はws-3から変わっていません。
+typeが増えると分岐が1つ足るだけで、他の経路には何も起きません。
+
+なお、この4つの定数はunit試験で**全文がそのまま固定**されています
 (`tests/unit/notifications/test_templates.py`)。文言の変更は、定数と試験の
 両方を変える作業になります。うっかり「ちょっと詳しい文面に変えてみよう」と
 いう変更が、静かに紛れ込まない仕掛けです。
@@ -170,6 +183,12 @@ class PushSendRecord(BaseModel):
 ```
 
 (`backend/src/latch/notifications/records.py:22-32`)
+
+コメントに並ぶtype名は3つで、これはこの型が生まれたws-3時点の並びです。
+2026-10-02に成立通知(latch_matched)が加わったときも、型の変更はありません
+でした。typeを受け取る欄はstrという値なので、typeの追加は「新しい文字列が
+1つ増える」だけで済みます。型が安定しているから、送信の記録も途切れずに
+続いています。
 
 `latch.llm.send`(第9章)と同じ作りの**構造化ログ**——出すフィールドを型で
 固定した、機械が読める1行の記録です。ロガー名は `latch.push.send`。
@@ -242,6 +261,16 @@ D-08の日次上限(1日6件)はnotifications行を数えていますから、�
 (`worker/sweeper.py:297-355`。第18章18.6の引用に、`targets.append(...)` の
 1行が加わったのがそれです)。
 
+この「tx内で行を書き、コミット後に送る」型は、回答の経路にも入りました。
+2026-10-02のマージm3-g3fixで、提案が成立する回答(respondで必要人数のyesが
+揃うとき)が、成立通知(latch_matched)を参加者全員へ書くようになったのです
+(第17章の回答APIと同じ窓口)。手順はsweeperのcompleted通知とそっくりです。
+matchedへの遷移を書く**同じトランザクションの中で**参加者全員のuser_idを
+集め、全員分のnotifications行を書き、コミットが済んだらプッシュを送る。
+実装(`latches/service.py` のrespond)には「今後、matched遷移を書く経路が
+増えた場合は通知挿入の追随が必要」というコメントが添えられています。今この
+遷移を書くのは回答APIだけで、だからここに置いて抜けがない、という記録です。
+
 ## 19.5 お知らせは構造で渡す: LEFT JOINと、文言を任せる理由
 
 もう一方の届け方、アプリ内通知(お知らせ)に入ります。窓口は2つ。
@@ -265,7 +294,7 @@ D-08の日次上限(1日6件)はnotifications行を数えていますから、�
 ```sql
 SELECT n.id, n.type, n.payload->>'latch_id', n.read_at, n.created_at,
        l.id, l.status, l.response_deadline, l.expires_at, l.completed_at,
-       l.proposal
+       l.proposal, l.responses
 FROM notifications n
 LEFT JOIN latches l
   ON n.payload->>'latch_id'
@@ -281,6 +310,11 @@ LIMIT :limit
 ```
 
 (`backend/src/latch/notifications/store.py:28-44`)
+
+SELECTの2行目の末尾に `l.responses` があります。latchesのresponses列
+(誰がyes/no/deferを返したかの記録。第17章17.3)を、応答の材料として運ぶ列で、
+2026-10-02のマージm3-g3fixで1行に足されました。SELECTが1列増えるだけで、
+JOINの形も改頁の条件もws-3から変わっていません。
 
 **JOIN**(ジョイン)とは、2つの表をつないで1つの結果にすることです。
 「notificationsの各行に、latchesの対応する行を横に並べる」。
@@ -314,13 +348,21 @@ uuidの形をしていなかった場合に問い合わせ全体が例外で死�
         "response_deadline": "…",
         "expires_at": "…",
         "completed_at": "2026-10-01T06:44:24.377022Z",
-        "proposal": {"headcount": 2, "match_level": "medium"}
+        "proposal": {"headcount": 2, "match_level": "medium"},
+        "my_response": "yes"
       }
     }
   ],
   "next_cursor": null
 }
 ```
+
+`my_response` は2026-10-02のマージm3-g3fixでlatch要素に加わった欄で、
+「あなたはこのLATCHに何と答えたか」を伝えます。この例はyesで参加したあとに
+完了したLATCHの行なので、自分の回答(yes)が乗ります。答えていなければnull。
+値はあなた自身の回答だけで、相手が何と答えたかはどんな行にも出ません
+(03 §7。この欄の使い道は第23章23.2で読みます。回答者視点の値の検証は
+integration試験 `test_notifications_api.py` のtest_9が担っています)。
 
 ここで、19.2の文面の話とつながります。文言はクライアントに任せた——では、
 **プライバシーはどうなる**のでしょう。hidden_until_match(成立するまで条件を
@@ -335,7 +377,11 @@ hidden_until_matchの行のproposalは `headcount` と `match_level` だけ
 では関数の型で、お知らせではデータの中身で、二重に守っている構図です。
 「クライアントが組み立てる」側の実装はM3 ws-8で生まれました。応答の
 typeとlatch.statusの組から行の文言を決める表は、第23章23.2で読みます
-(Lab 10では、この章の応答を本物の関数に通せます)。
+(Lab 10では、この章の応答を本物の関数に通せます)。なお、my_responseの追加
+はこの設計の1回目の実地試験でもありました。応答に材料が1つ増えただけで、
+文言を組み立てるのは相変わらずクライアントです。お知らせの終了行があなたの
+操作履歴を表示できるようになったのは、サーバが文言を足したからではなく、
+材料が揃ったからです(その接続の1行の話は、第23章23.3)。
 
 一覧が1頁(既定20件)を超えたら、続きを取るしくみが要ります。
 **cursor**(カーソル=次に読み始める位置を表す切符)です。しくみはこうです。
@@ -373,16 +419,20 @@ created_atが完全に同一になるから(第18章Lab 6で見ました)。1つ
   (プッシュ+お知らせ)はその後から読む。片方の失敗がもう片方を壊さない
 - プッシュの文面は、**引数にtypeしか取れない関数**からしか生まれない。
   FR-21(条件サマリをプッシュに含めない)の担保が、コードレビューの目から
-  関数の型へ移った。3つの定数はunit試験で全文固定されている
+  関数の型へ移った。汎用文は3つ(提案・申告・成立)で、
+  unit試験で全文固定されている
 - 送信者はProtocolで抽象し、現在は**ネットワークを呼ばないスタブ**。
   送信1件ごとに `latch.push.send` へ構造化ログを残す。本文を記録に含むのは
   「汎用文であることを記録で検証する」ため(LLM記録との方針差は、何が機微か
   による)
 - 送信は**トランザクションのコミット直後**。送り先はtx内で集めるだけ。
-  送信の失敗は例外を出さず記録に収め、再送しない。未注入はno-op
+  送信の失敗は例外を出さず記録に収め、再送しない。未注入はno-op。
+  成立通知(2026-10-02のm3-g3fixで追加)も同じ型で、回答APIのmatched遷移と
+  同じtxに参加者全員分の行を書き、コミット後に送る
 - お知らせ一覧はpayloadのlatch_idでlatchesを**LEFT JOIN**して構造だけ渡し、
   文言はクライアントが組み立てる。hidden_until_matchの行はproposalが最初から
-  最小構成なので、JOINしても条件サマリは**構造的に出ない**
+  最小構成なので、JOINしても条件サマリは**構造的に出ない**。latch要素の
+  my_response(自分の回答)も材料の1つで、相手の回答は構造的に出ない
 - 既読は冪等な204。他人のidは存在しないidと同じ404
 
 第17章・第18章と、latchesの行は提案・返事・成立・期限切れ・完了と進んできま
@@ -396,7 +446,8 @@ created_atが完全に同一になるから(第18章Lab 6で見ました)。1つ
 |---|---|
 | 条件サマリ | 人数・時間帯・地域名・カテゴリ・予算など、Intentの条件の要約 |
 | FR-21 | プッシュ本文を汎用文のみとし条件サマリを含めない、プライバシーの規定(03 §4・08 §2.6) |
-| 汎用文 | 「LATCH候補があります。詳細はアプリでご確認ください。」等、内容を特定しない固定の文面 |
+| 汎用文 | 「LATCH候補があります。詳細はアプリでご確認ください。」等、内容を特定しない固定の文面。現在は3つ(提案・申告・成立) |
+| 成立通知(latch_matched) | 提案が成立したとき参加者全員へ書かれる通知のtype(2026-10-02のm3-g3fixで追加)。プッシュは第三の汎用文 |
 | アプリ内通知 / お知らせ | notificationsの行をアプリの中の一覧として見せる届け方。プッシュの恒久フォールバック |
 | FCM | Firebase Cloud Messaging。Android・iOS・Webへのプッシュを中継するGoogleのサービス |
 | ドライラン | 外へ送らない代わりに「送ったならこうなる」を記録だけ残す実装方法 |
@@ -423,6 +474,9 @@ created_atが完全に同一になるから(第18章Lab 6で見ました)。1つ
    理由を、proposalの中身とJOINの関係で説明してください
 7. 既読APIが2回目も204を返す(冪等である)価値を、クライアント側の実装
    (通知を開く画面を2度開いた場合など)を想定して説明してください
+8. 成立通知のプッシュ本文が「LATCHが成立しました。\nチャットでメッセージを
+   確認しましょう。」である理由を、FR-21と「成立後にだけ解放される情報」
+   (第17章17.6)の2点から説明してください
 
 (解答例は用意していません。自分の言葉で答えられたら合格です。答えに詰まった
 部分が、読み返すべき節です)
