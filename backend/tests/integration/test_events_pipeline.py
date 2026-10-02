@@ -171,6 +171,13 @@ async def user_env(api_client, db_engine):
             await conn.execute(
                 text("DELETE FROM intents WHERE user_id = :uid"), {"uid": user_id}
             )
+            # usersも消す(STATUS ws-1節の観察: test-ci 1回あたり約12件のusers
+            # 蓄積。intents削除の後=FK順。usersはauth_*系テーブルから参照
+            # されないため追加削除は不要 — design §2.4)
+            await conn.execute(
+                text("DELETE FROM users WHERE id = CAST(:uid AS uuid)"),
+                {"uid": user_id},
+            )
 
 
 async def _create_active(api_client, headers) -> dict:
