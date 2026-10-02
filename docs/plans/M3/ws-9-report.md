@@ -50,6 +50,8 @@ lint起因の最小差分(§0「整形差分はruff formatを当てる」手順�
 
 ## コミット一覧
 ```
+245399f docs: ws-9 report — レビューMinor記録と切り分け指針を補足へ追記
+05699cf docs: ws-9 report with verification evidence
 1c1134a test: delete users in user_env teardown (m2ws1/m2ws2 leak fix)
 e1cd06f test: G3 acceptance e2e test 6 (self-duplicate group exclusion)
 e1971eb test: G3 acceptance e2e tests 3-5 (deadline expiry, conflict close, defer)
@@ -60,3 +62,8 @@ e1971eb test: G3 acceptance e2e tests 3-5 (deadline expiry, conflict close, defe
 - 計画書§0の「作成→構文→収集→unit全件」サイクルどおり全Taskを進行。各Taskでpy_compile・collect-only・`make lint && make test`(1215 passed不変)・basename一意(空)を確認してからコミット
 - スキップした項目なし(全Step実行)。仕様矛盾は発見せず
 - integration試験の実行は§0規律どおり一切行っていない(収集・構文確認のみ)
+- 実装後に独立レビュー(ブランチ全体cb2eab0..05699cf)を実施: Critical/Important 0件・verdict Yes。計画§8コードブロックとの機械突合で転写漏れ・改変ゼロ(逸脱は上記lint起因3点のみ)・Review Focus 5項目のピン留め(行番号実確認)と製品コード呼び出し形式の突合を確認。Minor 3件は以下のとおり記録のみ(修正対象外):
+  1. 試験2の `assert isinstance(p["area_name"], str) and p["area_name"]`(test_g3_acceptance_e2e.py:607)はci DBのgeofeatures逆引きが天文館周辺で必ず非Noneを返す前提(計画§8原文どおり)。**test-ciで万一落ちた場合は製品コードでなく期待値側の切り分け第一候補**
+  2. teardownコメント「usersはauth_*系テーブルから参照されないため追加削除は不要」(test_events_pipeline.py:175・test_embedding_pipeline.py:241)は根拠の記述が不正確(0001実査ではusersを参照するFKはintents/blocks/reports/notifications/messages。成立の真の根拠は「両試験がusers以外の参照行を作らない」)。動作影響なし・計画書原案の文言のためそのまま。他fixtureへの流用時は注意
+  3. コミット一覧欄は報告書コミット(05699cf)時点の4件(報告書は自分自身のコミットを列挙できない構造)。本追記コミット後は上記一覧に当該コミットを追記済み
+- test-ci時の追加切り分け指針(レビューRecommendationsより): 本diffは計画§8の忠実転写のため、試験が落ちた場合はまず計画書期待値側の誤りとして切り分けを開始する。test_6のPool検索は共有DBの残留Intentに感度を持ちうる(対照assertは「何も生成されない」偽陰性には効くが、外部残留Intentが貪欲法の選択を置き換える失敗まではガードしない — teardown+purge-match-subが前提)
