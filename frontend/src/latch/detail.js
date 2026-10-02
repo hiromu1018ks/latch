@@ -6,6 +6,7 @@ import { createChat } from "./chat.js";
 import { createRespondFlow } from "./respond.js";
 import {
   ANSWERED_TEXT,
+  BLOCK_ENTRY_TEXT,
   HIDDEN_PROPOSAL_TEXT,
   HOME_LINK_TEXT,
   LATCH_NOT_FOUND_TEXT,
@@ -25,7 +26,7 @@ import {
 
 const DEADLINE_TICK_MS = 30_000;
 
-export const createDetail = ({ client, appState, chrome, root, reportFlow }) => {
+export const createDetail = ({ client, appState, chrome, root, reportFlow, blockFlow = null }) => {
   let latchId = null;
   let timer = null;
   let chat = null;
@@ -78,6 +79,15 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow }) => 
         participants: participants ?? null,
         meId: appState.me?.id ?? null,
       });
+    });
+  };
+
+  // -- ブロック登録導線(ws-8 design §2.7・§5-1承認): 成立済み詳細のみ --
+  const wireBlockEntry = (section, participants) => {
+    const entry = section.querySelector("[data-role=block-entry]");
+    if (!entry) return;
+    entry.addEventListener("click", () => {
+      blockFlow?.open({ participants, meId: appState.me?.id ?? null });
     });
   };
 
@@ -186,6 +196,7 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow }) => 
           : ""
       }
       <button type="button" class="report-entry" data-role="report-entry">${reportEntryHtml("matched", latch.is_group)}</button>
+      <button type="button" class="block-entry" data-role="block-entry">${BLOCK_ENTRY_TEXT}</button>
     `;
     root.replaceChildren(section);
     chat = createChat({
@@ -206,6 +217,7 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow }) => 
       attendanceFlow.renderQuestion();
     }
     wireReportEntry(section, latch, participants);
+    wireBlockEntry(section, participants);
   };
 
   const renderClosed = (latch) => {

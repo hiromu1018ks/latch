@@ -936,3 +936,81 @@ html[data-theme="dark"] .modal-backdrop {
 @media (prefers-reduced-motion: reduce) {
   .latch-card { transition: none; }
 }
+
+/* ===== M3 ws-8 追加: お知らせ・設定・ブロック ===== */
+
+.notification-popover {
+  min-width: 320px;
+  max-height: 420px;
+  overflow-y: scroll; /* popoverの高さ上限・560px以下も同じ挙動 */
+}
+.notice-list { display: grid; gap: 10px; }
+.notice-item {
+  display: grid; gap: 4px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--paper); text-decoration: none; color: var(--ink);
+}
+.notice-item:hover, .notice-item:focus-visible { border-color: var(--green); }
+.notice-item.unread { border-color: var(--green); }
+.notice-line { font-size: 14px; }
+.notice-item.unread .notice-line:first-child { font-weight: 700; }
+.notice-time { font-size: 12px; color: var(--muted); }
+.notice-empty {
+  display: grid; gap: 6px; padding: 20px 16px;
+  border: 1px dashed var(--line); border-radius: 12px; color: var(--muted);
+}
+.notice-more { margin-top: 8px; }
+
+.settings-view { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+.settings-inner { display: grid; gap: 24px; }
+.settings-inner h1 { font-size: 24px; }
+.settings-section {
+  display: grid; gap: 14px; padding: 24px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--paper);
+}
+.permission-status { font-weight: 700; }
+.permission-note { font-size: 13px; color: var(--muted); }
+.permission-request {
+  justify-self: start; padding: 10px 24px; border-radius: 999px;
+  border: none; background: var(--green); color: #fff;
+  font-weight: 700; cursor: pointer;
+}
+.permission-request:disabled { opacity: 0.5; cursor: default; }
+
+.block-list { display: grid; gap: 10px; }
+.block-row {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px;
+}
+.block-name { font-weight: 700; }
+.block-date { font-size: 12px; color: var(--muted); margin-right: auto; }
+.block-unblock {
+  padding: 8px 18px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--paper); font-weight: 700; cursor: pointer;
+}
+
+.block-entry {
+  justify-self: start; padding: 8px 16px; font-size: 13px;
+  border: none; background: none; color: var(--muted);
+  text-decoration: underline; cursor: pointer;
+}
+.block-dialog { display: grid; gap: 16px; }
+.block-target { font-size: 15px; }
+.block-target-select { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+.block-target-select legend { font-weight: 700; padding: 0 8px; }
+.block-confirm { font-size: 15px; }
+.block-actions { display: flex; gap: 10px; }
+.block-submit {
+  padding: 12px 24px; border-radius: 12px; border: none;
+  background: var(--coral); color: #fff; font-weight: 700; cursor: pointer;
+}
+.block-cancel {
+  padding: 12px 24px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--paper); font-weight: 700; cursor: pointer;
+}
+.block-error { color: var(--coral); font-weight: 700; }
+
+@media (max-width: 560px) {
+  .settings-view { padding: 24px 16px 64px; }
+  .notification-popover { min-width: 0; max-height: 60vh; }
+}

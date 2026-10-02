@@ -13,6 +13,7 @@ import {
   createPermissionControl,
   permissionText,
 } from "../src/latch/permission.js";
+import { createSettings } from "../src/latch/settings.js";
 
 const mountPermission = (notificationApi) => {
   const mount = document.createElement("div");
@@ -103,5 +104,40 @@ describe("createPermissionControl(design §2.5・D-18)", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(b.mount.textContent).toContain(PERMISSION_DEFAULT_TEXT);
+  });
+});
+
+describe("settings画面骨組(design §2.4)", () => {
+  it("showはpermissionControl.renderとblocks.loadを呼ぶ", () => {
+    const permissionControl = { render: vi.fn() };
+    const blocks = { load: vi.fn(async () => {}) };
+    const settings = createSettings({ permissionControl, blocks });
+    settings.show();
+    expect(permissionControl.render).toHaveBeenCalledTimes(1);
+    expect(blocks.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("index.html構造: settingsScreen・2セクション・モーダル2種・noticeList・notificationDot初期hidden", () => {
+    const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
+    for (const id of [
+      "settingsScreen", "permissionControl", "blockList", "blockMoreButton",
+      "settingsButton", "noticeList", "noticeMoreButton",
+      "notificationDot", "unblockModal", "blockModal",
+    ]) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html).toContain('class="notification-dot" id="notificationDot" hidden');
+  });
+
+  it("main.js配線: 5モジュールのimport・screensへsettings・noticeButton追加リスナ・preload", () => {
+    const mainJs = readFileSync(resolve(process.cwd(), "src/main.js"), "utf8");
+    expect(mainJs).toContain('from "./latch/notice.js"');
+    expect(mainJs).toContain('from "./latch/permission.js"');
+    expect(mainJs).toContain('from "./latch/blocks.js"');
+    expect(mainJs).toContain('from "./latch/settings.js"');
+    expect(mainJs).toContain('from "./latch/blockFlow.js"');
+    expect(mainJs).toContain('settings: $("#settingsScreen")');
+    expect(mainJs).toContain('notice.preload()');
+    expect(mainJs).toContain('if (!$("#noticePopover").hidden) notice.open()');
   });
 });

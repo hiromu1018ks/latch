@@ -10,6 +10,11 @@ import { createRouter } from "./router.js";
 import { createHome } from "./latch/home.js";
 import { createDetail } from "./latch/detail.js";
 import { createReportFlow } from "./latch/report.js";
+import { createNotice } from "./latch/notice.js";
+import { createPermissionControl } from "./latch/permission.js";
+import { createBlocksSection } from "./latch/blocks.js";
+import { createSettings } from "./latch/settings.js";
+import { createBlockFlow } from "./latch/blockFlow.js";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -74,7 +79,7 @@ $("#tokenConnect").addEventListener("click", async () => {
 // --- 入力画面(既存ロジック・screen.jsへ切り出し) ---------------------------
 initIntentScreen({ client, chrome });
 
-// --- ホーム・詳細・通報・ルーター(ws-7 design §2.1〜§2.2) ------------------
+// --- ホーム・詳細・通報・お知らせ・設定(ws-7 §2.1〜§2.2・ws-8 §2.1〜§2.7) --
 const appState = createAppState({ client });
 const home = createHome({
   client,
@@ -88,21 +93,70 @@ const home = createHome({
 });
 $("#moreButton").addEventListener("click", () => home.loadMore().catch(() => {}));
 
+// お知らせ(ws-8 design §2.1〜§2.2): 起動時1回のpreloadでドット判定
+const notice = createNotice({
+  client,
+  el: {
+    list: $("#noticeList"),
+    moreButton: $("#noticeMoreButton"),
+    dot: $("#notificationDot"),
+  },
+});
+if (session.hasTokens()) notice.preload().catch(() => {});
+$("#noticeMoreButton").addEventListener("click", () => notice.loadMore().catch(() => {}));
+// popoverを開いたことの検知は追加リスナ(chromeのリスナが先に登録済みのため
+// このリスナの実行時にはhiddenは開閉後 — 開いたときだけ取得・既読化)
+$("#noticeButton").addEventListener("click", () => {
+  if (!$("#noticePopover").hidden) notice.open().catch(() => {});
+});
+
 const reportFlow = createReportFlow({ client, chrome, modal: $("#reportModal") });
+const blockFlow = createBlockFlow({
+  client,
+  chrome,
+  modal: $("#blockModal"),
+  onBlocked: () => detail.refresh(), // ブロック成功で詳細再取得(D-23収束)
+});
 const detail = createDetail({
   client,
   appState,
   chrome,
   root: $("#detailScreen"),
   reportFlow,
+  blockFlow,
+});
+
+// 設定画面(ws-8 design §2.4〜§2.6): 通知許可(DI)+ブロック管理
+const permissionControl = createPermissionControl({
+  notificationApi: typeof Notification !== "undefined" ? Notification : undefined,
+  mount: $("#permissionControl"),
+});
+const blocks = createBlocksSection({
+  client,
+  el: { list: $("#blockList"), moreButton: $("#blockMoreButton") },
+  modal: $("#unblockModal"),
+});
+$("#blockMoreButton").addEventListener("click", () => blocks.loadMore().catch(() => {}));
+const settings = createSettings({ permissionControl, blocks });
+$("#settingsButton").addEventListener("click", () => {
+  // popoverを閉じて設定画面へ(chromeのclosePopoversと同じ操作をmain.js側で実行)
+  location.hash = "#/settings";
+  $("#accountPopover").hidden = true;
+  $("#accountButton").setAttribute("aria-expanded", "false");
 });
 
 const router = createRouter({
-  screens: { home: $("#homeScreen"), latch: $("#detailScreen") },
+  screens: {
+    home: $("#homeScreen"),
+    latch: $("#detailScreen"),
+    settings: $("#settingsScreen"),
+  },
   onRoute: (route) => {
     if (route.name === "home") {
       home.load().catch(() => {}); // 通信失敗時は空状態のまま(再訪で再試行)
       home.loadIntents().catch(() => {});
+    } else if (route.name === "settings") {
+      settings.show();
     } else {
       detail.show(route.id).catch(() => {});
     }

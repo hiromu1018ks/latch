@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   BLOCK_CONFIRM_TEXT,
+  BLOCK_ENTRY_TEXT,
   BLOCK_SELECT_ERROR_TEXT,
   BLOCK_TOAST_TEXT,
   RATE_LIMIT_TEXT,
 } from "../src/latch/texts.js";
 import { createBlockFlow } from "../src/latch/blockFlow.js";
+import { createDetail } from "../src/latch/detail.js";
 
 const LATCH_ID = "11111111-1111-4111-8111-111111111111";
 const ME = "22222222-2222-4222-8222-222222222222";
@@ -109,5 +111,67 @@ describe("ブロック登録flow(design §2.7・§5-1承認)", () => {
     expect(modal.hidden).toBe(false);
     expect(modal.textContent).toContain(RATE_LIMIT_TEXT);
     expect(client.call).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("detail統合(design §2.7・§5-2⑤)", () => {
+  it("成立済み詳細にブロック導線(クリックでblockFlow.open)・提案詳細には置かない", async () => {
+    const fullProposal = {
+      time_summary: "2026-10-01 20:00",
+      area_name: "天文館周辺",
+      headcount: 2,
+      category_primary: "drinking",
+      category_secondary: null,
+      budget: null,
+      match_level: "high",
+    };
+    const participants = [
+      { user_id: ME, display_name: "自分", profile: {} },
+      { user_id: PEER, display_name: "相手", profile: {} },
+    ];
+    const matchedLatch = {
+      id: LATCH_ID, status: "matched",
+      response_deadline: "2026-12-01T12:00:00+09:00",
+      expires_at: "2026-12-04T12:00:00+09:00", created_at: "2026-10-01T09:00:00+09:00",
+      completed_at: null, proposal: fullProposal, is_group: false,
+      my_response: null, remaining_responses: 0,
+      participants, time_summary: "2026-10-01 20:00", area_name: "天文館周辺",
+    };
+    const apiFor = (latch) => async (method, path) => {
+      if (path === `/v1/latches/${latch.id}/messages?limit=100`) {
+        return { items: [], next_cursor: null };
+      }
+      return { latch };
+    };
+    const mountDetail = (latch) => {
+      const client = { call: vi.fn(apiFor(latch)) };
+      const blockFlow = { open: vi.fn() };
+      const root = document.createElement("section");
+      const detail = createDetail({
+        client,
+        appState: {
+          me: { id: ME },
+          ensureMe: vi.fn(async () => ({ id: ME })),
+        },
+        chrome: { showToast: vi.fn() },
+        root,
+        reportFlow: { open: vi.fn() },
+        blockFlow,
+      });
+      return { client, blockFlow, root, detail };
+    };
+    // 成立済み: 導線あり
+    const matched = mountDetail(matchedLatch);
+    await matched.detail.show(LATCH_ID);
+    expect(matched.root.textContent).toContain(BLOCK_ENTRY_TEXT);
+    matched.root.querySelector("[data-role=block-entry]").click();
+    expect(matched.blockFlow.open).toHaveBeenCalledWith({
+      participants,
+      meId: ME,
+    });
+    // 提案詳細(proposed): 導線なし(参加者非開示)
+    const proposed = mountDetail({ ...matchedLatch, status: "proposed" });
+    await proposed.detail.show(LATCH_ID);
+    expect(proposed.root.textContent).not.toContain(BLOCK_ENTRY_TEXT);
   });
 });
