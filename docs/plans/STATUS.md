@@ -10,7 +10,7 @@
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **M3 ws-8 進行中**(2026-10-02ユーザーGoサイン・設計 4ceb5df・計画 682cc71 完了 → 実装〔agent3・worktree〕へ。実行wave: ws-8 → ws-9/G3)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
+- 次の着手: **M3 ws-9(G3ハーネス)へ**(ws-8完了〔2026-10-02・マージ後main test-ci 1469 passed・frontend 217 passed〕・着手はユーザーGoサイン待ち。ws-9でG3判定資料を整備しゲート承認へ)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**Sonnet級の高単価モデルを含む実行・運用は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5へ変更済み)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -362,6 +362,11 @@
 - 学習資産追従: ws-6/ws-7分 8a17dd4(第22章「消すことの設計: カスケードと匿名化」+Lab 9〔フロント3画面を動かす・preview実機〕新設・既存6ファイル更新〔README・00-environment〔unit 1215・frontend 170・test-ci 1469〕・第6章〔DELETEの2段構え〕・第8章〔170件〕・第20章〔画面から使える〕・第21章〔案X拡張〕〕。make test 1215 passed・frontend 170 passed確認)/ 2026-10-02
 - ws-8 / 設計 4ceb5df(supervisor承認: **§5-1ブロック登録導線=成立済み詳細へ採用**〔ws-7 §5-2引継ぎ・導線皆無でD-23体験の入口が存在しないため・通報と同型・backend変更ゼロ・不採用時除外手順つき〕。引用確定値24件はdocs・実装と突合済み=03 §2/§4/§7/§8・05 §5・ws-3通知応答〔my_responseなし・latch LEFT JOIN・read 204冪等/404〕・ws-5 blocks〔display_name・DELETE 404〕・nearbyはcandidateのまま〔latch_engine〕・frontend現状〔CLOSED_TEXT・noticePopover・notification-dot常時表示〕。§5-2解釈5件はG3時確認事項⑪〜⑯へ追記)/ 2026-10-02
 - ws-8 / 計画 682cc71(2,261行・Task 1〜9・実コード全文記載。機械チェック合格: **basename一意〔新規4ファイル既存19と衝突なし・supervisor再実行で確認〕・既存170件影響事前特定〔§9-2で全19ファイル表・無傷の根拠明記〕・試験数整合〔170+47=217・23ファイル・supervisor再実行でベースライン170 passed確認〕**。agent2が計画書コード一式をmainのfrontendコピーへ適用し**機械検証217 passed+build成功を実施済み**(§9-5)。適合措置3件=§9-6〔#unblockModal追補・noticeTimeText書式=M月D日 HH:MM・notification-dotへid付与〕はdesign意図保持の補完として承認)/ 2026-10-02実装着手
+- ws-8 / マージ 97a87fe(実装は0ee3ba8まで・8コミット)/ docs/plans/M3/ws-8-report.md / 2026-10-02
+  - agent3実装(11分24秒・TDD全TaskでRed→Green確認)。報告書の逸脱記録は誠実(Task 1のRED内訳2 FAIL+1 PASS・Task 7のrenderClosed誤削除→コミット前に即時復元)
+  - スーパーバイザー独立検証: **一発グリーン**(worktree・マージ後mainともfrontend 217 passed・build成功)。コードレビューで表示規制の遵守を確認(nearby行=リンクなしdiv+文言1行・hidden行=条件サマリなし・終了3種=CLOSED_TEXT定数参照〔完了条件6〕・matched行=回答促しなしバッジ・escapeHtml全面適用・detail.jsはrenderMatched追記のみで提案姿に導線なし・Notification API DI注入・preload失敗はmain.jsでcatch)。変更18ファイル=§4どおり・basename一意・backend/prototype差分ゼロ
+  - **マージ後main test-ci 1469 passed**(376秒・frontendのみのためbackend試験数不変)・frontend 217 passed・build成功・worktree wB・ブランチ削除済み
+  - **G3完了条件の「プロトタイプ6画面」が揃った**(ホーム・提案詳細・成立済み詳細〔ws-7〕+お知らせ一覧・設定〔ws-8〕+Intent入力〔M1〕。実装基準はprototype/)
 
 ## G2判定資料(2026-09-30・承認済み)
 
