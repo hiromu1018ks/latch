@@ -22,6 +22,10 @@ class NotificationLatchOut(BaseModel):
     expires_at: datetime
     completed_at: datetime | None = None
     proposal: dict
+    # 自分の回答(yes/no/defer・未回答とlatch行不在はnull)。latches APIの
+    # LatchSummaryOut.my_responseと同名・同位置(m3-g3fix design §2.1)。
+    # 他者の回答種別は出さない(03 §7)
+    my_response: str | None = None
 
 
 class NotificationOut(BaseModel):

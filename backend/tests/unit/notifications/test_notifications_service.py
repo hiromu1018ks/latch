@@ -146,7 +146,7 @@ class FakeClockForService:
         return SVC_NOW
 
 
-def _page_row(n: int, *, latch=True) -> NotificationPageRow:
+def _page_row(n: int, *, latch=True, latch_responses=None) -> NotificationPageRow:
     lid = uuid_mod.UUID(f"00000000-0000-4000-8000-{n:012d}")
     latch_row = (
         LatchJoinedRow(
@@ -156,6 +156,7 @@ def _page_row(n: int, *, latch=True) -> NotificationPageRow:
             expires_at=SVC_NOW + timedelta(days=5),
             completed_at=None,
             proposal={"headcount": 2, "match_level": "medium"},
+            responses=latch_responses or [],
         )
         if latch
         else None
@@ -277,3 +278,45 @@ async def test_list_latch_null_defensive():
     assert items[0].latch is None
     assert items[0].latch_id is None  # uuid変換失敗はnull(防御)
     assert next_cursor is None
+
+
+async def test_list_my_response_extracted_per_viewer():
+    """my_response抽出(m3-g3fix design §2.1): responsesから本人の回答を
+    視点者ごとに抽出。no/defer/yes/未回答(None)・latch=null行はlatch
+    ブロックごとnull。入出力ケースはunit/latchesの応答試験(my_response)
+    と対応させ、latches/service._my_responseとのロジック一致を担保
+    (ヘルパーは複製・importはモジュール規律に反するため)。"""
+    uid = uuid_mod.UUID("00000000-0000-4000-8000-0000000000e1")
+    peer = "00000000-0000-4000-8000-0000000000e2"  # str(uuid)で格納(05 §2)
+
+    def resp(mine: str | None) -> list[dict]:
+        rows = [{"user_id": peer, "response": "yes"}]
+        if mine is not None:
+            rows.append({"user_id": str(uid), "response": mine})
+        return rows
+
+    cases = [
+        (resp("no"), "no"),
+        (resp("defer"), "defer"),
+        (resp("yes"), "yes"),
+        (resp(None), None),  # 未回答(本人の行がない)
+    ]
+    for latch_responses, expected in cases:
+        conn = _FakeConn(
+            page_rows=[_page_row(1, latch_responses=latch_responses)],
+            user_id=uid,
+        )
+        service = _service(conn)
+        _monkeypatch_store(_StubStore(conn))
+        items, _ = await service.list(
+            auth_provider=PROVIDER, auth_subject=SUBJECT, limit=20
+        )
+        assert items[0].latch.my_response == expected, latch_responses
+    # latch=null防御行はlatchブロックごとnull(my_responseも出ない)
+    conn = _FakeConn(page_rows=[_page_row(2, latch=False)], user_id=uid)
+    service = _service(conn)
+    _monkeypatch_store(_StubStore(conn))
+    items, _ = await service.list(
+        auth_provider=PROVIDER, auth_subject=SUBJECT, limit=20
+    )
+    assert items[0].latch is None

@@ -87,6 +87,19 @@ def _to_uuid_or_none(raw: str | None) -> uuid.UUID | None:
         return None
 
 
+def _my_response(responses: list[dict], user_id: uuid.UUID) -> str | None:
+    """responses配列から本人の回答抽出(m3-g3fix design §2.1)。
+
+    latches/service.py:539の同名privateヘルパーと同一ロジックの複製
+    (private関数のimportはモジュール規律に反するため)。両者の一致は
+    unit試験の入出力対応で担保(no/defer/None・§8 Task 2)。
+    """
+    for r in responses:
+        if r.get("user_id") == str(user_id):
+            return r.get("response")
+    return None
+
+
 class NotificationsService:
     """お知らせ一覧・既読のユースケース(design §2.5・§2.6)。"""
 
@@ -122,6 +135,7 @@ class NotificationsService:
                         expires_at=r.latch.expires_at,
                         completed_at=r.latch.completed_at,
                         proposal=r.latch.proposal,
+                        my_response=_my_response(r.latch.responses, user_id),
                     )
                 items.append(
                     NotificationOut(
