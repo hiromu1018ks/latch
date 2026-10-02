@@ -410,7 +410,6 @@ def _all_keys(obj) -> set:
 
 
 # -- design §2.3 試験1〜6 --
-# (試験3〜6はTask 2・3でこの位置へ追記する)
 
 
 async def test_1_muted_notification_chain_answerable(
@@ -632,3 +631,118 @@ async def test_2_visibility_ab_comparison_and_no_coordinates(
         assert body["my_response"] is None
         assert body["response_deadline"] is not None  # 回答期限は双方に存在
         assert _all_keys(body) & GEO_KEYS == set(), body
+
+
+async def test_3_group_deadline_expires_with_three_yes(api_client, db_engine, field):
+    """09 §3 期限時の確定条件(G3条件2・design §2.3試験3): 4人組で3人YES
+    (partial_accept)のままresponse_deadlineを経過→expiredで閉じる
+    (3人YESでも成立しない=matchedにならない)。4人目の回答は409。
+
+    deadline過去化はapi常設プロセスのClock(SystemClock)が差し替え不能な
+    ためDB値操作(ws-1計画§9-2規律・test_expiry_batches試験3と同一手法)。
+    FakeClockをset/advanceしないためrun_once内nowがsweeper構築時の
+    last_tickと同一時刻になり(created_at > last_tick不成立)クローズ検知
+    drainは観測しない(test_expiry_batches試験2と同型)。
+    """
+    hs = [await _user(api_client, field) for _ in range(4)]
+    intents = [await _intent(api_client, db_engine, h, _structured()) for h in hs]
+    ids = [i["id"] for i in intents]
+    latch = await _latch(db_engine, ids)  # 4人組・proposed・deadline未来
+    # 3人yes → partial_accept・remaining=1(3人YESでも成立しない)
+    for h in hs[:3]:
+        r = await _respond(api_client, h, latch, "yes")
+        assert r.status_code == 200, r.text
+    assert (await _latch_row(db_engine, latch))["status"] == "partial_accept"
+    # deadlineを過去へ(sweeper遅延でstatus=partial_acceptのままの状態を再現)
+    async with db_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "UPDATE latches SET response_deadline ="
+                " CAST(:past AS timestamptz) WHERE id = CAST(:l AS uuid)"
+            ),
+            {"past": SystemClock().now() - timedelta(hours=1), "l": latch},
+        )
+    clock = FakeClock(SystemClock().now())
+    # ①run_onceが当該latchを処理(他試験残骸はteardown+時間窓分離で不在)
+    assert await _sweeper(db_engine, clock).run_once() == 1
+    # ②expired(matchedにならない)
+    assert (await _latch_row(db_engine, latch))["status"] == "expired"
+    # ③latch_status_events: partial_accept→expired・user_id=NULL(システム起因)
+    assert ("partial_accept", "expired", None) in await _events(db_engine, latch)
+    # ④4人目の回答は409
+    r4 = await _respond(api_client, hs[3], latch, "yes")
+    assert r4.status_code == 409, r4.text
+    assert r4.json()["error"]["code"] == "LATCH_EXPIRED"
+
+
+async def test_4_group_match_closes_one_on_one(api_client, db_engine, field):
+    """09 §3 競合クローズ・グループ成立側(G3条件2・design §2.3試験4)。
+
+    i2を共有する2つの提案(グループ{i1,i2,i3}と1対1{i2,iX})を用意し、
+    グループを成立させる→1対1側はcancelledで閉じる(対象抽出は
+    intent_ids && member_ids=同一Intent含有・§10-2の_SELECT_CONFLICTING_
+    LATCHES)。iX(非共有)はactiveのまま。test_11(latches・1対1×1対1)の
+    グループ成立側対。
+    """
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    h3 = await _user(api_client, field)
+    hx = await _user(api_client, field)  # iXの所有者(外部ユーザーU4相当)
+    i1 = await _intent(api_client, db_engine, h1, _structured())
+    i2 = await _intent(api_client, db_engine, h2, _structured())
+    i3 = await _intent(api_client, db_engine, h3, _structured())
+    ix = await _intent(api_client, db_engine, hx, _structured())
+    group_latch = await _latch(db_engine, [i1["id"], i2["id"], i3["id"]])
+    pair_latch = await _latch(db_engine, [i2["id"], ix["id"]])
+    # グループ3人yes → matched
+    for h in (h1, h2, h3):
+        r = await _respond(api_client, h, group_latch, "yes")
+        assert r.status_code == 200, r.text
+    # ①グループmatched・参加Intentはmatched(05 §6 Intent遷移)
+    assert (await _latch_row(db_engine, group_latch))["status"] == "matched"
+    # ②1対1側はcancelled(もう片方はcancelledで閉じる)
+    assert (await _latch_row(db_engine, pair_latch))["status"] == "cancelled"
+    # ③latch_status_events(1対1側: proposed→cancelled・user_id=NULL=システム起因)
+    assert ("proposed", "cancelled", None) in await _events(db_engine, pair_latch)
+    # ④Intent遷移: グループ側3つはmatched・iXはactiveのまま
+    async with db_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    "SELECT id, status FROM intents"
+                    " WHERE id = ANY(CAST(:ids AS uuid[]))"
+                ),
+                {
+                    "ids": [
+                        uuid_mod.UUID(x)
+                        for x in (i1["id"], i2["id"], i3["id"], ix["id"])
+                    ]
+                },
+            )
+        ).fetchall()
+    by_id = {str(r[0]): r[1] for r in rows}
+    assert by_id[i1["id"]] == "matched"
+    assert by_id[i2["id"]] == "matched"
+    assert by_id[i3["id"]] == "matched"
+    assert by_id[ix["id"]] == "active"  # 閉じるのはi2を含む提案のみ
+
+
+async def test_5_group_defer_rejects(api_client, db_engine, field):
+    """09 §3 部分成立の禁止・defer側(G3条件2・design §2.3試験5)。
+
+    3人グループで2人yes(partial_accept)→1人defer→即rejected(部分成立なし)。
+    「一部がnoまたはdefer」のdefer側(no側は既存test_9(latches)担当)。
+    """
+    hs = [await _user(api_client, field) for _ in range(3)]
+    intents = [await _intent(api_client, db_engine, h, _structured()) for h in hs]
+    latch = await _latch(db_engine, [i["id"] for i in intents])
+    await _respond(api_client, hs[0], latch, "yes")
+    r2 = await _respond(api_client, hs[1], latch, "yes")
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["latch"]["status"] == "partial_accept"
+    r3 = await _respond(api_client, hs[2], latch, "defer")
+    assert r3.status_code == 200, r3.text
+    assert r3.json()["latch"]["status"] == "rejected"  # 即時・部分成立なし
+    row = await _latch_row(db_engine, latch)
+    assert row["status"] == "rejected"
+    assert row["responses"][-1]["response"] == "defer"  # 区別保持
