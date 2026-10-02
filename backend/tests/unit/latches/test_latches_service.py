@@ -671,3 +671,157 @@ async def test_summary_completed_at_flows_from_row():
     assert summary.completed_at == done_at
     # 未完了行はNoneのまま
     assert _summary_from_page(_page_view_of(_latch_row()), ME).completed_at is None
+
+
+# -- m3-g3fix: 成立通知の先行書き込み+tx後プッシュ(design §2.4) --
+
+
+class _RecordingPush:
+    """PushSenderスタブ(送信呼び出しを記録・sender.pyのIFと同形)。"""
+
+    def __init__(self):
+        self.name = "recording"
+        self.calls: list[dict] = []
+
+    async def send(self, *, user_id, notification_type, latch_id):
+        self.calls.append(
+            {"user_id": user_id, "type": notification_type, "latch_id": latch_id}
+        )
+
+
+def _patch_matched_common(monkeypatch) -> None:
+    """matched経路の共通差し替え(通知宛先・Calibration材料・イベント系)。"""
+    from latch.latches import store as store_mod
+    from latch.latches.calibration import EvalRow
+
+    async def _event(
+        conn, latch_id, from_status=None, to_status=None, user_id=None, now=None
+    ):
+        return None
+
+    async def _match(conn, ids, now):
+        return list(ids)
+
+    async def _conflicting(conn, self_id, member_ids):
+        return []
+
+    async def _cancel(conn, latch_id):
+        return False
+
+    async def _calibration(conn=None, **kwargs):
+        return uuid.uuid4()
+
+    async def _participant_users(conn, intent_ids):
+        return [ME, PEER]
+
+    eval_row = EvalRow(
+        jev_result={
+            "would_a_accept_b": 0.6,
+            "would_b_accept_a": 0.7,
+            "jev_5axis": {},
+            "provider": "typesafe_jev",
+            "model": "jev-1.13.0",
+        },
+        latch_score=Decimal("0.85"),
+        updated_at=NOW,
+    )
+    monkeypatch.setattr(store_mod, "insert_latch_event", _event)
+    monkeypatch.setattr(store_mod, "match_intents", _match)
+    monkeypatch.setattr(store_mod, "select_conflicting_latches", _conflicting)
+    monkeypatch.setattr(store_mod, "cancel_latch", _cancel)
+    monkeypatch.setattr(store_mod, "insert_calibration", _calibration)
+    monkeypatch.setattr(store_mod, "fetch_pair_rows", _ret([eval_row]))
+    monkeypatch.setattr(store_mod, "fetch_intents_structured", _ret([{}, {}]))
+    monkeypatch.setattr(store_mod, "fetch_participant_user_ids", _participant_users)
+
+
+async def test_respond_matched_writes_notifications_and_pushes(monkeypatch):
+    """matched成立時: 参加者全員への通知先行書き込み+tx後プッシュ2件
+    (m3-g3fix design §2.4・03 §4 D-20同時送信・最後にYESを入れた本人を含む)。"""
+    from latch.latches import store as store_mod
+
+    notify_calls: list[dict] = []
+
+    async def _notify_insert(conn, *, latch_id, user_ids, now):
+        notify_calls.append({"latch_id": latch_id, "users": list(user_ids)})
+
+    _patch_matched_common(monkeypatch)
+    monkeypatch.setattr(store_mod, "insert_matched_notifications", _notify_insert)
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+
+    push = _RecordingPush()
+    row = _latch_row(responses=[{"user_id": str(PEER), "response": "yes"}])
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "update_response", _ret((row.id, "matched")))
+    svc = LatchesService(clock=FakeClock(NOW), engine=ScriptedEngine([]), push=push)
+    out = await svc.respond(
+        auth_provider="google", auth_subject="s", latch_id=row.id, response="yes"
+    )
+    assert out.status == "matched"
+    # 通知先行書き込み: 1回・宛先は参加者全員(本人MEを含む)
+    assert len(notify_calls) == 1
+    assert notify_calls[0]["latch_id"] == row.id
+    assert notify_calls[0]["users"] == [ME, PEER]
+    # tx後プッシュ: 全員へlatch_matched(D-08上限は消費しない・design §2.3)
+    assert len(push.calls) == 2
+    assert {c["user_id"] for c in push.calls} == {ME, PEER}
+    assert all(c["type"] == "latch_matched" for c in push.calls)
+    assert all(c["latch_id"] == row.id for c in push.calls)
+
+
+async def test_respond_non_matched_no_notification(monkeypatch):
+    """partial_accept・rejectedでは成立通知を書かない・送らない
+    (matched遷移のみが通知のトリガー・design §2.4)。"""
+    from latch.latches import store as store_mod
+
+    notify_calls: list[dict] = []
+
+    async def _notify_insert(conn, *, latch_id, user_ids, now):
+        notify_calls.append({"latch_id": latch_id, "users": list(user_ids)})
+
+    _patch_matched_common(monkeypatch)
+    monkeypatch.setattr(store_mod, "insert_matched_notifications", _notify_insert)
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+
+    push = _RecordingPush()
+    row = _latch_row()
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    svc = LatchesService(clock=FakeClock(NOW), engine=ScriptedEngine([]), push=push)
+
+    # 1人目yes → partial_accept(まだ成立していない)
+    monkeypatch.setattr(store_mod, "update_response", _ret((row.id, "partial_accept")))
+    out1 = await svc.respond(
+        auth_provider="google", auth_subject="s", latch_id=row.id, response="yes"
+    )
+    assert out1.status == "partial_accept"
+    # no → rejected
+    monkeypatch.setattr(store_mod, "update_response", _ret((row.id, "rejected")))
+    out2 = await svc.respond(
+        auth_provider="google", auth_subject="s", latch_id=row.id, response="no"
+    )
+    assert out2.status == "rejected"
+    assert notify_calls == []  # 成立通知はmatched時のみ(完全列挙)
+    assert push.calls == []
+
+
+async def test_respond_matched_push_none_is_noop(monkeypatch):
+    """push未注入(既定None)でもmatched成立は例外なく完了(sweeperと同型)。"""
+    from latch.latches import store as store_mod
+
+    async def _notify_insert(conn, *, latch_id, user_ids, now):
+        return None
+
+    _patch_matched_common(monkeypatch)
+    monkeypatch.setattr(store_mod, "insert_matched_notifications", _notify_insert)
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+
+    row = _latch_row(responses=[{"user_id": str(PEER), "response": "yes"}])
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "update_response", _ret((row.id, "matched")))
+    out = await _svc(ScriptedEngine([])).respond(  # push省略=既定None
+        auth_provider="google", auth_subject="s", latch_id=row.id, response="yes"
+    )
+    assert out.status == "matched"

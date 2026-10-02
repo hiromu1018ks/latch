@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from latch.latches.calibration import EvalRow, PairEvalRow
+from latch.notifications.types import NOTIFICATION_MATCHED
 
 
 def _coerce_uuid(value: object) -> uuid.UUID:
@@ -167,6 +168,14 @@ _INSERT_LATCH_EVENT = text("""
         (latch_id, from_status, to_status, user_id, created_at)
     VALUES (CAST(:latch_id AS uuid), CAST(:from_status AS text),
             :to_status, CAST(:user_id AS uuid), CAST(:now AS timestamptz))
+""")
+
+# 成立通知の先行書き込み(m3-g3fix design §2.4。payloadは{"latch_id"}の
+# 最小参照 — sweeper._INSERT_ATTENDANCE_NOTIFICATION・latch_engine.
+# _INSERT_NOTIFICATIONと同一SQL形)
+_INSERT_MATCHED_NOTIFICATION = text("""
+    INSERT INTO notifications (user_id, type, payload, created_at)
+    VALUES (CAST(:user_id AS uuid), :type, CAST(:payload AS jsonb), :now)
 """)
 
 # -- Calibration(design §2.5・引用#13) --
@@ -447,6 +456,32 @@ async def insert_latch_event(
             "now": now,
         },
     )
+
+
+async def insert_matched_notifications(
+    conn: AsyncConnection,
+    *,
+    latch_id: uuid.UUID,
+    user_ids: list[uuid.UUID],
+    now: datetime,
+) -> None:
+    """成立通知の参加者全員への先行書き込み(m3-g3fix design §2.4)。
+
+    宛先は呼び出し側(respond tx)がfetch_participant_user_idsで取得した
+    全員(最後にYESを入れた本人を含む・03 §4 D-20同時送信)。typeは
+    NOTIFICATION_MATCHED(D-08日次上限の対象外・design §2.3)。
+    """
+    payload = json.dumps({"latch_id": str(latch_id)})
+    for uid in user_ids:
+        await conn.execute(
+            _INSERT_MATCHED_NOTIFICATION,
+            {
+                "user_id": uid,
+                "type": NOTIFICATION_MATCHED,
+                "payload": payload,
+                "now": now,
+            },
+        )
 
 
 async def insert_calibration(

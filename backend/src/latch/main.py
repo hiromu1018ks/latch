@@ -34,6 +34,7 @@ from latch.intents.service import make_intent_service
 from latch.latches import LatchesError, latches_router, make_latches_service
 from latch.notifications import (
     NotificationsError,
+    build_push_sender,
     make_notifications_service,
     notifications_router,
 )
@@ -166,8 +167,14 @@ async def _lifespan(app: FastAPI):
             clock=app.state.clock, engine=engine, block_cache=block_cache
         )
     if build_latches:
+        # 成立通知のプッシュ(m3-g3fix design §2.4): APIプロセスでも
+        # push_mode設定が有効。stubはネットワーク呼び出しゼロ(例外は
+        # sender側で握る・API応答への影響は送信先障害時のtimeout上限のみ)
         app.state.latches_service = make_latches_service(
-            clock=app.state.clock, engine=engine, block_cache=block_cache
+            clock=app.state.clock,
+            engine=engine,
+            block_cache=block_cache,
+            push=build_push_sender(app.state.clock, settings),
         )
     if build_notifications:
         app.state.notifications_service = make_notifications_service(
