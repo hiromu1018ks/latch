@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  ANSWERED_TEXT,
   ATTENDANCE_QUESTION,
   CLOSED_TEXT,
   HIDDEN_PROPOSAL_TEXT,
   MATCH_NOTICE_TEXT,
+  MATCHED_NOTICE_TITLE,
   NEARBY_NOTICE_TEXT,
+  NEXT_ACTION_TEXT,
   NOTICE_EMPTY_NOTE,
   NOTICE_EMPTY_TITLE,
   NOTICE_FALLBACK_TEXT,
@@ -284,5 +287,52 @@ describe("createNotice(design §2.1〜§2.2)", () => {
     expect(client.call).toHaveBeenCalledTimes(1); // preloadのGETのみ
     expect(el.list.querySelectorAll("a.notice-item").length).toBe(0); // nearbyは<div>
     expect(el.list.querySelectorAll(".notice-item").length).toBe(1);
+  });
+});
+
+describe("notificationLines(m3-g3fix: my_response分岐+成立通知行)", () => {
+  it("proposal×終了はmy_responseで分岐(no=辞退しました/defer=今回は見送りました/未設定・yes=統一文言)", () => {
+    expect(
+      notificationLines(
+        item("proposal", notificationLatch("rejected", { my_response: "no" })), NOW))
+      .toEqual([ANSWERED_TEXT.no]);
+    expect(
+      notificationLines(
+        item("proposal", notificationLatch("expired", { my_response: "defer" })), NOW))
+      .toEqual([ANSWERED_TEXT.defer]);
+    // 未設定(undefined)・yesは統一文言のまま(詳細画面closedTextと同一・design §2.2)
+    expect(notificationLines(item("proposal", notificationLatch("cancelled")), NOW))
+      .toEqual([CLOSED_TEXT]);
+    expect(
+      notificationLines(
+        item("proposal", notificationLatch("cancelled", { my_response: "yes" })), NOW))
+      .toEqual([CLOSED_TEXT]);
+  });
+
+  it("latch_matched×matched: 見出し+チャット導線+バッジ成立済み(条件サマリ不含)", () => {
+    expect(notificationLines(item("latch_matched", notificationLatch("matched")), NOW))
+      .toEqual([MATCHED_NOTICE_TITLE, NEXT_ACTION_TEXT, "成立済み"]);
+  });
+
+  it("latch_matched×completed: バッジは完了", () => {
+    expect(
+      notificationLines(item("latch_matched", notificationLatch("completed")), NOW))
+      .toEqual([MATCHED_NOTICE_TITLE, NEXT_ACTION_TEXT, "完了"]);
+  });
+
+  it("latch_matched×解散後(cancelled): CLOSED_TEXTの1行(一文統一)", () => {
+    expect(
+      notificationLines(item("latch_matched", notificationLatch("cancelled")), NOW))
+      .toEqual([CLOSED_TEXT]);
+  });
+
+  it("latch_matched×latch=null: フォールバック文言(防御)", () => {
+    expect(notificationLines(item("latch_matched", null), NOW))
+      .toEqual([NOTICE_FALLBACK_TEXT]);
+  });
+
+  it("latch_matched行のhrefは#/latches/{id}(FR-46・変更不要の確認)", () => {
+    expect(notificationHref(item("latch_matched", notificationLatch("matched"))))
+      .toBe(`#/latches/${LATCH_ID}`);
   });
 });
