@@ -39,8 +39,9 @@ async def _cli_idp_token(provider: str, subject: str) -> str:
 
 
 async def _token(api_client, subject: str) -> str:
+    idp = await _cli_idp_token("google", subject)
     tok = await api_client.post(
-        "/v1/auth/token", json={"provider": "google", "idp_token": await _cli_idp_token("google", subject)}
+        "/v1/auth/token", json={"provider": "google", "idp_token": idp}
     )
     assert tok.status_code == 200, tok.text
     return tok.json()["access_token"]
@@ -143,7 +144,8 @@ async def test_parse_blocked_without_consent_then_allowed(api_client):
         "/v1/intents/parse", headers=h, json={"text": "今夜 天文館で飲みたい"}
     )
     assert blocked.status_code == 422, blocked.text
-    assert blocked.json()["error"]["code"] == "CONSENT_REQUIRED"  # フロント誘導分岐の契約
+    # フロント誘導分岐の契約
+    assert blocked.json()["error"]["code"] == "CONSENT_REQUIRED"
 
     await api_client.post("/v1/users/me/consent", headers=h)
     ok = await api_client.post(
@@ -181,7 +183,11 @@ async def test_draft_allowed_and_activation_blocked_then_allowed(api_client):
     draft = await api_client.post(
         "/v1/intents",
         headers=h,
-        json={"raw_text": "今夜 天文館で飲みたい", "status": "draft", "structured_intent": _structured()},
+        json={
+            "raw_text": "今夜 天文館で飲みたい",
+            "status": "draft",
+            "structured_intent": _structured(),
+        },
     )
     assert draft.status_code == 201, draft.text  # draftは同意不要(LLM送信ゼロ)
     intent_id = draft.json()["intent"]["id"]
@@ -189,7 +195,11 @@ async def test_draft_allowed_and_activation_blocked_then_allowed(api_client):
     blocked = await api_client.patch(
         f"/v1/intents/{intent_id}",
         headers=h,
-        json={"raw_text": "今夜 天文館で飲みたい", "status": "active", "structured_intent": _structured()},
+        json={
+            "raw_text": "今夜 天文館で飲みたい",
+            "status": "active",
+            "structured_intent": _structured(),
+        },
     )
     assert blocked.status_code == 422
     assert blocked.json()["error"]["code"] == "CONSENT_REQUIRED"
@@ -202,7 +212,11 @@ async def test_draft_allowed_and_activation_blocked_then_allowed(api_client):
     ok = await api_client.patch(
         f"/v1/intents/{intent_id}",
         headers=h,
-        json={"raw_text": "今夜 天文館で飲みたい", "status": "active", "structured_intent": _structured()},
+        json={
+            "raw_text": "今夜 天文館で飲みたい",
+            "status": "active",
+            "structured_intent": _structured(),
+        },
     )
     assert ok.status_code == 200, ok.text
     assert ok.json()["intent"]["status"] == "active"
