@@ -67,6 +67,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("latch.intents")
 
 UserLookup = Callable[[str, str], Awaitable[uuid.UUID | None]]
+ConsentLookup = Callable[[uuid.UUID], Awaitable[bool]]
 
 
 class SupportsParseIntent(Protocol):
@@ -124,10 +125,12 @@ class IntentParseService:
         clock: Clock,
         parser: SupportsParseIntent,
         user_lookup: UserLookup,
+        consent_lookup: ConsentLookup | None = None,
     ) -> None:
         self._clock = clock
         self._parser = parser
         self._user_lookup = user_lookup
+        self._consent_lookup = consent_lookup
 
     async def parse(
         self, *, text: str, auth_provider: str, auth_subject: str
@@ -138,6 +141,19 @@ class IntentParseService:
             raise DependencyUnavailableError(
                 "intent parse dependency unavailable"
             ) from exc
+        if user_id is not None and self._consent_lookup is not None:
+            # 同意検査は登録済みユーザーのみ(未登録JWT経路はg1gate資産と
+            # M1確定のとおり現行挙動 — 計画§4-2)。LLM送信前に遮断する
+            try:
+                consented = await self._consent_lookup(user_id)
+            except IntentsError:
+                raise
+            except Exception as exc:
+                raise DependencyUnavailableError(
+                    "intent parse dependency unavailable"
+                ) from exc
+            if not consented:
+                raise ConsentRequiredError("consent required")
         try:
             raw = await self._parser.parse_intent(
                 text=text,
@@ -166,7 +182,11 @@ class IntentParseService:
 
 
 def make_intent_parse_service(
-    *, clock: Clock, settings: Settings, user_lookup: UserLookup
+    *,
+    clock: Clock,
+    settings: Settings,
+    user_lookup: UserLookup,
+    consent_lookup: ConsentLookup | None = None,
 ) -> IntentParseService:
     """設定からIntentParseServiceを構築する(design §2.7・ws-6 design §2.3)。
 
@@ -181,7 +201,12 @@ def make_intent_parse_service(
         parser_system_prompt=PARSER_SYSTEM_PROMPT,
         parser_output_schema=ParserOutput.model_json_schema(),
     )
-    return IntentParseService(clock=clock, parser=gateway, user_lookup=user_lookup)
+    return IntentParseService(
+        clock=clock,
+        parser=gateway,
+        user_lookup=user_lookup,
+        consent_lookup=consent_lookup,
+    )
 
 
 # ---------------------------------------------------------------------------

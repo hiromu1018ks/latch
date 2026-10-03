@@ -135,6 +135,7 @@ async def _lifespan(app: FastAPI):
             clock=app.state.clock,
             settings=settings,
             user_lookup=user_lookup,
+            consent_lookup=app.state.consent_service.consented,
         )
     event_relay_task = None
     event_relay_stop = None
