@@ -16,6 +16,7 @@ from latch.geo.service import Geofeature
 from latch.intents import events as events_mod
 from latch.intents.errors import (
     ActiveIntentLimitError,
+    ConsentRequiredError,
     DependencyUnavailableError,
     ForbiddenError,
     GeocodingFailedError,
@@ -78,7 +79,9 @@ class StubStore:
 
     def __init__(self, *, user_row=_UNSET, rows=None, page=None):
         self.user_row = (
-            UserRow(id=USER_ID, birth_date=date(2000, 1, 1))  # 26歳
+            UserRow(
+                id=USER_ID, birth_date=date(2000, 1, 1), consent_at=NOW
+            )  # 26歳・同意済み
             if user_row is _UNSET
             else user_row
         )
@@ -365,7 +368,9 @@ async def test_active_past_time_rejected_draft_accepted():
 async def test_under_age_drinking_rejected_but_birthday_20_accepted():
     """19歳=422 UNDER_AGE・20歳の誕生日当日=受理(08 D-10・age_years仕様)。"""
     svc19, _, _, _, _ = _service(
-        store=StubStore(user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 28)))
+        store=StubStore(
+            user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 28), consent_at=NOW)
+        )
     )
     with pytest.raises(UnderAgeError) as ei:
         await svc19.create(
@@ -377,7 +382,9 @@ async def test_under_age_drinking_rejected_but_birthday_20_accepted():
         )
     assert ei.value.code == "UNDER_AGE"
     svc20, _, _, _, _ = _service(
-        store=StubStore(user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 27)))
+        store=StubStore(
+            user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 27), consent_at=NOW)
+        )
     )  # JST 2026-09-27時点で20歳ちょうど
     row = await svc20.create(
         auth_provider="google",
@@ -392,7 +399,9 @@ async def test_under_age_drinking_rejected_but_birthday_20_accepted():
 async def test_under_age_not_checked_for_non_drinking():
     """meal等のalcohol=falseでは19歳でも受理(確定値8はalcohol=trueのみ)。"""
     svc, _, _, _, _ = _service(
-        store=StubStore(user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 28)))
+        store=StubStore(
+            user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 28), consent_at=NOW)
+        )
     )
     row = await svc.create(
         auth_provider="google",
@@ -785,7 +794,9 @@ async def test_patch_category_change_to_drinking_under_age_rejected():
     row = _row(status="active", category_primary="meal", alcohol_involved=False)
     svc19, _, _, _, _ = _service(
         store=StubStore(
-            user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 28)),
+            user_row=UserRow(
+                id=USER_ID, birth_date=date(2006, 9, 28), consent_at=NOW
+            ),
             rows={row.id: row},
         )
     )
@@ -1132,3 +1143,55 @@ async def test_limiter_none_keeps_existing_behavior():
     )
     assert row.status == "active"
     assert store.locked_users == []
+
+
+# --- M4 ws-5: 同意ゲート(計画Task 5・08 D-14「同意は利用条件」) ------------
+
+
+async def test_create_active_without_consent_rejected():
+    """同意なしのactive作成=422 CONSENT_REQUIRED(遮断3経路の1・計画§5-2)。"""
+    svc, _, _, _, _ = _service(
+        store=StubStore(
+            user_row=UserRow(id=USER_ID, birth_date=date(2000, 1, 1), consent_at=None)
+        )
+    )
+    with pytest.raises(ConsentRequiredError) as ei:
+        await svc.create(
+            auth_provider="google",
+            auth_subject="s",
+            raw_text="r",
+            status="active",
+            structured_intent=_active_input(),
+        )
+    assert ei.value.http_status == 422
+    assert ei.value.code == "CONSENT_REQUIRED"
+
+
+async def test_create_draft_without_consent_allowed():
+    """draft保存は同意なしで許可(LLM送信なし・設計§2.2)。"""
+    svc, _, _, _, _ = _service(
+        store=StubStore(
+            user_row=UserRow(id=USER_ID, birth_date=date(2000, 1, 1), consent_at=None)
+        )
+    )
+    row = await svc.create(
+        auth_provider="google",
+        auth_subject="s",
+        raw_text="r",
+        status="draft",
+        structured_intent=_active_input(),
+    )
+    assert row.status == "draft"
+
+
+async def test_activation_from_draft_without_consent_rejected():
+    """draft→active化も同意なし=422 CONSENT_REQUIRED(遮断3経路の2)。"""
+    row = _draft_row_of(_active_input())  # 既存のdraft行ヘルパー
+    svc, _, _, _, _ = _service(
+        store=StubStore(
+            user_row=UserRow(id=USER_ID, birth_date=date(2000, 1, 1), consent_at=None),
+            rows={row.id: row},
+        )
+    )
+    with pytest.raises(ConsentRequiredError):
+        await _update(svc, row, structured=_active_input(), status="active")

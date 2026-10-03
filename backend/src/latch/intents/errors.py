@@ -60,6 +60,16 @@ class UnderAgeError(IntentsError):
     code = "UNDER_AGE"
 
 
+class ConsentRequiredError(IntentsError):
+    """同意なしのactive化・parse(08 D-14「同意はマッチング機能の利用条件」)。
+
+    API層の遮断(設計§2.2第1層)。draft保存は同意不要(LLM送信なし)。
+    """
+
+    http_status = 422
+    code = "CONSENT_REQUIRED"
+
+
 class GeocodingFailedError(IntentsError):
     """location.nameに該当する地物が存在しない(05 §5・04 §3)。"""
 

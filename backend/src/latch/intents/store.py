@@ -26,10 +26,11 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class UserRow:
-    """fetch_user_rowの戻り(年齢検証に必要な最小列 — design §2.6)。"""
+    """fetch_user_rowの戻り(年齢・同意検証に必要な最小列 — design §2.6・M4 ws-5)。"""
 
     id: uuid.UUID
     birth_date: date
+    consent_at: datetime | None  # None=未同意(08 D-14・M4 ws-5)
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ _SELECT_FOR_UPDATE = text(
 )
 
 _SELECT_USER = text(
-    "SELECT id, birth_date FROM users "
+    "SELECT id, birth_date, consent_at FROM users "
     "WHERE auth_provider = :provider AND auth_subject = :subject"
 )
 
@@ -241,7 +242,11 @@ class IntentStore:
             )
         if row is None:
             return None
-        return UserRow(id=_coerce_uuid(row.id), birth_date=row.birth_date)
+        return UserRow(
+            id=_coerce_uuid(row.id),
+            birth_date=row.birth_date,
+            consent_at=row.consent_at,
+        )
 
     async def fetch(
         self, conn: AsyncConnection, intent_id: uuid.UUID

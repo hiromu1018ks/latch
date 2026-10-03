@@ -25,6 +25,7 @@ from latch.events import EventBus
 from latch.geo.service import Geofeature
 from latch.intents.errors import (
     ActiveIntentLimitError,
+    ConsentRequiredError,
     DependencyUnavailableError,
     ForbiddenError,
     GeocodingFailedError,
@@ -280,6 +281,12 @@ class IntentService:
             raise UnderAgeError("under 20 years old")
 
     @staticmethod
+    def _require_consent(user: UserRow) -> None:
+        """同意なしのactive化を遮断(08 D-14・設計§2.2第1層)。draftは許可。"""
+        if user.consent_at is None:
+            raise ConsentRequiredError("consent required")
+
+    @staticmethod
     def _validate_required3(inp: StructuredIntentInput) -> None:
         if inp.category is None or inp.category.primary is None:
             raise IntentValidationError("category is required")
@@ -424,6 +431,7 @@ class IntentService:
             # COUNT→INSERTをusers行ロックで直列化(§2.3)。ジオコーディングは
             # 別コネクションのgeofeatures参照のみでusersロックと競合しない
             async with self._uow() as conn:
+                self._require_consent(user)
                 if self._limiter is not None:
                     await self._check_active_limit(conn, user.id, now=now)
                 cols = self._resolve_active_or_raise(inp, now=now)
@@ -677,6 +685,7 @@ class IntentService:
                 new_version,
             )
         # draft→active化: 全量必須・全検証(不通なら422でdraft据え置き)
+        self._require_consent(user)
         if self._limiter is not None:
             await self._check_active_limit(conn, user.id, now=now)
         if inp is None:

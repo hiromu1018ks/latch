@@ -55,6 +55,7 @@ class _Store:
         return UserRow(
             id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
             birth_date=date(2000, 1, 1),
+            consent_at=NOW,
         )
 
     async def insert(self, conn, cols, *, user_id, status, now):
