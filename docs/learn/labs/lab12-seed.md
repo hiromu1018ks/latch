@@ -9,9 +9,11 @@
   1バイトも変わらない」ことを確認してもらえる。検査器が何を見ているか出力で確かめ、
   YAMLに1か所の壊れを入れて**検査がそれを見つける瞬間**を観察できる。さらに、基準日を
   変えて生み直したときに「何が変わって、何が変わらないか」を自分の目で分類できる
-- 次に読むもの: 第26章で触れたとおり、このシードはstagingでの機能試験(ws-3)の素材です。
-  「生んだ資産が、後の単位でどう消費されるか」は、その単位の教材が開放されたときの
-  楽しみに取っておいてください
+- 次に読むもの: 第28章(`concepts/28-staging-fullrun.md`)とLab 14
+  (`labs/lab14-staging-fullrun.md`)。このシードは、stagingでの機能試験ハーネスの素材として
+  実際に消費されました。「生んだ資産が、後の単位でどう消費されるか」は、そこで自分の目で
+  見られます(あなたがLab 12で生んだ300件と、試験が数える627ペアが、stagingの試験の
+  台帳になります)
 
 ## 0. このLabで何をするか
 
@@ -44,10 +46,10 @@ make seed-generate ARGS="--base-datetime 2026-10-04T11:00:00+09:00"
 
 ```
 cd backend && uv run python -m latch.testassets.generator --base-datetime 2026-10-04T11:00:00+09:00
-generated ../docs/testassets/m4-seed.yaml: intents=300 users=100 pair_total=44850 layer1_pass=576
+generated ../docs/testassets/m4-seed.yaml: intents=300 users=100 pair_total=44850 layer1_pass=627
 ```
 
-`intents=300 users=100` は生成した件数、`pair_total=44850` は全ペア数、`layer1_pass=576`
+`intents=300 users=100` は生成した件数、`pair_total=44850` は全ペア数、`layer1_pass=627`
 はそのうちLayer 1を通ったペアの数(第26章の集計と同じ値)です。
 
 **実行する前に予測を書いてください**(my-notes.mdへ)。今、gitに「何か変わった?」と聞くと、
@@ -164,32 +166,35 @@ Intent本体の1件です。`ex_group: EX-001` は「このIntentは、意図的
     - SD-008
     expected: fail
     fail_reason: age_alcohol
-    basis: 'D-10(10 §3 #27)・06 §2(飲酒は双方20歳以上)'
+    basis: 'D-10(10 §3 #27)・06 §2(飲酒は双方20歳以上)。2026-10-03裁定で両側meal化(20歳以上×alcohol true
+      vs 18-19歳×alcohol false)'
 ```
 
 個別期待(EX)の1件です。SD-007とSD-008のペアは「fail・理由はage_alcohol(飲酒は
-双方20歳以上の条件)」で、根拠の仕様の節番号まで書いてあります。18〜19歳のユーザーの
+双方20歳以上の条件)」で、根拠の仕様の節番号まで書いてあります。basisの末尾にある
+裁定の記録は、後の単位(ws-3)で資産の側を直したときに足されたものです(経緯は
+第28章28.7)。18〜19歳のユーザーの
 Intentと20歳以上の飲酒Intentが組み合わさったとき、Layer 1がこれを落とす——それが
 **起きるはず**という約束です。
 
 ```yaml
   aggregate:
     pair_total: 44850
-    layer1_pass: 576
-    layer1_fail: 44274
+    layer1_pass: 627
+    layer1_fail: 44223
     fail_breakdown:
       self_pair: 305
-      category_mismatch: 25926
-      time0: 17263
-      distance: 80
-      people: 574
-      budgetmin: 9
+      category_mismatch: 25943
+      time0: 17215
+      distance: 97
+      people: 646
+      budgetmin: 7
       blocked: 0
-      age_alcohol: 117
+      age_alcohol: 10
 ```
 
-第2層の集計です。44,274件が落ちる理由の内訳まで書いてあり、内訳の合計は
-`305+25926+17263+80+574+9+0+117=44274` ときっちり一致します。書き漏らしの
+第2層の集計です。44,223件が落ちる理由の内訳まで書いてあり、内訳の合計は
+`305+25943+17215+97+646+7+0+10=44223` ときっちり一致します。書き漏らしの
 心配が不要な作り(第26章26.5)が、この足し算です。
 
 ## 4. 検査に、壊れを見つけさせる
@@ -229,12 +234,12 @@ make seed-verify
 FAIL: 8件の違反
   - カテゴリ分布: drinking 実測149 vs 目標150
   - カテゴリ分布: meal 実測121 vs 目標120
-  - aggregate.layer1_pass不一致: 記載576 vs 再計算564
-  - aggregate.layer1_fail不一致: 記載44274 vs 再計算44286
-  - fail_breakdown.category_mismatch不一致: 記載25926 vs 再計算25954
-  - fail_breakdown.time0不一致: 記載17263 vs 再計算17241
-  - fail_breakdown.people不一致: 記載574 vs 再計算582
-  - fail_breakdown.age_alcohol不一致: 記載117 vs 再計算115
+  - aggregate.layer1_pass不一致: 記載627 vs 再計算616
+  - aggregate.layer1_fail不一致: 記載44223 vs 再計算44234
+  - fail_breakdown.category_mismatch不一致: 記載25943 vs 再計算25969
+  - fail_breakdown.time0不一致: 記載17215 vs 再計算17191
+  - fail_breakdown.people不一致: 記載646 vs 再計算653
+  - fail_breakdown.age_alcohol不一致: 記載10 vs 再計算12
 make: *** [Makefile:111: seed-verify] エラー 1
 ```
 
@@ -278,13 +283,13 @@ git diff --stat docs/testassets/m4-seed.yaml
 期待される出力(生成側の数値は§1と同じ。変えた行数だけが表示されます):
 
 ```
-generated ../docs/testassets/m4-seed.yaml: intents=300 users=100 pair_total=44850 layer1_pass=576
- docs/testassets/m4-seed.yaml | 1346 +++++++++++++++++++++---------------------
- 1 file changed, 673 insertions(+), 673 deletions(-)
+generated ../docs/testassets/m4-seed.yaml: intents=300 users=100 pair_total=44850 layer1_pass=627
+ docs/testassets/m4-seed.yaml | 1356 +++++++++++++++++++++---------------------
+ 1 file changed, 678 insertions(+), 678 deletions(-)
 ```
 
-生成時の数値(`intents=300`・`layer1_pass=576`)は§1と**まったく同じ**です。差分は
-673行。中身を見てみます。
+生成時の数値(`intents=300`・`layer1_pass=627`)は§1と**まったく同じ**です。差分は
+678行。中身を見てみます。
 
 ```bash
 git diff docs/testassets/m4-seed.yaml | head -30
@@ -312,7 +317,7 @@ git diff docs/testassets/m4-seed.yaml | head -30
 §1と同じまま。実施日が延びた試験でも「再生成して日付だけずらす」運用ができるのは
 この構造のおかげです(第26章26.3)。
 
-細かい予測試験をもう1つ。差分673行の中に `aggregate:` の節の数字は含まれるでしょうか。
+細かい予測試験をもう1つ。差分678行の中に `aggregate:` の節の数字は含まれるでしょうか。
 答えが予測できたら、次のコマンドで確かめてください(何も出なければ「含まれない」です)。
 
 ```bash
@@ -352,5 +357,6 @@ OK: ../docs/testassets/m4-seed.yaml の機械検査に合格(a構造/b分布/c�
    自分のノートに書く
 
 疑問が残ったら、それもノートに書いてください。このシードは、stagingでの機能試験の
-材料として後の単位で消費されます。「自分が生んだ300件が試験の中心役になる」——
-そのとき、このLabで確認した再現性が「試験の証拠」の下地になります。
+材料として実際に消費されました(M4 ws-3)。自分が生んだ300件が試験の中心役になる
+様子は、第28章とLab 14で見られます——このLabで確認した再現性が、「試験の証拠」の
+下地として実際に使われているところを。

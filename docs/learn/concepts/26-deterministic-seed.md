@@ -147,11 +147,14 @@ stagingへの投入日は試験の実施日で、実施日が延びることが�
   - SD-008
   expected: fail
   fail_reason: age_alcohol
-  basis: 'D-10(10 §3 #27)・06 §2(飲酒は双方20歳以上)'
+  basis: 'D-10(10 §3 #27)・06 §2(飲酒は双方20歳以上)。2026-10-03裁定で両側meal化(20歳以上×alcohol true
+    vs 18-19歳×alcohol false)'
 ```
 
 `expected` は判定(pass/fail)、`fail_reason` は落ちた理由の分類、`basis` は根拠となった
-仕様の節番号です。**「なぜこうなるか」まで資産に書いてある**のがポイントです。33件の内訳は、
+仕様の節番号です(後の単位で資産の側を直したときは、その判断の記録もbasisに残ります。
+実際に何があって直ったかは、第28章28.7の裁定の話です)。**「なぜこうなるか」まで資産に
+書いてある**のがポイントです。33件の内訳は、
 ペア判定24件+集合の構成検査4件+「作成拒否が正」の素材5件(18〜19歳が飲酒Intentを作ろうと
 すると422で断られる。第4章・D-10の動作試験の材料)です。
 
@@ -160,20 +163,20 @@ stagingへの投入日は試験の実施日で、実施日が延びることが�
 ```yaml
 aggregate:
   pair_total: 44850
-  layer1_pass: 576
-  layer1_fail: 44274
+  layer1_pass: 627
+  layer1_fail: 44223
   fail_breakdown:
     self_pair: 305
-    category_mismatch: 25926
-    time0: 17263
-    distance: 80
-    people: 574
-    budgetmin: 9
+    category_mismatch: 25943
+    time0: 17215
+    distance: 97
+    people: 646
+    budgetmin: 7
     blocked: 0
-    age_alcohol: 117
+    age_alcohol: 10
 ```
 
-通過は576件。落ちる44,274件は、落ちた理由ごとの件数(内訳)で書きます。内訳の合計が
+通過は627件。落ちる44,223件は、落ちた理由ごとの件数(内訳)で書きます。内訳の合計が
 `layer1_fail` と一致するので、「書き漏らした理由」の心配も不要です。個別のEXは
 「この現象が意図どおり起きたか」を、aggregateは「全体の形が崩れていないか」を、
 それぞれ受け持ちます。
