@@ -6,6 +6,8 @@ from latch.settings import Settings
 def test_settings_defaults(monkeypatch):
     monkeypatch.delenv("LATCH_APP_ENV", raising=False)
     monkeypatch.delenv("LATCH_LOG_LEVEL", raising=False)
+    monkeypatch.delenv("LATCH_CLOCK_MODE", raising=False)
+    monkeypatch.delenv("LATCH_AUTH_TESTKEYS_DIR", raising=False)
     s = Settings()
     assert s.app_env == "ci"
     assert s.log_level == "INFO"
@@ -15,6 +17,16 @@ def test_settings_defaults(monkeypatch):
     assert s.reset_retry_sec == 300  # M3 ws-2(04 §5・リセット失敗時の再試行間隔)
     assert s.push_mode == "stub"  # M3 ws-3(design §3.2・realはG3後)
     assert s.push_stub_delay_ms == 0  # M3 ws-3(スタブ遅延注入)
+    assert s.clock_mode == "system"  # M4 ws-1(design §2.2・ciはSystemClock既定)
+    assert s.auth_testkeys_dir == ""  # M4 ws-1(design §2.4・空=同梱鍵)
+
+
+def test_settings_clock_mode_and_testkeys_dir_env_override(monkeypatch):
+    monkeypatch.setenv("LATCH_CLOCK_MODE", "controlled")
+    monkeypatch.setenv("LATCH_AUTH_TESTKEYS_DIR", "/keys")
+    s = Settings()
+    assert s.clock_mode == "controlled"
+    assert s.auth_testkeys_dir == "/keys"
 
 
 def test_settings_env_override_with_latch_prefix(monkeypatch):

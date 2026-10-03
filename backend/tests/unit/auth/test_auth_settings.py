@@ -67,6 +67,7 @@ def test_auth_settings_are_exactly_eight_fields(monkeypatch):
         "auth_idp_issuer_apple",
         "auth_idp_audience_google",
         "auth_idp_audience_apple",
+        "auth_testkeys_dir",  # M4 ws-1裁定追記(2026-10-03)。auth_系8項目=関数名どおり
     }
     assert redis_fields == {"redis_url"}
 
