@@ -185,7 +185,7 @@ async def seed_all(api, db) -> dict:  # noqa: ANN001
     judged = judge_all(intents, users, now=_p(meta_base))
     l1_pass = {k for k, (ok, _reason) in judged.items() if ok}
 
-    # D-08事前集計(設計§2.2対抗策(c)・計画時実測: 6件超え74件)
+    # D-08事前集計(設計§2.2対抗策(c)・再実測: 6件超え84件)
     intent_user = {i["id"]: i["user"] for i in intents}
     per_user_day: dict[tuple[str, str], int] = {}
     for a, b in l1_pass:

@@ -206,7 +206,8 @@ EX_CASES: list[dict] = [
         "intents": ["SD-007", "SD-008"],
         "expected": "fail",
         "fail_reason": "age_alcohol",
-        "basis": "D-10(10 §3 #27)・06 §2(飲酒は双方20歳以上)",
+        "basis": "D-10(10 §3 #27)・06 §2(飲酒は双方20歳以上)。2026-10-03裁定で"
+        "両側meal化(20歳以上×alcohol true vs 18-19歳×alcohol false)",
     },
     {
         "id": "EX-005",
@@ -545,63 +546,67 @@ _EX_ROWS: list[tuple] = [
         2,
         2,
     ),  # SD-006 SU-012
-    # -- EX-004/005 D-10ペア(18-19歳×drinking false vs 20歳以上×true・D3)
+    # -- EX-004/005 D-10ペア(20歳以上×alcohol true vs 18-19歳×alcohol false・
+    # D3。2026-10-03スーパーバイザー裁定でdrinking→mealへ振替: 若年ユーザーは
+    # drinkingを作れず(mapping.pyがalcohol trueへ強制→service.pyが422
+    # UNDER_AGE)、かつcategory_mismatchを先に発火させないため両側同カテゴリ。
+    # alcoholフラグはL1年齢条件の判定入力(reference_l1.py:131)でカテゴリ非依存)
     (
         1,
         20,
         0,
         180,
         "天文館",
-        "drinking",
-        "居酒屋",
+        "meal",
+        "もつ鍋",
         True,
         1000,
         3500,
         2,
         2,
-    ),  # SD-007 SU-021
+    ),  # SD-007 SU-021(meal×alcohol true・20歳以上)
     (
         1,
         20,
         30,
         180,
         "天文館",
-        "drinking",
-        "ハイボール",
+        "meal",
+        "お茶漬け",
         False,
         1000,
         3500,
         2,
         2,
-    ),  # SD-008 SU-001(18歳)
+    ),  # SD-008 SU-001(18歳・meal×alcohol false)
     (
         2,
         20,
         0,
         180,
         "加治屋町",
-        "drinking",
-        "バー",
+        "meal",
+        "もつ鍋",
         True,
         1000,
         3000,
         2,
         2,
-    ),  # SD-009 SU-022
+    ),  # SD-009 SU-022(meal×alcohol true・20歳以上)
     (
         2,
         20,
         30,
         180,
         "加治屋町",
-        "drinking",
-        "ビール",
+        "meal",
+        "お茶漬け",
         False,
         1000,
         3000,
         2,
         2,
-    ),  # SD-010 SU-002(19歳)
+    ),  # SD-010 SU-002(19歳・meal×alcohol false)
     # -- EX-006..009 時間交差境界
     (1, 12, 0, 120, "呉服町", "meal", "定食", False, 1000, 1500, 2, 2),  # SD-011 SU-023
     (
@@ -1496,8 +1501,9 @@ def _intentional_slots(base: datetime) -> list[dict]:
     """意図的配置intents(SD-001〜064)を組み立てる(乱数不使用・D10)。
 
     消費集計(残余割付が差し引く前提値・unit試験の期待値):
-    時間帯=昼10/夕14/夜30/その他10・カテゴリ=drinking 25/meal 21/
-    activity 18・志向=1対1 46/グループ 18。
+    時間帯=昼10/夕14/夜30/その他10・カテゴリ=drinking 23/meal 23/
+    activity 18(2026-10-03裁定でSD-007/009をdrinking→mealへ振替)・
+    志向=1対1 46/グループ 18。
     """
     if not (len(_EX_ROWS) == len(_EX_USERS) == len(_EX_GROUPS) == EX_SLOT_COUNT):
         raise AssertionError("EX素材テーブルの要素数不一致")
@@ -1647,16 +1653,21 @@ def _build_remaining_intent(
     else:
         end = start + timedelta(minutes=rng.choice([60, 90, 120, 180]))
     place = rng.choice(list(LOCATIONS))
-    secondary = rng.choice(CATEGORY_SECONDARY[cat])
-    # alcohol割付(design §2.4規則7+18-19歳例外): 18-19歳ユーザーは全カテゴリで
-    # 常にfalse(alcohol trueは作成検証(service.py:430)で422になる「作成拒否
-    # 相当」を避ける)・drinking→常にtrue(20歳以上)・activity→常にfalse・
+    # カテゴリ振替(2026-10-03スーパーバイザー裁定): 18-19歳ユーザーには
+    # drinkingを配分しない(mealへ振替)。drinkingは実行時(mapping.py
+    # resolve_for_active)でalcohol trueへ強制され、20歳未満は作成検証
+    # (service.py:638)で422 UNDER_AGEになる — シードの全IntentがAPIで
+    # 作成可能であるための条件。振替分の分布補完は_remaining_slotsが行う
+    effective_cat = "meal" if (user in UNDERAGE_USERS and cat == "drinking") else cat
+    secondary = rng.choice(CATEGORY_SECONDARY[effective_cat])
+    # alcohol割付(design §2.4規則7): 18-19歳ユーザーは全カテゴリで常にfalse・
+    # drinking→常にtrue(20歳以上のみに配分される)・activity→常にfalse・
     # meal→20歳以上のみ確率MEAL_ALCOHOL_RATIO(規約を満たす)
     if user in UNDERAGE_USERS:
         alcohol = False
-    elif cat == "drinking":
+    elif effective_cat == "drinking":
         alcohol = True
-    elif cat == "activity":
+    elif effective_cat == "activity":
         alcohol = False
     else:
         alcohol = rng.random() < MEAL_ALCOHOL_RATIO
@@ -1666,8 +1677,8 @@ def _build_remaining_intent(
         pmin, pmax = rng.choice([(2, 2), (2, 3), (2, 4)])  # 1対1=それ以外
     budget = rng.choice(BUDGET_CHOICES)
     radius = rng.choice(RADIUS_CHOICES)
-    soft = rng.sample(SOFT_CONSTRAINTS[cat], k=rng.choice([1, 2]))
-    raw = rng.choice(RAW_TEMPLATES[cat]).format(
+    soft = rng.sample(SOFT_CONSTRAINTS[effective_cat], k=rng.choice([1, 2]))
+    raw = rng.choice(RAW_TEMPLATES[effective_cat]).format(
         time_prefix=TIME_PREFIX[bucket],
         place=place,
         secondary=secondary,
@@ -1678,7 +1689,7 @@ def _build_remaining_intent(
         "user": user,
         "raw_text": raw,
         "structured": {
-            "category": {"primary": cat, "secondary": secondary},
+            "category": {"primary": effective_cat, "secondary": secondary},
             "alcohol_involved": alcohol,
             "time": {"start": start, "end": end},
             "location": {"name": place, "radius_m": radius},
@@ -1730,6 +1741,28 @@ def _remaining_slots(
         cells = _max_remainder(n_bucket, [cat_rem[c] for c in CATEGORY_ORDER])
         for cat, n in zip(CATEGORY_ORDER, cells, strict=True):
             combos.extend([(bucket, cat)] * n)
+    # バケット毎の剰余配分は丸めの都合で全局カテゴリ合計がcat_remから±ずれ
+    # うる(300件時の検査は目標一致のため吸収が必要・時間帯合計は不変)。
+    # 決定的: 超過カテゴリのコンボを不足カテゴリへ先頭から張り替える。
+    # --count変更時(スケール配分・目標一致でない)は適用しない
+    if sum(cat_rem.values()) == remaining:
+        counts = Counter(cat for _b, cat in combos)
+        under = [
+            c for c in CATEGORY_ORDER for _ in range(max(0, cat_rem[c] - counts[c]))
+        ]
+        under_iter = iter(under)
+        rebalanced: list[tuple[str, str]] = []
+        for b, cat in combos:
+            if counts[cat] > cat_rem[cat]:
+                nxt = next(under_iter, None)
+                if nxt is not None:
+                    counts[cat] -= 1
+                    counts[nxt] += 1
+                    cat = nxt
+            rebalanced.append((b, cat))
+        if counts != Counter({c: cat_rem[c] for c in CATEGORY_ORDER}):
+            raise AssertionError("カテゴリ合計の吸収に失敗")
+        combos = rebalanced
     ori_counts = _max_remainder(remaining, [ori_rem["one_to_one"], ori_rem["group"]])
     ori_list = ["one_to_one"] * ori_counts[0] + ["group"] * ori_counts[1]
     if len(combos) != remaining or len(ori_list) != remaining:
@@ -1737,7 +1770,7 @@ def _remaining_slots(
     slots = list(zip(combos, ori_list, strict=True))
     rng.shuffle(slots)  # D10: 固定シードで決定的
     user_assign = _assign_users(remaining, Counter(i["user"] for i in ex_intents))
-    return [
+    built = [
         _build_remaining_intent(
             base,
             rng,
@@ -1750,6 +1783,46 @@ def _remaining_slots(
         )
         for idx, ((bucket, cat), ori) in enumerate(slots)
     ]
+    # 分布補完(2026-10-03スーパーバイザー裁定): 若年×drinking→mealへ振替った
+    # 件数と同数だけ、20歳以上ユーザーのmeal×alcohol false残余をdrinking×
+    # alcohol trueへ振り替え、カテゴリ分布目標(150/120/30)を維持する
+    # (verify (b)は目標との一致検査)。振替先はSD順の決定的選択・補完 Intentは
+    # drinkingの語彙(raw_text/secondary/soft)へ組み替える
+    n_swap = sum(
+        1
+        for (((_bucket, cat), _ori), u) in zip(slots, user_assign, strict=True)
+        if u in UNDERAGE_USERS and cat == "drinking"
+    )
+    candidates = [
+        it
+        for it in built
+        if it["user"] not in UNDERAGE_USERS
+        and it["structured"]["category"]["primary"] == "meal"
+        and it["structured"]["alcohol_involved"] is False
+    ]
+    # 300件時(目標一致)は補完不足を即失敗させる(分布の一致検査を守る)。
+    # --count変更時(スケール配分)は候補の範囲で部分補完(決定的) — 分布の
+    # 一致は300件時のみが契約(verify/unitは300件時のみ検査する)
+    exact_mode = sum(cat_rem.values()) == remaining
+    if len(candidates) < n_swap and exact_mode:
+        raise AssertionError("振替補完の候補が不足(カテゴリ分布を維持できない)")
+    for k, it in enumerate(candidates[:n_swap]):
+        hour = it["structured"]["time"]["start"].astimezone(JST).hour
+        bucket = time_bucket_of(hour)
+        sec = CATEGORY_SECONDARY["drinking"][k % len(CATEGORY_SECONDARY["drinking"])]
+        soft = [SOFT_CONSTRAINTS["drinking"][k % len(SOFT_CONSTRAINTS["drinking"])]]
+        it["structured"]["category"] = {"primary": "drinking", "secondary": sec}
+        it["structured"]["alcohol_involved"] = True
+        it["structured"]["soft_constraints"] = soft
+        it["raw_text"] = RAW_TEMPLATES["drinking"][
+            k % len(RAW_TEMPLATES["drinking"])
+        ].format(
+            time_prefix=TIME_PREFIX[bucket],
+            place=it["structured"]["location"]["name"],
+            secondary=sec,
+            soft=soft[0],
+        )
+    return built
 
 
 def _resolve_reject(base: datetime) -> list[dict]:

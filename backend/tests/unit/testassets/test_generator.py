@@ -157,22 +157,90 @@ def test_underage_intents_all_alcohol_false(seed):
 def test_drinking_all_alcohol_true_and_activity_false(seed):
     """drinking→全true・activity→全false(規則7・design §2.4)。
 
-    18-19歳ユーザーのintentは例外 — 同設計の「18-19歳ユーザーのIntentは
-    全てfalse」が優先し、D3素材(SD-008/010=drinking×false)を含む
-    (test_underage_intents_all_alcohol_falseがfalseを規定する)。
+    18-19歳ユーザーはdrinkingカテゴリ自体を持たない(2026-10-03スーパー
+    バイザー裁定・test_underage_intents_never_drinking)ため例外なし —
+    drinkingは実行時(mapping.py resolve_for_active)でalcohol trueへ
+    強制されるためYAML上もtrueで一貫させる。
+    """
+    for i in seed["intents"]:
+        cat = i["structured"]["category"]["primary"]
+        alc = i["structured"]["alcohol_involved"]
+        if cat == "activity":
+            assert alc is False
+        if cat == "drinking":
+            assert alc is True
+
+
+def test_underage_intents_never_drinking(seed):
+    """18-19歳ユーザーのintentはdrinkingカテゴリを含まない(裁定2026-10-03)。
+
+    drinkingはmapping.py:123でalcohol trueへ強制され、20歳未満は作成検証
+    (service.py:638)で422 UNDER_AGEになる — シードの全IntentがAPIで
+    作成可能であることの前提(ws-3 BLOCKED事由の再発防止)。
     """
     underage_ids = {
         u["id"]
         for u in seed["users"]
         if age_years_at(u["birth_date"], BASE.astimezone(JST).date()) < 20
     }
-    for i in seed["intents"]:
-        cat = i["structured"]["category"]["primary"]
-        alc = i["structured"]["alcohol_involved"]
-        if cat == "activity":
-            assert alc is False
-        if cat == "drinking" and i["user"] not in underage_ids:
-            assert alc is True
+    bad = [
+        i["id"]
+        for i in seed["intents"]
+        if i["user"] in underage_ids
+        and i["structured"]["category"]["primary"] == "drinking"
+    ]
+    assert not bad, f"18-19歳ユーザー×drinking: {bad}"
+
+
+def test_alcohol_true_implies_creator_20_or_older(seed):
+    """alcohol_involved=trueのIntentは作成者が20歳以上(実行時作成契約のピン)。
+
+    保存APIの作成検証(service.py:638-639・_require_age_20)はalcohol true
+    ×20歳未満を422にするため、この不変式が「全Intent作成可能」と同値。
+    """
+    users = {u["id"]: u for u in seed["users"]}
+    bad = [
+        i["id"]
+        for i in seed["intents"]
+        if i["structured"]["alcohol_involved"]
+        and age_years_at(users[i["user"]]["birth_date"], BASE.astimezone(JST).date())
+        < 20
+    ]
+    assert not bad, f"alcohol true×20歳未満の作成者: {bad}"
+
+
+def test_d10_material_is_runtime_creatable(seed):
+    """EX-004/005(D-10素材)が実行時契約で成立する形であること。
+
+    20歳以上側=alcohol true・18-19歳側=alcohol false×同一カテゴリ
+    (category_mismatchを先に発火させない)×若年側はdrinkingでない
+    (作成拒否にならない)。ペア判定がage_alcohol単独failであることは
+    test_ex_pair_cases_match_expectedが担保。
+    """
+    by_id = _by_id(seed)
+    users = {u["id"]: u for u in seed["users"]}
+    for case_id in ("EX-004", "EX-005"):
+        case = next(c for c in seed["expectations"]["cases"] if c["id"] == case_id)
+        older, younger = (by_id[i] for i in case["intents"])
+        assert (
+            age_years_at(
+                users[older["user"]]["birth_date"], BASE.astimezone(JST).date()
+            )
+            >= 20
+        )
+        assert (
+            age_years_at(
+                users[younger["user"]]["birth_date"], BASE.astimezone(JST).date()
+            )
+            < 20
+        )
+        assert older["structured"]["alcohol_involved"] is True
+        assert younger["structured"]["alcohol_involved"] is False
+        assert (
+            older["structured"]["category"]["primary"]
+            == younger["structured"]["category"]["primary"]
+        )
+        assert younger["structured"]["category"]["primary"] != "drinking"
 
 
 def test_visibility_notification_coverage(seed):

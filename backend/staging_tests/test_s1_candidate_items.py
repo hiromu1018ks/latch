@@ -376,7 +376,7 @@ async def test_s1_item08_retention_promotion(api, db):
         " WHERE from_status='candidate' AND to_status='proposed'"
     )
     assert before_retained > 0, (
-        "保留中candidateが0件 — D-08事前集計(計画§2.2: 6件超え74件)と不整合"
+        "保留中candidateが0件 — D-08事前集計(計画§2.2: 6件超え84件)と不整合"
     )
     # D1 00:05 JST へ前進(base_datetimeの翌日・ISO明示・後退は行わない)
     base = datetime.fromisoformat(state["meta_base"])
