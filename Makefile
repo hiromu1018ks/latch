@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish load-up load-down load-ps
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -54,3 +54,52 @@ jev-smoke: ## Jev実APIスモーク(1呼び出し・課金。.envにLATCH_LLM_MO
 
 g2-gate: ## G2日本語評価harness(実API・課金。.envにLATCH_LLM_MODE=real+3鍵必須。引数は make g2-gate ARGS="--limit 2 --route both" — makeは--以降の転送をしないため)
 	cd backend && uv run --env-file ../.env python -m latch.g2gate $(ARGS)
+
+# --- staging/load環境(M4 ws-1・別プロジェクト。ciのcompose.yamlと既存ターゲットは触らない)---
+
+STAGING_COMPOSE = docker compose -f compose.staging.yaml
+LOAD_COMPOSE = docker compose -f compose.load.yaml
+STAGING_DB_URL = postgresql+asyncpg://latch:latch@127.0.0.1:15432/latch
+
+SUBJECT ?= u1
+
+staging-up: ## staging環境を起動(healthy待ち。初回は先行して make staging-keys)
+	$(STAGING_COMPOSE) up -d --wait
+
+staging-down: ## staging環境を停止(ボリューム保持)
+	$(STAGING_COMPOSE) down
+
+staging-ps: ## staging環境の状態
+	$(STAGING_COMPOSE) ps
+
+staging-logs: ## staging環境のログ(--tail 30。followは直接 logs -f を)
+	$(STAGING_COMPOSE) logs --tail 30
+
+staging-migrate: ## staging DBをheadまでマイグレーション(15432宛・明示実行)
+	cd backend && LATCH_DATABASE_URL=$(STAGING_DB_URL) uv run alembic upgrade head
+
+staging-geo-import: ## staging DBへ地物データを取り込み(15432宛。CSV/PBFはbackend/data/geo/・git管理外)
+	cd backend && LATCH_DATABASE_URL=$(STAGING_DB_URL) uv run --group geo python -m latch.geo import-isj --csv data/geo/isj.csv
+	cd backend && LATCH_DATABASE_URL=$(STAGING_DB_URL) uv run --group geo python -m latch.geo import-osm --pbf data/geo/kyushu-latest.osm.pbf
+
+staging-keys: ## staging専用テスト鍵ペアを生成(.staging/keys・git管理外)
+	mkdir -p .staging/keys
+	cd backend && uv run python -m latch.auth gen-keypair --out-dir ../.staging/keys
+
+staging-token: ## staging鍵でテストユーザーJWTを発行(make staging-token SUBJECT=u1)
+	cd backend && uv run python -m latch.auth issue-idp-token --provider google --subject $(SUBJECT) --private-key ../.staging/keys/idp_test_private.pem
+
+staging-clock: ## staging Redisの制御Clock操作(make staging-clock ARGS="show|set <ISO>|advance <秒>")
+	cd backend && LATCH_REDIS_URL=redis://127.0.0.1:16379/0 uv run python -m latch.core.clock_cli $(ARGS)
+
+staging-publish: ## stagingへMatch Eventを手動発行(make staging-publish ARGS="publish created --intent-id <uuid>")
+	cd backend && LATCH_PUBSUB_EMULATOR_HOST=127.0.0.1:18085 LATCH_PUBSUB_PROJECT_ID=latch-staging uv run python -m latch.events $(ARGS)
+
+load-up: ## load環境を起動(healthy待ち。負荷試験中のci停止運用はws-6/ws-7手順の前段)
+	$(LOAD_COMPOSE) up -d --wait
+
+load-down: ## load環境を停止(ボリューム保持)
+	$(LOAD_COMPOSE) down
+
+load-ps: ## load環境の状態
+	$(LOAD_COMPOSE) ps
