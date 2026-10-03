@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish load-up load-down load-ps
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish load-up load-down load-ps seed-generate seed-verify
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -103,3 +103,9 @@ load-down: ## load環境を停止(ボリューム保持)
 
 load-ps: ## load環境の状態
 	$(LOAD_COMPOSE) ps
+
+seed-generate: ## M4シード生成(決定的。ローカル・DB不要。ARGS="--base-datetime 2026-10-04T11:00:00+09:00" — tz付きISO必須。--count既定300)
+	cd backend && uv run python -m latch.testassets.generator $(ARGS)
+
+seed-verify: ## M4シード機械検査(構造・分布・意図的配置・aggregate照合・地名。ローカル・DB不要)
+	cd backend && uv run python -m latch.testassets.verify $(ARGS)

@@ -1,0 +1,7954 @@
+meta:
+  status: draft
+  created: '2026-10-03'
+  generator: latch.testassets.generator
+  base_datetime: '2026-10-04T11:00:00+09:00'
+  random_seed: 42
+  user_count: 100
+  intent_count: 300
+  pair_total: 44850
+  time_bucket_targets:
+    day: 60
+    evening: 90
+    night: 120
+    other: 30
+  category_targets:
+    drinking: 150
+    meal: 120
+    activity: 30
+  orientation_targets:
+    one_to_one: 210
+    group: 90
+users:
+- id: SU-001
+  display_name: 合成はると001
+  birth_date: '2008-04-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-001)
+- id: SU-002
+  display_name: 合成ゆい002
+  birth_date: '2007-04-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-002)
+- id: SU-003
+  display_name: 合成そうた003
+  birth_date: '2008-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-003)
+- id: SU-004
+  display_name: 合成あおい004
+  birth_date: '2008-03-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-004)
+- id: SU-005
+  display_name: 合成かえで005
+  birth_date: '2007-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-005)
+- id: SU-006
+  display_name: 合成りく006
+  birth_date: '2007-08-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-006)
+- id: SU-007
+  display_name: 合成ひな007
+  birth_date: '2007-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-007)
+- id: SU-008
+  display_name: 合成ゆうと008
+  birth_date: '2007-01-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-008)
+- id: SU-009
+  display_name: 合成みお009
+  birth_date: '1986-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-009)
+- id: SU-010
+  display_name: 合成さくら010
+  birth_date: '2005-11-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-010)
+- id: SU-011
+  display_name: 合成はると011
+  birth_date: '1998-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-011)
+- id: SU-012
+  display_name: 合成ゆい012
+  birth_date: '1999-08-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-012)
+- id: SU-013
+  display_name: 合成そうた013
+  birth_date: '1983-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-013)
+- id: SU-014
+  display_name: 合成あおい014
+  birth_date: '1984-11-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-014)
+- id: SU-015
+  display_name: 合成かえで015
+  birth_date: '1978-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-015)
+- id: SU-016
+  display_name: 合成りく016
+  birth_date: '2004-01-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-016)
+- id: SU-017
+  display_name: 合成ひな017
+  birth_date: '1993-10-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-017)
+- id: SU-018
+  display_name: 合成ゆうと018
+  birth_date: '2006-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-018)
+- id: SU-019
+  display_name: 合成みお019
+  birth_date: '2000-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-019)
+- id: SU-020
+  display_name: 合成さくら020
+  birth_date: '1990-01-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-020)
+- id: SU-021
+  display_name: 合成はると021
+  birth_date: '2006-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-021)
+- id: SU-022
+  display_name: 合成ゆい022
+  birth_date: '1999-11-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-022)
+- id: SU-023
+  display_name: 合成そうた023
+  birth_date: '1985-11-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-023)
+- id: SU-024
+  display_name: 合成あおい024
+  birth_date: '1989-04-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-024)
+- id: SU-025
+  display_name: 合成かえで025
+  birth_date: '1999-03-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-025)
+- id: SU-026
+  display_name: 合成りく026
+  birth_date: '1988-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-026)
+- id: SU-027
+  display_name: 合成ひな027
+  birth_date: '1981-10-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-027)
+- id: SU-028
+  display_name: 合成ゆうと028
+  birth_date: '1982-08-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-028)
+- id: SU-029
+  display_name: 合成みお029
+  birth_date: '1984-04-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-029)
+- id: SU-030
+  display_name: 合成さくら030
+  birth_date: '1996-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-030)
+- id: SU-031
+  display_name: 合成はると031
+  birth_date: '2002-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-031)
+- id: SU-032
+  display_name: 合成ゆい032
+  birth_date: '1976-05-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-032)
+- id: SU-033
+  display_name: 合成そうた033
+  birth_date: '2003-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-033)
+- id: SU-034
+  display_name: 合成あおい034
+  birth_date: '1994-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-034)
+- id: SU-035
+  display_name: 合成かえで035
+  birth_date: '1995-05-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-035)
+- id: SU-036
+  display_name: 合成りく036
+  birth_date: '1987-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-036)
+- id: SU-037
+  display_name: 合成ひな037
+  birth_date: '1981-10-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-037)
+- id: SU-038
+  display_name: 合成ゆうと038
+  birth_date: '1983-03-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-038)
+- id: SU-039
+  display_name: 合成みお039
+  birth_date: '1989-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-039)
+- id: SU-040
+  display_name: 合成さくら040
+  birth_date: '1977-04-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-040)
+- id: SU-041
+  display_name: 合成はると041
+  birth_date: '2004-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-041)
+- id: SU-042
+  display_name: 合成ゆい042
+  birth_date: '1996-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-042)
+- id: SU-043
+  display_name: 合成そうた043
+  birth_date: '1987-05-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-043)
+- id: SU-044
+  display_name: 合成あおい044
+  birth_date: '1988-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-044)
+- id: SU-045
+  display_name: 合成かえで045
+  birth_date: '1984-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-045)
+- id: SU-046
+  display_name: 合成りく046
+  birth_date: '2004-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-046)
+- id: SU-047
+  display_name: 合成ひな047
+  birth_date: '1999-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-047)
+- id: SU-048
+  display_name: 合成ゆうと048
+  birth_date: '2004-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-048)
+- id: SU-049
+  display_name: 合成みお049
+  birth_date: '1979-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-049)
+- id: SU-050
+  display_name: 合成さくら050
+  birth_date: '1994-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-050)
+- id: SU-051
+  display_name: 合成はると051
+  birth_date: '1991-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-051)
+- id: SU-052
+  display_name: 合成ゆい052
+  birth_date: '1980-05-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-052)
+- id: SU-053
+  display_name: 合成そうた053
+  birth_date: '2001-05-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-053)
+- id: SU-054
+  display_name: 合成あおい054
+  birth_date: '1995-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-054)
+- id: SU-055
+  display_name: 合成かえで055
+  birth_date: '1985-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-055)
+- id: SU-056
+  display_name: 合成りく056
+  birth_date: '1983-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-056)
+- id: SU-057
+  display_name: 合成ひな057
+  birth_date: '1986-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-057)
+- id: SU-058
+  display_name: 合成ゆうと058
+  birth_date: '1986-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-058)
+- id: SU-059
+  display_name: 合成みお059
+  birth_date: '2001-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-059)
+- id: SU-060
+  display_name: 合成さくら060
+  birth_date: '1983-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-060)
+- id: SU-061
+  display_name: 合成はると061
+  birth_date: '2001-03-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-061)
+- id: SU-062
+  display_name: 合成ゆい062
+  birth_date: '1994-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-062)
+- id: SU-063
+  display_name: 合成そうた063
+  birth_date: '1976-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-063)
+- id: SU-064
+  display_name: 合成あおい064
+  birth_date: '1984-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-064)
+- id: SU-065
+  display_name: 合成かえで065
+  birth_date: '1998-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-065)
+- id: SU-066
+  display_name: 合成りく066
+  birth_date: '1996-10-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-066)
+- id: SU-067
+  display_name: 合成ひな067
+  birth_date: '1999-10-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-067)
+- id: SU-068
+  display_name: 合成ゆうと068
+  birth_date: '1981-05-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-068)
+- id: SU-069
+  display_name: 合成みお069
+  birth_date: '1994-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-069)
+- id: SU-070
+  display_name: 合成さくら070
+  birth_date: '2004-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-070)
+- id: SU-071
+  display_name: 合成はると071
+  birth_date: '1977-01-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-071)
+- id: SU-072
+  display_name: 合成ゆい072
+  birth_date: '1977-11-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-072)
+- id: SU-073
+  display_name: 合成そうた073
+  birth_date: '1996-07-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-073)
+- id: SU-074
+  display_name: 合成あおい074
+  birth_date: '1986-03-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-074)
+- id: SU-075
+  display_name: 合成かえで075
+  birth_date: '1993-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-075)
+- id: SU-076
+  display_name: 合成りく076
+  birth_date: '1992-08-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-076)
+- id: SU-077
+  display_name: 合成ひな077
+  birth_date: '1998-08-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-077)
+- id: SU-078
+  display_name: 合成ゆうと078
+  birth_date: '1998-11-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-078)
+- id: SU-079
+  display_name: 合成みお079
+  birth_date: '1989-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-079)
+- id: SU-080
+  display_name: 合成さくら080
+  birth_date: '1997-11-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-080)
+- id: SU-081
+  display_name: 合成はると081
+  birth_date: '1988-04-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-081)
+- id: SU-082
+  display_name: 合成ゆい082
+  birth_date: '1978-01-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-082)
+- id: SU-083
+  display_name: 合成そうた083
+  birth_date: '1994-05-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-083)
+- id: SU-084
+  display_name: 合成あおい084
+  birth_date: '1999-08-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-084)
+- id: SU-085
+  display_name: 合成かえで085
+  birth_date: '1990-03-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-085)
+- id: SU-086
+  display_name: 合成りく086
+  birth_date: '2004-10-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-086)
+- id: SU-087
+  display_name: 合成ひな087
+  birth_date: '1979-09-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-087)
+- id: SU-088
+  display_name: 合成ゆうと088
+  birth_date: '2001-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-088)
+- id: SU-089
+  display_name: 合成みお089
+  birth_date: '2000-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-089)
+- id: SU-090
+  display_name: 合成さくら090
+  birth_date: '1993-01-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-090)
+- id: SU-091
+  display_name: 合成はると091
+  birth_date: '2004-04-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-091)
+- id: SU-092
+  display_name: 合成ゆい092
+  birth_date: '1994-01-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-092)
+- id: SU-093
+  display_name: 合成そうた093
+  birth_date: '1992-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-093)
+- id: SU-094
+  display_name: 合成あおい094
+  birth_date: '1998-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-094)
+- id: SU-095
+  display_name: 合成かえで095
+  birth_date: '1979-10-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-095)
+- id: SU-096
+  display_name: 合成りく096
+  birth_date: '1984-11-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-096)
+- id: SU-097
+  display_name: 合成ひな097
+  birth_date: '2002-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-097)
+- id: SU-098
+  display_name: 合成ゆうと098
+  birth_date: '1978-02-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-098)
+- id: SU-099
+  display_name: 合成みお099
+  birth_date: '1982-06-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-099)
+- id: SU-100
+  display_name: 合成さくら100
+  birth_date: '1981-12-04'
+  profile:
+    bio: テスト用合成ユーザー(SU-100)
+intents:
+- id: SD-001
+  user: SU-010
+  ex_group: EX-001
+  raw_text: 今夜天文館あたりで居酒屋に行きたい。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T20:00:00+09:00'
+      end: '2026-10-05T23:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - のんびり席を温めたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-002
+  user: SU-010
+  ex_group: EX-001
+  raw_text: 天文館あたりで居酒屋を探してます。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T20:30:00+09:00'
+      end: '2026-10-05T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-003
+  user: SU-011
+  ex_group: EX-002
+  raw_text: 仕事終わりに呉服町でカフェ、同世代と一緒に。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T18:00:00+09:00'
+      end: '2026-10-05T20:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - さっと食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-004
+  user: SU-011
+  ex_group: EX-002
+  raw_text: 仕事終わりに呉服町あたりでカフェを食べたい。しっかり食べるつもり
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T18:30:00+09:00'
+      end: '2026-10-05T20:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっかり食べるつもり
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-005
+  user: SU-012
+  ex_group: EX-003
+  raw_text: 高見馬場あたりで街歩きしませんか。ゆっくり過ごしたい
+  structured:
+    category:
+      primary: activity
+      secondary: 街歩き
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T12:00:00+09:00'
+      end: '2026-10-05T14:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - ゆっくり過ごしたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-006
+  user: SU-012
+  ex_group: EX-003
+  raw_text: 昼に高見馬場で街歩き、気軽に集まりたい。時間をかけて楽しみたい
+  structured:
+    category:
+      primary: activity
+      secondary: 街歩き
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T12:30:00+09:00'
+      end: '2026-10-05T14:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 時間をかけて楽しみたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-007
+  user: SU-021
+  ex_group: EX-004
+  raw_text: 今夜天文館あたりで居酒屋に行きたい。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T20:00:00+09:00'
+      end: '2026-10-05T23:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-008
+  user: SU-001
+  ex_group: EX-004
+  raw_text: 天文館あたりでハイボールを探してます。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T20:30:00+09:00'
+      end: '2026-10-05T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - まったり語りたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-009
+  user: SU-022
+  ex_group: EX-005
+  raw_text: 今夜加治屋町でバー、一緒に行きませんか。締めの一杯
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:00:00+09:00'
+      end: '2026-10-06T23:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 締めの一杯
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-010
+  user: SU-002
+  ex_group: EX-005
+  raw_text: 今夜加治屋町あたりでビールに行きたい。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-011
+  user: SU-023
+  ex_group: EX-006
+  raw_text: 呉服町あたりで定食に行きたいです。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T12:00:00+09:00'
+      end: '2026-10-05T14:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - がっつり食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-012
+  user: SU-024
+  ex_group: EX-006
+  raw_text: 昼に呉服町で定食、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T13:00:00+09:00'
+      end: null
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-013
+  user: SU-025
+  ex_group: EX-007
+  raw_text: 仕事終わりに天文館あたりでとんこつラーメンを食べたい。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T18:00:00+09:00'
+      end: '2026-10-06T19:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - さっと食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-014
+  user: SU-026
+  ex_group: EX-007
+  raw_text: 天文館あたりでとんこつラーメンに行きたいです。しっかり食べるつもり
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T19:30:00+09:00'
+      end: '2026-10-06T21:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっかり食べるつもり
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-015
+  user: SU-027
+  ex_group: EX-008
+  raw_text: 今夜天文館でビール、一緒に行きませんか。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:00:00+09:00'
+      end: '2026-10-06T21:01:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-016
+  user: SU-028
+  ex_group: EX-008
+  raw_text: 今夜天文館あたりでビールに行きたい。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T21:00:00+09:00'
+      end: '2026-10-06T22:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 大人の雰囲気で
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-017
+  user: SU-029
+  ex_group: EX-009
+  raw_text: 浜町あたりで読書しませんか。1時間くらいで切り上げたい
+  structured:
+    category:
+      primary: activity
+      secondary: 読書
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T10:00:00+09:00'
+      end: '2026-10-07T11:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 1時間くらいで切り上げたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-018
+  user: SU-030
+  ex_group: EX-009
+  raw_text: 今度の休みに浜町で読書、気軽に集まりたい。サクッと帰るつもり
+  structured:
+    category:
+      primary: activity
+      secondary: 読書
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T15:00:00+09:00'
+      end: '2026-10-07T16:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - サクッと帰るつもり
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-019
+  user: SU-031
+  ex_group: EX-010
+  raw_text: 仕事終わりに天文館あたりで観光を楽しみたい。短時間で済ませたい
+  structured:
+    category:
+      primary: activity
+      secondary: 観光
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:00:00+09:00'
+      end: '2026-10-07T20:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 388
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 短時間で済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-020
+  user: SU-032
+  ex_group: EX-010
+  raw_text: 高見馬場あたりで観光しませんか。雰囲気良ければどこでも
+  structured:
+    category:
+      primary: activity
+      secondary: 観光
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:30:00+09:00'
+      end: '2026-10-07T20:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 雰囲気良ければどこでも
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-021
+  user: SU-033
+  ex_group: EX-011
+  raw_text: 仕事終わりに天文館で観光、気軽に集まりたい。にぎやかに騒ぎたい
+  structured:
+    category:
+      primary: activity
+      secondary: 観光
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T18:00:00+09:00'
+      end: '2026-10-08T20:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 387
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - にぎやかに騒ぎたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-022
+  user: SU-034
+  ex_group: EX-011
+  raw_text: 仕事終わりに高見馬場あたりで観光を楽しみたい。わいわい盛り上がりたい
+  structured:
+    category:
+      primary: activity
+      secondary: 観光
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T18:30:00+09:00'
+      end: '2026-10-08T20:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - わいわい盛り上がりたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-023
+  user: SU-035
+  ex_group: EX-012
+  raw_text: 加治屋町あたりでバルを探してます。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T10:00:00+09:00'
+      end: '2026-10-07T12:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-024
+  user: SU-036
+  ex_group: EX-012
+  raw_text: 今度の休みに浜町でバル、一緒に行きませんか。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T10:30:00+09:00'
+      end: '2026-10-07T12:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-025
+  user: SU-037
+  ex_group: EX-013
+  raw_text: 今度の休みに天文館あたりで水族館を楽しみたい。ゆっくり過ごしたい
+  structured:
+    category:
+      primary: activity
+      secondary: 水族館
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T10:00:00+09:00'
+      end: '2026-10-08T12:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - ゆっくり過ごしたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-026
+  user: SU-038
+  ex_group: EX-013
+  raw_text: 城山あたりで水族館しませんか。時間をかけて楽しみたい
+  structured:
+    category:
+      primary: activity
+      secondary: 水族館
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T10:30:00+09:00'
+      end: '2026-10-08T12:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 時間をかけて楽しみたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-027
+  user: SU-039
+  ex_group: EX-014
+  raw_text: 昼に加治屋町で定食、同世代と一緒に。肉系ならどこでもいい
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T12:00:00+09:00'
+      end: '2026-10-08T14:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 400
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 肉系ならどこでもいい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-028
+  user: SU-040
+  ex_group: EX-014
+  raw_text: 昼に加治屋町あたりで定食を食べたい。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T12:30:00+09:00'
+      end: '2026-10-08T14:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 400
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 昼はサクッと
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-029
+  user: SU-041
+  ex_group: EX-015
+  raw_text: 加治屋町あたりで定食に行きたいです。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T12:00:00+09:00'
+      end: '2026-10-09T14:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-030
+  user: SU-042
+  ex_group: EX-015
+  raw_text: 昼に加治屋町で定食、同世代と一緒に。早めに済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T12:30:00+09:00'
+      end: '2026-10-09T14:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 早めに済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-031
+  user: SU-043
+  ex_group: EX-016
+  raw_text: 今度の休みに城山あたりで日本酒に行きたい。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T10:00:00+09:00'
+      end: '2026-10-09T12:00:00+09:00'
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - のんびり席を温めたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-032
+  user: SU-044
+  ex_group: EX-016
+  raw_text: 城山あたりで日本酒を探してます。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T10:30:00+09:00'
+      end: '2026-10-09T12:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: 499
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-033
+  user: SU-045
+  ex_group: EX-017
+  raw_text: 今度の休みに浜町でハイキング、気軽に集まりたい。静かにやりたい
+  structured:
+    category:
+      primary: activity
+      secondary: ハイキング
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T10:00:00+09:00'
+      end: '2026-10-09T12:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 静かにやりたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-034
+  user: SU-046
+  ex_group: EX-017
+  raw_text: 今度の休みに浜町あたりでハイキングを楽しみたい。落ち着いた雰囲気で
+  structured:
+    category:
+      primary: activity
+      secondary: ハイキング
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T10:30:00+09:00'
+      end: '2026-10-09T12:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 落ち着いた雰囲気で
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-035
+  user: SU-047
+  ex_group: EX-018
+  raw_text: 天文館あたりで立ち飲みを探してます。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T20:00:00+09:00'
+      end: '2026-10-09T23:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-036
+  user: SU-048
+  ex_group: EX-018
+  raw_text: 今夜天文館で立ち飲み、一緒に行きませんか。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T20:30:00+09:00'
+      end: '2026-10-09T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 大人の雰囲気で
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-037
+  user: SU-049
+  ex_group: EX-019
+  raw_text: 今夜呉服町あたりで寿司を食べたい。肉系ならどこでもいい
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T21:00:00+09:00'
+      end: '2026-10-09T23:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 1
+      max: 1
+    soft_constraints:
+    - 肉系ならどこでもいい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-038
+  user: SU-050
+  ex_group: EX-019
+  raw_text: 呉服町あたりで寿司に行きたいです。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T21:30:00+09:00'
+      end: '2026-10-09T23:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 昼はサクッと
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-039
+  user: SU-051
+  ex_group: EX-020
+  raw_text: 今夜呉服町でカラオケ、気軽に集まりたい。短時間で済ませたい
+  structured:
+    category:
+      primary: activity
+      secondary: カラオケ
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T22:00:00+09:00'
+      end: '2026-10-10T00:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 短時間で済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-040
+  user: SU-052
+  ex_group: EX-020
+  raw_text: 今夜呉服町あたりでカラオケを楽しみたい。雰囲気良ければどこでも
+  structured:
+    category:
+      primary: activity
+      secondary: カラオケ
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T22:30:00+09:00'
+      end: '2026-10-10T00:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 雰囲気良ければどこでも
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-041
+  user: SU-053
+  ex_group: EX-021
+  raw_text: 天文館あたりでハイボールを探してます。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T21:00:00+09:00'
+      end: '2026-10-05T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - のんびり席を温めたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-042
+  user: SU-053
+  ex_group: EX-022
+  raw_text: 今夜天文館でハイボール、一緒に行きませんか。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T22:30:00+09:00'
+      end: '2026-10-06T01:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-043
+  user: SU-054
+  ex_group: EX-021,EX-022
+  raw_text: 今夜天文館あたりでハイボールに行きたい。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T21:30:00+09:00'
+      end: '2026-10-06T00:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-044
+  user: SU-055
+  ex_group: EX-023
+  raw_text: 呉服町あたりでワインを探してます。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T18:00:00+09:00'
+      end: '2026-10-06T20:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-045
+  user: SU-056
+  ex_group: EX-023
+  raw_text: 仕事終わりに呉服町で焼肉、同世代と一緒に。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T18:30:00+09:00'
+      end: '2026-10-06T20:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - お腹を空かせてる
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-046
+  user: SU-057
+  ex_group: EX-024
+  raw_text: 昼に加治屋町あたりで映画を楽しみたい。時間をかけて楽しみたい
+  structured:
+    category:
+      primary: activity
+      secondary: 映画
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T12:00:00+09:00'
+      end: '2026-10-07T14:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 時間をかけて楽しみたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-047
+  user: SU-058
+  ex_group: EX-024
+  raw_text: 加治屋町あたりで焼酎を探してます。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T12:30:00+09:00'
+      end: '2026-10-07T14:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-048
+  user: SU-059
+  ex_group: EX-025
+  raw_text: 今夜天文館でしゃぶしゃぶ、同世代と一緒に。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T20:00:00+09:00'
+      end: '2026-10-05T23:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-049
+  user: SU-059
+  ex_group: EX-025
+  raw_text: 今夜天文館あたりでしゃぶしゃぶを食べたい。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T20:30:00+09:00'
+      end: '2026-10-05T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-050
+  user: SU-060
+  ex_group: EX-025
+  raw_text: 天文館あたりでしゃぶしゃぶに行きたいです。早めに済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T21:00:00+09:00'
+      end: '2026-10-06T00:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 早めに済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-051
+  user: SU-061
+  ex_group: EX-025
+  raw_text: 今夜天文館でしゃぶしゃぶ、同世代と一緒に。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T21:30:00+09:00'
+      end: '2026-10-06T00:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - がっつり食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-052
+  user: SU-062
+  ex_group: EX-026
+  raw_text: 今夜天文館あたりで居酒屋に行きたい。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-053
+  user: SU-063
+  ex_group: EX-026
+  raw_text: 天文館あたりで居酒屋を探してます。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-054
+  user: SU-064
+  ex_group: EX-026
+  raw_text: 今夜天文館で居酒屋、一緒に行きませんか。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-055
+  user: SU-065
+  ex_group: EX-026
+  raw_text: 今夜天文館あたりで居酒屋に行きたい。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-056
+  user: SU-066
+  ex_group: EX-026
+  raw_text: 天文館あたりで居酒屋を探してます。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 大人の雰囲気で
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-057
+  user: SU-067
+  ex_group: EX-026
+  raw_text: 今夜天文館で居酒屋、一緒に行きませんか。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-058
+  user: SU-068
+  ex_group: EX-027
+  raw_text: 仕事終わりに呉服町あたりで海鮮丼を食べたい。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:00:00+09:00'
+      end: '2026-10-07T21:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-059
+  user: SU-069
+  ex_group: EX-027
+  raw_text: 呉服町あたりで海鮮丼に行きたいです。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:30:00+09:00'
+      end: '2026-10-07T21:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-060
+  user: SU-070
+  ex_group: EX-027
+  raw_text: 仕事終わりに呉服町で海鮮丼、同世代と一緒に。早めに済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T19:00:00+09:00'
+      end: '2026-10-07T22:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 早めに済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-061
+  user: SU-071
+  ex_group: EX-027
+  raw_text: 仕事終わりに呉服町あたりで海鮮丼を食べたい。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T19:30:00+09:00'
+      end: '2026-10-07T22:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 4000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - がっつり食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-062
+  user: SU-072
+  ex_group: EX-028
+  raw_text: 加治屋町あたりでカラオケしませんか。わいわい盛り上がりたい
+  structured:
+    category:
+      primary: activity
+      secondary: カラオケ
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T21:00:00+09:00'
+      end: '2026-10-08T23:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - わいわい盛り上がりたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-063
+  user: SU-073
+  ex_group: EX-028
+  raw_text: 今夜加治屋町でカラオケ、気軽に集まりたい。静かにやりたい
+  structured:
+    category:
+      primary: activity
+      secondary: カラオケ
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T21:30:00+09:00'
+      end: '2026-10-09T00:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 静かにやりたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-064
+  user: SU-074
+  ex_group: EX-028
+  raw_text: 今夜加治屋町あたりでカラオケを楽しみたい。落ち着いた雰囲気で
+  structured:
+    category:
+      primary: activity
+      secondary: カラオケ
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T22:00:00+09:00'
+      end: '2026-10-09T00:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 落ち着いた雰囲気で
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-065
+  user: SU-001
+  raw_text: 呉服町あたりでビールを探してます。締めの一杯
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T20:00:00+09:00'
+      end: '2026-10-05T21:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 締めの一杯
+    - まったり語りたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-066
+  user: SU-002
+  raw_text: 仕事終わりに呉服町で海鮮丼、同世代と一緒に。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T19:30:00+09:00'
+      end: null
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 昼は手早く
+    - 肉系ならどこでもいい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-067
+  user: SU-003
+  raw_text: 浜町あたりで水族館しませんか。ゆっくり過ごしたい
+  structured:
+    category:
+      primary: activity
+      secondary: 水族館
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T12:15:00+09:00'
+      end: '2026-10-07T14:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - ゆっくり過ごしたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-068
+  user: SU-004
+  raw_text: 鹿児島駅前あたりでバルを探してます。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T18:15:00+09:00'
+      end: '2026-10-08T20:15:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-069
+  user: SU-005
+  raw_text: 今夜鹿児島駅前あたりでワインに行きたい。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T22:30:00+09:00'
+      end: '2026-10-10T01:30:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-070
+  user: SU-006
+  raw_text: 高見馬場あたりでとんこつラーメンに行きたいです。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T20:45:00+09:00'
+      end: '2026-10-05T22:15:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - お腹を空かせてる
+    visibility: summary_only
+    notification_level: muted
+- id: SD-071
+  user: SU-007
+  raw_text: 高見馬場あたりでおしゃれなバルを探してます。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T19:00:00+09:00'
+      end: '2026-10-06T21:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 大人の雰囲気で
+    - 銘酒をゆっくり味わいたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-072
+  user: SU-008
+  raw_text: 仕事終わりに加治屋町でとんこつラーメン、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:30:00+09:00'
+      end: null
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: muted
+- id: SD-073
+  user: SU-009
+  raw_text: 呉服町あたりで日本酒を探してます。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T20:30:00+09:00'
+      end: '2026-10-08T23:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 2000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-074
+  user: SU-010
+  raw_text: 仕事終わりに呉服町でイタリアン、同世代と一緒に。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: イタリアン
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T18:30:00+09:00'
+      end: '2026-10-09T19:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    - しっかり食べるつもり
+    visibility: summary_only
+    notification_level: muted
+- id: SD-075
+  user: SU-011
+  raw_text: 今夜天文館あたりでしゃぶしゃぶを食べたい。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T20:00:00+09:00'
+      end: '2026-10-05T22:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - がっつり食べたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-076
+  user: SU-012
+  raw_text: 昼に城山あたりで日本酒に行きたい。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T12:45:00+09:00'
+      end: '2026-10-06T14:15:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - のんびり席を温めたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-077
+  user: SU-013
+  raw_text: 高見馬場あたりでバーを探してます。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T18:45:00+09:00'
+      end: null
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まったり語りたい
+    - 締めの一杯
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-078
+  user: SU-014
+  raw_text: 今夜鹿児島駅前あたりでカレーを食べたい。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T22:45:00+09:00'
+      end: '2026-10-09T00:15:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - お腹を空かせてる
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-079
+  user: SU-015
+  raw_text: 今度の休みに高見馬場あたりで立ち飲みに行きたい。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T16:30:00+09:00'
+      end: '2026-10-09T17:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-080
+  user: SU-016
+  raw_text: 鹿児島駅前あたりで日本酒を探してます。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T21:45:00+09:00'
+      end: '2026-10-05T23:15:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 2000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まったり語りたい
+    - のんびり席を温めたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-081
+  user: SU-017
+  raw_text: 今夜加治屋町あたりでカフェを食べたい。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T21:15:00+09:00'
+      end: '2026-10-06T23:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 3000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-082
+  user: SU-018
+  raw_text: 今夜加治屋町あたりで立ち飲みに行きたい。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T22:00:00+09:00'
+      end: null
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    - 大人の雰囲気で
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-083
+  user: SU-019
+  raw_text: 昼に呉服町で焼肉、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T13:45:00+09:00'
+      end: '2026-10-08T16:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-084
+  user: SU-020
+  raw_text: 仕事終わりに高見馬場で海鮮丼、同世代と一緒に。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T18:15:00+09:00'
+      end: '2026-10-09T19:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 野菜中心で
+    - さっと食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-085
+  user: SU-021
+  raw_text: 仕事終わりに浜町でカレー、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T19:00:00+09:00'
+      end: '2026-10-05T21:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-086
+  user: SU-022
+  raw_text: 今度の休みに鹿児島駅前でハンバーガー、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T04:30:00+09:00'
+      end: '2026-10-06T05:30:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 3000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 昼は手早く
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-087
+  user: SU-023
+  raw_text: 今度の休みに加治屋町でハイボール、一緒に行きませんか。締めの一杯
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T05:45:00+09:00'
+      end: '2026-10-07T06:45:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 締めの一杯
+    visibility: summary_only
+    notification_level: muted
+- id: SD-088
+  user: SU-024
+  raw_text: 仕事終わりに呉服町でワイン、一緒に行きませんか。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T19:45:00+09:00'
+      end: '2026-10-08T21:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-089
+  user: SU-025
+  raw_text: 仕事終わりに加治屋町でしゃぶしゃぶ、同世代と一緒に。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T18:45:00+09:00'
+      end: '2026-10-09T20:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 昼は手早く
+    - がっつり食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-090
+  user: SU-026
+  raw_text: 今夜城山あたりで映画を楽しみたい。ゆっくり過ごしたい
+  structured:
+    category:
+      primary: activity
+      secondary: 映画
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T20:45:00+09:00'
+      end: '2026-10-05T22:15:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - ゆっくり過ごしたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-091
+  user: SU-027
+  raw_text: 加治屋町あたりでバルを探してます。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T12:30:00+09:00'
+      end: '2026-10-06T14:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 大人の雰囲気で
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-092
+  user: SU-028
+  raw_text: 天文館あたりでバルを探してます。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T20:00:00+09:00'
+      end: '2026-10-07T22:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-093
+  user: SU-029
+  raw_text: 呉服町あたりでとんこつラーメンに行きたいです。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T12:30:00+09:00'
+      end: '2026-10-08T14:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-094
+  user: SU-030
+  raw_text: 加治屋町あたりでカフェに行きたいです。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T21:00:00+09:00'
+      end: '2026-10-09T23:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 早めに済ませたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-095
+  user: SU-031
+  raw_text: 天文館あたりで読書しませんか。短時間で済ませたい
+  structured:
+    category:
+      primary: activity
+      secondary: 読書
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T17:00:00+09:00'
+      end: '2026-10-05T19:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 2000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 短時間で済ませたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-096
+  user: SU-032
+  raw_text: 今夜浜町あたりでバーに行きたい。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T21:45:00+09:00'
+      end: '2026-10-06T22:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-097
+  user: SU-033
+  raw_text: 今夜加治屋町でおしゃれなバル、一緒に行きませんか。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T20:15:00+09:00'
+      end: null
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-098
+  user: SU-034
+  raw_text: 鹿児島駅前あたりでカレーに行きたいです。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T13:00:00+09:00'
+      end: '2026-10-08T15:00:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - さっと食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-099
+  user: SU-035
+  raw_text: 今夜加治屋町で焼肉、同世代と一緒に。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T20:15:00+09:00'
+      end: '2026-10-09T22:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    - 軽めの食事で済ませたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-100
+  user: SU-036
+  raw_text: 今夜天文館あたりでワインに行きたい。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T22:30:00+09:00'
+      end: '2026-10-05T23:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 3000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - のんびり席を温めたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-101
+  user: SU-037
+  raw_text: 仕事終わりに城山あたりでカフェを食べたい。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T19:30:00+09:00'
+      end: '2026-10-06T22:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 野菜中心で
+    - 軽めの食事で済ませたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-102
+  user: SU-038
+  raw_text: 今夜鹿児島駅前で甘味処、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: 甘味処
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T22:45:00+09:00'
+      end: '2026-10-08T01:45:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 肉系ならどこでもいい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-103
+  user: SU-039
+  raw_text: 浜町あたりでハイボールを探してます。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T19:45:00+09:00'
+      end: null
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - のんびり席を温めたい
+    - 軽く飲みたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-104
+  user: SU-040
+  raw_text: 城山あたりで海鮮丼に行きたいです。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T13:45:00+09:00'
+      end: '2026-10-09T15:15:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-105
+  user: SU-041
+  raw_text: 浜町あたりで寿司に行きたいです。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T18:45:00+09:00'
+      end: '2026-10-05T20:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 昼は手早く
+    - さっと食べたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-106
+  user: SU-042
+  raw_text: 今度の休みに鹿児島駅前あたりで日本酒に行きたい。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T07:15:00+09:00'
+      end: '2026-10-06T09:15:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-107
+  user: SU-043
+  raw_text: 仕事終わりに加治屋町あたりでハイボールに行きたい。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T19:30:00+09:00'
+      end: '2026-10-07T22:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 2000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽く飲みたい
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-108
+  user: SU-044
+  raw_text: 加治屋町あたりで居酒屋を探してます。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T19:45:00+09:00'
+      end: '2026-10-08T21:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - 締めの一杯
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-109
+  user: SU-045
+  raw_text: 今夜天文館でカフェ、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T20:45:00+09:00'
+      end: '2026-10-09T22:15:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 2000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-110
+  user: SU-046
+  raw_text: 今夜浜町あたりでバーに行きたい。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T22:45:00+09:00'
+      end: '2026-10-05T23:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-111
+  user: SU-047
+  raw_text: 呉服町あたりでとんこつラーメンに行きたいです。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T21:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-112
+  user: SU-048
+  raw_text: 浜町あたりでカレーに行きたいです。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T12:00:00+09:00'
+      end: '2026-10-07T15:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - お腹を空かせてる
+    - 昼はサクッと
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-113
+  user: SU-049
+  raw_text: 今夜呉服町あたりでおしゃれなバルに行きたい。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T21:15:00+09:00'
+      end: null
+    location:
+      name: 呉服町
+      radius_m: 3000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まったり語りたい
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-114
+  user: SU-050
+  raw_text: 今夜浜町で観光、気軽に集まりたい。ゆっくり過ごしたい
+  structured:
+    category:
+      primary: activity
+      secondary: 観光
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T20:15:00+09:00'
+      end: '2026-10-09T22:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - ゆっくり過ごしたい
+    - にぎやかに騒ぎたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-115
+  user: SU-051
+  raw_text: 昼に浜町でハイボール、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T13:30:00+09:00'
+      end: '2026-10-05T15:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 2000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっぽりと飲みたい
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-116
+  user: SU-052
+  raw_text: 今度の休みに呉服町あたりで寿司を食べたい。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T00:45:00+09:00'
+      end: null
+    location:
+      name: 呉服町
+      radius_m: 3000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - さっと食べたい
+    - しっかり食べるつもり
+    visibility: summary_only
+    notification_level: muted
+- id: SD-117
+  user: SU-053
+  raw_text: 仕事終わりに鹿児島駅前あたりでビールに行きたい。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T19:15:00+09:00'
+      end: '2026-10-07T22:15:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - しっぽりと飲みたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-118
+  user: SU-054
+  raw_text: 今夜呉服町でバル、一緒に行きませんか。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T21:00:00+09:00'
+      end: '2026-10-08T22:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-119
+  user: SU-055
+  raw_text: 仕事終わりに浜町で観光、気軽に集まりたい。サクッと帰るつもり
+  structured:
+    category:
+      primary: activity
+      secondary: 観光
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T18:45:00+09:00'
+      end: null
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - サクッと帰るつもり
+    visibility: summary_only
+    notification_level: muted
+- id: SD-120
+  user: SU-056
+  raw_text: 呉服町あたりで焼酎を探してます。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T19:00:00+09:00'
+      end: '2026-10-05T20:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-121
+  user: SU-057
+  raw_text: 今夜加治屋町あたりでバーに行きたい。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T22:45:00+09:00'
+      end: '2026-10-07T00:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 大人の雰囲気で
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-122
+  user: SU-058
+  raw_text: 城山あたりでおむらいすに行きたいです。しっかり食べるつもり
+  structured:
+    category:
+      primary: meal
+      secondary: おむらいす
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T20:30:00+09:00'
+      end: null
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - しっかり食べるつもり
+    - 軽めの食事で済ませたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-123
+  user: SU-059
+  raw_text: 仕事終わりに呉服町あたりでワインに行きたい。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T18:00:00+09:00'
+      end: null
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-124
+  user: SU-060
+  raw_text: 仕事終わりに高見馬場あたりで水族館を楽しみたい。静かにやりたい
+  structured:
+    category:
+      primary: activity
+      secondary: 水族館
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T18:00:00+09:00'
+      end: '2026-10-09T19:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 静かにやりたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-125
+  user: SU-061
+  raw_text: 高見馬場あたりで日本酒を探してます。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T19:00:00+09:00'
+      end: '2026-10-05T20:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-126
+  user: SU-062
+  raw_text: 昼に城山でカレー、同世代と一緒に。肉系ならどこでもいい
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T12:45:00+09:00'
+      end: '2026-10-06T13:45:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 肉系ならどこでもいい
+    - 早めに済ませたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-127
+  user: SU-063
+  raw_text: 天文館あたりでおむらいすに行きたいです。肉系ならどこでもいい
+  structured:
+    category:
+      primary: meal
+      secondary: おむらいす
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T22:45:00+09:00'
+      end: null
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 肉系ならどこでもいい
+    - 昼は手早く
+    visibility: summary_only
+    notification_level: muted
+- id: SD-128
+  user: SU-064
+  raw_text: 城山あたりでバーを探してます。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T22:45:00+09:00'
+      end: null
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-129
+  user: SU-065
+  raw_text: 昼に城山あたりでビールに行きたい。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T13:00:00+09:00'
+      end: '2026-10-09T15:00:00+09:00'
+    location:
+      name: 城山
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - 銘酒をゆっくり味わいたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-130
+  user: SU-066
+  raw_text: 浜町あたりでバルを探してます。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T20:30:00+09:00'
+      end: '2026-10-05T21:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-131
+  user: SU-067
+  raw_text: 今夜天文館でハンバーガー、同世代と一緒に。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T20:30:00+09:00'
+      end: '2026-10-06T22:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-132
+  user: SU-068
+  raw_text: 仕事終わりに浜町あたりでビールに行きたい。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T19:15:00+09:00'
+      end: '2026-10-07T20:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 大人の雰囲気で
+    - 銘酒をゆっくり味わいたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-133
+  user: SU-069
+  raw_text: 今夜城山あたりで居酒屋に行きたい。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T22:45:00+09:00'
+      end: null
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - まったり語りたい
+    - 大人の雰囲気で
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-134
+  user: SU-070
+  raw_text: 高見馬場あたりでハンバーガーに行きたいです。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T19:00:00+09:00'
+      end: '2026-10-09T20:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 昼はサクッと
+    - 早めに済ませたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-135
+  user: SU-071
+  raw_text: 仕事終わりに城山でおしゃれなバル、一緒に行きませんか。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T18:30:00+09:00'
+      end: '2026-10-05T20:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-136
+  user: SU-072
+  raw_text: 今度の休みに鹿児島駅前で海鮮丼、同世代と一緒に。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T03:15:00+09:00'
+      end: '2026-10-06T04:45:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-137
+  user: SU-073
+  raw_text: 今度の休みに浜町あたりで甘味処を食べたい。肉系ならどこでもいい
+  structured:
+    category:
+      primary: meal
+      secondary: 甘味処
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T04:15:00+09:00'
+      end: '2026-10-07T05:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 肉系ならどこでもいい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-138
+  user: SU-074
+  raw_text: 呉服町あたりで焼肉に行きたいです。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T19:45:00+09:00'
+      end: '2026-10-08T22:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 2000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 野菜中心で
+    - 軽めの食事で済ませたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-139
+  user: SU-075
+  raw_text: 仕事終わりに鹿児島駅前でビール、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T19:45:00+09:00'
+      end: '2026-10-09T22:45:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - しっぽりと飲みたい
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-140
+  user: SU-076
+  raw_text: 今夜呉服町あたりで寿司を食べたい。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T22:15:00+09:00'
+      end: '2026-10-06T00:15:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - お腹を空かせてる
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-141
+  user: SU-077
+  raw_text: 今夜加治屋町あたりでハンバーガーを食べたい。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T20:00:00+09:00'
+      end: '2026-10-06T23:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 3000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - さっと食べたい
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-142
+  user: SU-078
+  raw_text: 昼に浜町で焼肉、同世代と一緒に。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T13:30:00+09:00'
+      end: '2026-10-07T15:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - お腹を空かせてる
+    - 軽めの食事で済ませたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-143
+  user: SU-079
+  raw_text: 加治屋町あたりでハンバーガーに行きたいです。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T19:45:00+09:00'
+      end: '2026-10-08T20:45:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 2000
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - がっつり食べたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-144
+  user: SU-080
+  raw_text: 城山あたりで焼酎を探してます。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T12:15:00+09:00'
+      end: null
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-145
+  user: SU-081
+  raw_text: 仕事終わりに天文館あたりで甘味処を食べたい。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: 甘味処
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T18:30:00+09:00'
+      end: null
+    location:
+      name: 天文館
+      radius_m: 3000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 野菜中心で
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-146
+  user: SU-082
+  raw_text: 今夜呉服町で甘味処、同世代と一緒に。肉系ならどこでもいい
+  structured:
+    category:
+      primary: meal
+      secondary: 甘味処
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T21:45:00+09:00'
+      end: '2026-10-06T22:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 肉系ならどこでもいい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-147
+  user: SU-083
+  raw_text: 仕事終わりに呉服町でカフェ、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T19:30:00+09:00'
+      end: '2026-10-07T21:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-148
+  user: SU-084
+  raw_text: 高見馬場あたりで海鮮丼に行きたいです。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T13:15:00+09:00'
+      end: '2026-10-08T14:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - がっつり食べたい
+    - 肉系ならどこでもいい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-149
+  user: SU-085
+  raw_text: 今夜高見馬場でバル、一緒に行きませんか。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T22:30:00+09:00'
+      end: '2026-10-10T01:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 大人の雰囲気で
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-150
+  user: SU-086
+  raw_text: 高見馬場あたりでワインを探してます。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T21:45:00+09:00'
+      end: '2026-10-06T00:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - まったり語りたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-151
+  user: SU-087
+  raw_text: 高見馬場あたりで観光しませんか。落ち着いた雰囲気で
+  structured:
+    category:
+      primary: activity
+      secondary: 観光
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T12:30:00+09:00'
+      end: null
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 落ち着いた雰囲気で
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-152
+  user: SU-088
+  raw_text: 今夜高見馬場あたりで定食を食べたい。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T21:00:00+09:00'
+      end: '2026-10-07T23:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 野菜中心で
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-153
+  user: SU-089
+  raw_text: 今夜鹿児島駅前で寿司、同世代と一緒に。しっかり食べるつもり
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T21:45:00+09:00'
+      end: '2026-10-08T23:15:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - しっかり食べるつもり
+    - さっと食べたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-154
+  user: SU-090
+  raw_text: 仕事終わりに高見馬場で定食、同世代と一緒に。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T19:15:00+09:00'
+      end: '2026-10-09T20:15:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-155
+  user: SU-091
+  raw_text: 今夜加治屋町で居酒屋、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T22:15:00+09:00'
+      end: '2026-10-06T00:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - しっぽりと飲みたい
+    - ちょい飲みして帰りたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-156
+  user: SU-092
+  raw_text: 今夜天文館あたりでカレーを食べたい。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T22:00:00+09:00'
+      end: '2026-10-07T01:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 3000
+    budget:
+      max: 2500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-157
+  user: SU-093
+  raw_text: 今度の休みに高見馬場で居酒屋、一緒に行きませんか。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T07:00:00+09:00'
+      end: '2026-10-07T09:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-158
+  user: SU-094
+  raw_text: 鹿児島駅前あたりでカフェに行きたいです。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T20:15:00+09:00'
+      end: null
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: muted
+- id: SD-159
+  user: SU-095
+  raw_text: 城山あたりでワインを探してます。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T21:30:00+09:00'
+      end: null
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    - ちょい飲みして帰りたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-160
+  user: SU-096
+  raw_text: 仕事終わりに加治屋町で焼酎、一緒に行きませんか。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T19:45:00+09:00'
+      end: '2026-10-05T21:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-161
+  user: SU-097
+  raw_text: 今夜城山あたりでイタリアンを食べたい。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: イタリアン
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T21:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 野菜中心で
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: muted
+- id: SD-162
+  user: SU-098
+  raw_text: 今夜天文館で日本酒、一緒に行きませんか。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T21:30:00+09:00'
+      end: '2026-10-07T22:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-163
+  user: SU-099
+  raw_text: 呉服町あたりで定食に行きたいです。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T18:00:00+09:00'
+      end: '2026-10-08T20:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 野菜中心で
+    - 早めに済ませたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-164
+  user: SU-100
+  raw_text: 高見馬場あたりでバーを探してます。締めの一杯
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T12:30:00+09:00'
+      end: '2026-10-09T14:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 締めの一杯
+    - ちょい飲みして帰りたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-165
+  user: SU-001
+  raw_text: 今夜城山あたりでカフェを食べたい。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T21:15:00+09:00'
+      end: '2026-10-05T23:15:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-166
+  user: SU-002
+  raw_text: 仕事終わりに呉服町あたりで立ち飲みに行きたい。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T19:30:00+09:00'
+      end: '2026-10-06T21:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-167
+  user: SU-003
+  raw_text: 仕事終わりに加治屋町でバル、一緒に行きませんか。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T19:00:00+09:00'
+      end: '2026-10-07T21:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっとり静かな店がいい
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-168
+  user: SU-004
+  raw_text: 加治屋町あたりで焼酎を探してます。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T12:15:00+09:00'
+      end: '2026-10-08T13:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-169
+  user: SU-005
+  raw_text: 城山あたりでワインを探してます。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T12:30:00+09:00'
+      end: '2026-10-09T14:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 軽く飲みたい
+    - 締めの一杯
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-170
+  user: SU-006
+  raw_text: 仕事終わりに浜町あたりでおしゃれなバルに行きたい。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T19:00:00+09:00'
+      end: '2026-10-05T20:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - のんびり席を温めたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-171
+  user: SU-007
+  raw_text: 仕事終わりに浜町あたりでカレーを食べたい。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T19:15:00+09:00'
+      end: '2026-10-06T22:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - お腹を空かせてる
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-172
+  user: SU-008
+  raw_text: 加治屋町あたりで日本酒を探してます。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T21:00:00+09:00'
+      end: '2026-10-07T22:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - しっぽりと飲みたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-173
+  user: SU-009
+  raw_text: 浜町あたりでバルを探してます。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T13:45:00+09:00'
+      end: '2026-10-08T15:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - まずは1杯だけ様子を見たい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-174
+  user: SU-010
+  raw_text: 今度の休みに加治屋町あたりでおしゃれなバルに行きたい。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T07:00:00+09:00'
+      end: null
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - 大人の雰囲気で
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-175
+  user: SU-011
+  raw_text: 天文館あたりでバーを探してます。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T19:45:00+09:00'
+      end: '2026-10-05T22:45:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-176
+  user: SU-012
+  raw_text: 呉服町あたりで甘味処に行きたいです。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: 甘味処
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T13:45:00+09:00'
+      end: '2026-10-06T16:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 野菜中心で
+    - 肉系ならどこでもいい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-177
+  user: SU-013
+  raw_text: 昼に天文館あたりで日本酒に行きたい。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T12:15:00+09:00'
+      end: '2026-10-07T14:15:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 2000
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-178
+  user: SU-014
+  raw_text: 今夜鹿児島駅前あたりで立ち飲みに行きたい。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T21:30:00+09:00'
+      end: '2026-10-08T23:30:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 2000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - のんびり席を温めたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-179
+  user: SU-015
+  raw_text: 今夜浜町でバル、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T21:45:00+09:00'
+      end: '2026-10-09T23:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 2000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっぽりと飲みたい
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-180
+  user: SU-016
+  raw_text: 今夜加治屋町で居酒屋、一緒に行きませんか。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T21:45:00+09:00'
+      end: '2026-10-05T23:45:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 3000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-181
+  user: SU-017
+  raw_text: 仕事終わりに城山あたりで居酒屋に行きたい。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T18:45:00+09:00'
+      end: '2026-10-06T20:15:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - しっぽりと飲みたい
+    - 軽く飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-182
+  user: SU-018
+  raw_text: 仕事終わりに加治屋町で寿司、同世代と一緒に。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:45:00+09:00'
+      end: '2026-10-07T20:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 3000
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - さっと食べたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-183
+  user: SU-019
+  raw_text: 今夜高見馬場あたりで焼酎に行きたい。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T21:45:00+09:00'
+      end: '2026-10-08T23:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 2000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    - まったり語りたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-184
+  user: SU-020
+  raw_text: 昼に鹿児島駅前でイタリアン、同世代と一緒に。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: イタリアン
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T13:15:00+09:00'
+      end: '2026-10-09T15:15:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 野菜中心で
+    - 昼は手早く
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-185
+  user: SU-021
+  raw_text: 加治屋町あたりでおむらいすに行きたいです。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: おむらいす
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T09:00:00+09:00'
+      end: '2026-10-05T12:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: muted
+- id: SD-186
+  user: SU-022
+  raw_text: 今夜浜町あたりでビールに行きたい。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T21:15:00+09:00'
+      end: '2026-10-06T23:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 2000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-187
+  user: SU-023
+  raw_text: 今夜城山で焼酎、一緒に行きませんか。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T20:00:00+09:00'
+      end: '2026-10-07T22:00:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-188
+  user: SU-024
+  raw_text: 鹿児島駅前あたりで焼肉に行きたいです。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T12:30:00+09:00'
+      end: '2026-10-08T13:30:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - さっと食べたい
+    - がっつり食べたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-189
+  user: SU-025
+  raw_text: 浜町あたりでハンバーガーに行きたいです。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T19:00:00+09:00'
+      end: null
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - さっと食べたい
+    - 昼は手早く
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-190
+  user: SU-026
+  raw_text: 今夜城山でイタリアン、同世代と一緒に。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: イタリアン
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T20:30:00+09:00'
+      end: '2026-10-05T23:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - さっと食べたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-191
+  user: SU-027
+  raw_text: 高見馬場あたりで立ち飲みを探してます。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T13:00:00+09:00'
+      end: '2026-10-06T14:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-192
+  user: SU-028
+  raw_text: 呉服町あたりでハイボールを探してます。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T13:30:00+09:00'
+      end: '2026-10-07T14:30:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - まったり語りたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-193
+  user: SU-029
+  raw_text: 昼に呉服町でおしゃれなバル、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T13:00:00+09:00'
+      end: '2026-10-08T15:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっぽりと飲みたい
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-194
+  user: SU-030
+  raw_text: 仕事終わりに浜町でカフェ、同世代と一緒に。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T19:15:00+09:00'
+      end: '2026-10-09T20:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 2000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - がっつり食べたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-195
+  user: SU-031
+  raw_text: 仕事終わりに天文館あたりでカレーを食べたい。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T18:15:00+09:00'
+      end: '2026-10-05T21:15:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - がっつり食べたい
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-196
+  user: SU-032
+  raw_text: 城山あたりでとんこつラーメンに行きたいです。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T22:00:00+09:00'
+      end: '2026-10-07T00:00:00+09:00'
+    location:
+      name: 城山
+      radius_m: 2000
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - がっつり食べたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-197
+  user: SU-033
+  raw_text: 加治屋町あたりでとんこつラーメンに行きたいです。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:00:00+09:00'
+      end: '2026-10-07T19:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 野菜中心で
+    - 肉系ならどこでもいい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-198
+  user: SU-034
+  raw_text: 仕事終わりに天文館あたりで海鮮丼を食べたい。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T18:15:00+09:00'
+      end: '2026-10-08T20:15:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - がっつり食べたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-199
+  user: SU-035
+  raw_text: 今夜高見馬場でカフェ、同世代と一緒に。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T22:45:00+09:00'
+      end: '2026-10-10T00:15:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - がっつり食べたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-200
+  user: SU-036
+  raw_text: 浜町あたりで居酒屋を探してます。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T12:15:00+09:00'
+      end: '2026-10-05T13:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-201
+  user: SU-037
+  raw_text: 昼に高見馬場あたりでハイキングを楽しみたい。落ち着いた雰囲気で
+  structured:
+    category:
+      primary: activity
+      secondary: ハイキング
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T12:00:00+09:00'
+      end: '2026-10-06T14:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 2000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 落ち着いた雰囲気で
+    - ゆっくり過ごしたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-202
+  user: SU-038
+  raw_text: 仕事終わりに浜町で寿司、同世代と一緒に。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T19:30:00+09:00'
+      end: null
+    location:
+      name: 浜町
+      radius_m: 2000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - がっつり食べたい
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: muted
+- id: SD-203
+  user: SU-039
+  raw_text: 今夜加治屋町あたりで海鮮丼を食べたい。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T21:45:00+09:00'
+      end: '2026-10-08T23:45:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - さっと食べたい
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-204
+  user: SU-040
+  raw_text: 呉服町あたりでバーを探してます。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T18:45:00+09:00'
+      end: '2026-10-09T20:15:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - のんびり席を温めたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-205
+  user: SU-041
+  raw_text: 今度の休みに鹿児島駅前あたりでおしゃれなバルに行きたい。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T15:00:00+09:00'
+      end: '2026-10-05T16:30:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    - のんびり席を温めたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-206
+  user: SU-042
+  raw_text: 加治屋町あたりでしゃぶしゃぶに行きたいです。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T12:45:00+09:00'
+      end: '2026-10-06T14:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - お腹を空かせてる
+    - 早めに済ませたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-207
+  user: SU-043
+  raw_text: 高見馬場あたりでおむらいすに行きたいです。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: おむらいす
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T20:45:00+09:00'
+      end: '2026-10-07T22:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - がっつり食べたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-208
+  user: SU-044
+  raw_text: 今夜浜町でしゃぶしゃぶ、同世代と一緒に。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T20:15:00+09:00'
+      end: '2026-10-08T23:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: 2500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    - さっと食べたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-209
+  user: SU-045
+  raw_text: 今夜浜町あたりでとんこつラーメンを食べたい。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T20:45:00+09:00'
+      end: '2026-10-09T21:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - さっと食べたい
+    - しっかり食べるつもり
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-210
+  user: SU-046
+  raw_text: 仕事終わりに城山で焼酎、一緒に行きませんか。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T18:45:00+09:00'
+      end: '2026-10-05T21:45:00+09:00'
+    location:
+      name: 城山
+      radius_m: 2000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - のんびり席を温めたい
+    - 銘酒をゆっくり味わいたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-211
+  user: SU-047
+  raw_text: 仕事終わりに鹿児島駅前あたりで立ち飲みに行きたい。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T19:00:00+09:00'
+      end: '2026-10-06T22:00:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 2000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-212
+  user: SU-048
+  raw_text: 今夜加治屋町で焼酎、一緒に行きませんか。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T21:45:00+09:00'
+      end: null
+    location:
+      name: 加治屋町
+      radius_m: 3000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-213
+  user: SU-049
+  raw_text: 今夜加治屋町あたりで日本酒に行きたい。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T22:00:00+09:00'
+      end: null
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-214
+  user: SU-050
+  raw_text: 仕事終わりに高見馬場でワイン、一緒に行きませんか。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T19:00:00+09:00'
+      end: '2026-10-09T20:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-215
+  user: SU-051
+  raw_text: 昼に天文館あたりでワインに行きたい。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T12:15:00+09:00'
+      end: '2026-10-05T14:15:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - まずは1杯だけ様子を見たい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-216
+  user: SU-052
+  raw_text: 鹿児島駅前あたりで寿司に行きたいです。しっかり食べるつもり
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T21:30:00+09:00'
+      end: '2026-10-06T23:00:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - しっかり食べるつもり
+    - 軽めの食事で済ませたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-217
+  user: SU-053
+  raw_text: 今夜加治屋町でワイン、一緒に行きませんか。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T20:30:00+09:00'
+      end: '2026-10-07T23:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-218
+  user: SU-054
+  raw_text: 昼に呉服町あたりで立ち飲みに行きたい。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T13:15:00+09:00'
+      end: '2026-10-08T14:15:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 大人の雰囲気で
+    - 銘酒をゆっくり味わいたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-219
+  user: SU-055
+  raw_text: 昼に天文館で立ち飲み、一緒に行きませんか。締めの一杯
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T13:45:00+09:00'
+      end: '2026-10-09T15:45:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 締めの一杯
+    - 銘酒をゆっくり味わいたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-220
+  user: SU-056
+  raw_text: 昼に浜町あたりでおしゃれなバルに行きたい。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T12:00:00+09:00'
+      end: '2026-10-05T13:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    - 銘酒をゆっくり味わいたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-221
+  user: SU-057
+  raw_text: 呉服町あたりでビールを探してます。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T18:45:00+09:00'
+      end: '2026-10-06T20:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-222
+  user: SU-058
+  raw_text: 呉服町あたりでワインを探してます。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T04:45:00+09:00'
+      end: '2026-10-07T06:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-223
+  user: SU-059
+  raw_text: 加治屋町あたりでハイボールを探してます。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T19:45:00+09:00'
+      end: '2026-10-08T21:45:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - 軽く飲みたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-224
+  user: SU-060
+  raw_text: 今夜浜町でワイン、一緒に行きませんか。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T21:30:00+09:00'
+      end: '2026-10-10T00:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 大人の雰囲気で
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-225
+  user: SU-061
+  raw_text: 今夜城山で焼酎、一緒に行きませんか。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T22:15:00+09:00'
+      end: '2026-10-05T23:15:00+09:00'
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-226
+  user: SU-062
+  raw_text: 昼に城山で日本酒、一緒に行きませんか。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T13:15:00+09:00'
+      end: '2026-10-06T14:45:00+09:00'
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-227
+  user: SU-063
+  raw_text: 仕事終わりに天文館でワイン、一緒に行きませんか。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T18:30:00+09:00'
+      end: '2026-10-07T19:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-228
+  user: SU-064
+  raw_text: 昼に呉服町でワイン、一緒に行きませんか。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T13:00:00+09:00'
+      end: null
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - しっとり静かな店がいい
+    - まったり語りたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-229
+  user: SU-065
+  raw_text: 仕事終わりに天文館あたりでバーに行きたい。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T18:45:00+09:00'
+      end: '2026-10-09T21:45:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 大人の雰囲気で
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-230
+  user: SU-066
+  raw_text: 呉服町あたりでバーを探してます。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T19:00:00+09:00'
+      end: '2026-10-05T22:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 3000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - のんびり席を温めたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-231
+  user: SU-067
+  raw_text: 昼に呉服町で甘味処、同世代と一緒に。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 甘味処
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T12:15:00+09:00'
+      end: '2026-10-06T13:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - さっと食べたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-232
+  user: SU-068
+  raw_text: 仕事終わりに加治屋町あたりでとんこつラーメンを食べたい。早めに済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:15:00+09:00'
+      end: '2026-10-07T21:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 3000
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 早めに済ませたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-233
+  user: SU-069
+  raw_text: 今夜城山で焼酎、一緒に行きませんか。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 焼酎
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T21:15:00+09:00'
+      end: '2026-10-08T23:15:00+09:00'
+    location:
+      name: 城山
+      radius_m: 2000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-234
+  user: SU-070
+  raw_text: 仕事終わりに浜町あたりでハンバーガーを食べたい。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T19:45:00+09:00'
+      end: '2026-10-09T21:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - お腹を空かせてる
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-235
+  user: SU-071
+  raw_text: 今夜浜町あたりで海鮮丼を食べたい。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T22:15:00+09:00'
+      end: '2026-10-06T01:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼は手早く
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-236
+  user: SU-072
+  raw_text: 浜町あたりで居酒屋を探してます。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:15:00+09:00'
+      end: '2026-10-06T23:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-237
+  user: SU-073
+  raw_text: 今夜加治屋町あたりで立ち飲みに行きたい。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T22:45:00+09:00'
+      end: '2026-10-08T01:45:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - のんびり席を温めたい
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-238
+  user: SU-074
+  raw_text: 仕事終わりに浜町で焼肉、同世代と一緒に。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T19:45:00+09:00'
+      end: '2026-10-08T20:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 2000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 昼はサクッと
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-239
+  user: SU-075
+  raw_text: 仕事終わりに加治屋町あたりでビールに行きたい。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T18:15:00+09:00'
+      end: '2026-10-09T19:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-240
+  user: SU-076
+  raw_text: 仕事終わりに鹿児島駅前あたりでワインに行きたい。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T19:15:00+09:00'
+      end: '2026-10-05T20:45:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 2000
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - 締めの一杯
+    visibility: summary_only
+    notification_level: muted
+- id: SD-241
+  user: SU-077
+  raw_text: 今夜高見馬場あたりで定食を食べたい。しっかり食べるつもり
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T21:30:00+09:00'
+      end: '2026-10-06T22:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - しっかり食べるつもり
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-242
+  user: SU-078
+  raw_text: 仕事終わりに城山で日本酒、一緒に行きませんか。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T19:45:00+09:00'
+      end: '2026-10-07T21:45:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-243
+  user: SU-079
+  raw_text: 仕事終わりに浜町でとんこつラーメン、同世代と一緒に。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T19:45:00+09:00'
+      end: '2026-10-08T21:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 野菜中心で
+    - 軽めの食事で済ませたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-244
+  user: SU-080
+  raw_text: 今夜鹿児島駅前あたりで観光を楽しみたい。時間をかけて楽しみたい
+  structured:
+    category:
+      primary: activity
+      secondary: 観光
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T21:15:00+09:00'
+      end: '2026-10-09T23:15:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 2000
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 時間をかけて楽しみたい
+    - にぎやかに騒ぎたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-245
+  user: SU-081
+  raw_text: 今夜加治屋町あたりでカフェを食べたい。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T21:00:00+09:00'
+      end: '2026-10-05T22:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: 3000
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - お腹を空かせてる
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-246
+  user: SU-082
+  raw_text: 今度の休みに城山で立ち飲み、一緒に行きませんか。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T11:30:00+09:00'
+      end: '2026-10-06T13:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: 3000
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 軽く飲みたい
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-247
+  user: SU-083
+  raw_text: 昼に高見馬場あたりでハンバーガーを食べたい。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T12:00:00+09:00'
+      end: '2026-10-07T13:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: muted
+- id: SD-248
+  user: SU-084
+  raw_text: 今夜加治屋町あたりでバーに行きたい。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T20:45:00+09:00'
+      end: null
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 大人の雰囲気で
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-249
+  user: SU-085
+  raw_text: 仕事終わりに浜町でカレー、同世代と一緒に。肉系ならどこでもいい
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T18:00:00+09:00'
+      end: '2026-10-09T19:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 3000
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 肉系ならどこでもいい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-250
+  user: SU-086
+  raw_text: 浜町あたりで日本酒を探してます。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T20:00:00+09:00'
+      end: '2026-10-05T21:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-251
+  user: SU-087
+  raw_text: 今夜鹿児島駅前あたりでカレーを食べたい。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: カレー
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T22:30:00+09:00'
+      end: '2026-10-06T23:30:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 3000
+    budget:
+      max: 2000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - お腹を空かせてる
+    - がっつり食べたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-252
+  user: SU-088
+  raw_text: 昼に浜町でとんこつラーメン、同世代と一緒に。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T12:15:00+09:00'
+      end: '2026-10-07T13:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - 野菜中心で
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-253
+  user: SU-089
+  raw_text: 呉服町あたりでワインを探してます。締めの一杯
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T20:00:00+09:00'
+      end: '2026-10-08T21:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 締めの一杯
+    - しっとり静かな店がいい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-254
+  user: SU-090
+  raw_text: 天文館あたりでバルを探してます。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T12:30:00+09:00'
+      end: null
+    location:
+      name: 天文館
+      radius_m: 2000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっとり静かな店がいい
+    - ちょい飲みして帰りたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-255
+  user: SU-091
+  raw_text: 仕事終わりに天文館あたりで映画を楽しみたい。わいわい盛り上がりたい
+  structured:
+    category:
+      primary: activity
+      secondary: 映画
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T18:00:00+09:00'
+      end: '2026-10-05T21:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - わいわい盛り上がりたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-256
+  user: SU-092
+  raw_text: 今夜浜町で甘味処、同世代と一緒に。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: 甘味処
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T20:15:00+09:00'
+      end: '2026-10-06T22:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - お腹を空かせてる
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-257
+  user: SU-093
+  raw_text: 昼に呉服町あたりでおしゃれなバルに行きたい。締めの一杯
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T13:45:00+09:00'
+      end: '2026-10-07T14:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 締めの一杯
+    - 大人の雰囲気で
+    visibility: summary_only
+    notification_level: muted
+- id: SD-258
+  user: SU-094
+  raw_text: 昼に浜町あたりでバーに行きたい。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T12:30:00+09:00'
+      end: '2026-10-08T13:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽く飲みたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-259
+  user: SU-095
+  raw_text: 今夜浜町あたりで日本酒に行きたい。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T21:15:00+09:00'
+      end: '2026-10-09T22:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 大人の雰囲気で
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-260
+  user: SU-096
+  raw_text: 加治屋町あたりで焼肉に行きたいです。昼は手早く
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T22:00:00+09:00'
+      end: '2026-10-05T23:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-261
+  user: SU-097
+  raw_text: 昼に城山あたりでおしゃれなバルに行きたい。軽く飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T12:30:00+09:00'
+      end: '2026-10-06T14:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽く飲みたい
+    - 締めの一杯
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-262
+  user: SU-098
+  raw_text: 仕事終わりに城山あたりで居酒屋に行きたい。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T19:00:00+09:00'
+      end: '2026-10-07T21:00:00+09:00'
+    location:
+      name: 城山
+      radius_m: 3000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-263
+  user: SU-099
+  raw_text: 仕事終わりに城山でビール、一緒に行きませんか。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T19:00:00+09:00'
+      end: '2026-10-08T20:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 大人の雰囲気で
+    - まったり語りたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-264
+  user: SU-100
+  raw_text: 天文館あたりでハンバーガーに行きたいです。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T18:15:00+09:00'
+      end: '2026-10-09T21:15:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - お腹を空かせてる
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-265
+  user: SU-003
+  raw_text: 高見馬場あたりで海鮮丼に行きたいです。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T09:45:00+09:00'
+      end: '2026-10-05T10:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-266
+  user: SU-004
+  raw_text: 昼に加治屋町でビール、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T12:30:00+09:00'
+      end: '2026-10-06T14:00:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-267
+  user: SU-005
+  raw_text: 仕事終わりに高見馬場でカラオケ、気軽に集まりたい。短時間で済ませたい
+  structured:
+    category:
+      primary: activity
+      secondary: カラオケ
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:15:00+09:00'
+      end: '2026-10-07T20:15:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 短時間で済ませたい
+    - にぎやかに騒ぎたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-268
+  user: SU-006
+  raw_text: 仕事終わりに浜町あたりでバルに行きたい。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バル
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T18:00:00+09:00'
+      end: '2026-10-08T21:00:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-269
+  user: SU-007
+  raw_text: 今夜呉服町あたりでバーに行きたい。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T20:15:00+09:00'
+      end: '2026-10-09T23:15:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-270
+  user: SU-008
+  raw_text: 今度の休みに天文館あたりでとんこつラーメンを食べたい。肉系ならどこでもいい
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T16:00:00+09:00'
+      end: '2026-10-05T18:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 肉系ならどこでもいい
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: muted
+- id: SD-271
+  user: SU-009
+  raw_text: 呉服町あたりでビールを探してます。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T21:15:00+09:00'
+      end: '2026-10-06T22:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-272
+  user: SU-013
+  raw_text: 加治屋町あたりで海鮮丼に行きたいです。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 海鮮丼
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T21:00:00+09:00'
+      end: null
+    location:
+      name: 加治屋町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 昼はサクッと
+    - 昼は手早く
+    visibility: summary_only
+    notification_level: muted
+- id: SD-273
+  user: SU-014
+  raw_text: 今夜天文館でハイボール、一緒に行きませんか。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T22:30:00+09:00'
+      end: '2026-10-09T00:00:00+09:00'
+    location:
+      name: 天文館
+      radius_m: null
+    budget:
+      max: 2000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - のんびり席を温めたい
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-274
+  user: SU-015
+  raw_text: 昼に呉服町あたりで甘味処を食べたい。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: 甘味処
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T12:15:00+09:00'
+      end: '2026-10-09T13:45:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 野菜中心で
+    - さっと食べたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-275
+  user: SU-016
+  raw_text: 今度の休みに浜町で居酒屋、一緒に行きませんか。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T11:30:00+09:00'
+      end: '2026-10-05T13:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 2000
+    budget:
+      max: 1500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-276
+  user: SU-017
+  raw_text: 仕事終わりに高見馬場あたりでハンバーガーを食べたい。早めに済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T19:00:00+09:00'
+      end: null
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 早めに済ませたい
+    - しっかり食べるつもり
+    visibility: summary_only
+    notification_level: muted
+- id: SD-277
+  user: SU-018
+  raw_text: 昼に高見馬場でハンバーガー、同世代と一緒に。軽めの食事で済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: ハンバーガー
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T12:30:00+09:00'
+      end: null
+    location:
+      name: 高見馬場
+      radius_m: 2000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 軽めの食事で済ませたい
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: muted
+- id: SD-278
+  user: SU-019
+  raw_text: 仕事終わりに高見馬場で日本酒、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T18:30:00+09:00'
+      end: '2026-10-08T20:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - しっぽりと飲みたい
+    - 締めの一杯
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-279
+  user: SU-020
+  raw_text: 今夜高見馬場あたりで立ち飲みに行きたい。銘酒をゆっくり味わいたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T22:15:00+09:00'
+      end: '2026-10-10T00:15:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 3000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 銘酒をゆっくり味わいたい
+    - のんびり席を温めたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-280
+  user: SU-075
+  raw_text: 今度の休みに加治屋町で立ち飲み、一緒に行きませんか。大人の雰囲気で
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T23:15:00+09:00'
+      end: '2026-10-06T00:15:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 大人の雰囲気で
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-281
+  user: SU-076
+  raw_text: 今夜高見馬場あたりでワインに行きたい。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T22:30:00+09:00'
+      end: '2026-10-07T00:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - のんびり席を温めたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-282
+  user: SU-077
+  raw_text: 今夜加治屋町あたりで映画を楽しみたい。雰囲気良ければどこでも
+  structured:
+    category:
+      primary: activity
+      secondary: 映画
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T22:45:00+09:00'
+      end: '2026-10-08T01:45:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - 雰囲気良ければどこでも
+    - 落ち着いた雰囲気で
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-283
+  user: SU-078
+  raw_text: 仕事終わりに呉服町でバー、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T18:30:00+09:00'
+      end: null
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: 3000
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっぽりと飲みたい
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-284
+  user: SU-079
+  raw_text: 城山あたりで立ち飲みを探してます。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T22:45:00+09:00'
+      end: '2026-10-10T01:45:00+09:00'
+    location:
+      name: 城山
+      radius_m: null
+    budget:
+      max: 3500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-285
+  user: SU-080
+  raw_text: 昼に高見馬場あたりで焼肉を食べたい。野菜中心で
+  structured:
+    category:
+      primary: meal
+      secondary: 焼肉
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T13:30:00+09:00'
+      end: '2026-10-05T15:30:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - 野菜中心で
+    visibility: summary_only
+    notification_level: proposals_only
+- id: SD-286
+  user: SU-081
+  raw_text: 高見馬場あたりで立ち飲みを探してます。ちょい飲みして帰りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 立ち飲み
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T21:45:00+09:00'
+      end: '2026-10-06T22:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - ちょい飲みして帰りたい
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-287
+  user: SU-082
+  raw_text: 高見馬場あたりでおむらいすに行きたいです。お腹を空かせてる
+  structured:
+    category:
+      primary: meal
+      secondary: おむらいす
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T13:00:00+09:00'
+      end: '2026-10-07T16:00:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: 1500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - お腹を空かせてる
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-288
+  user: SU-083
+  raw_text: 今夜鹿児島駅前で寿司、同世代と一緒に。早めに済ませたい
+  structured:
+    category:
+      primary: meal
+      secondary: 寿司
+    alcohol_involved: false
+    time:
+      start: '2026-10-08T20:30:00+09:00'
+      end: '2026-10-08T22:00:00+09:00'
+    location:
+      name: 鹿児島駅前
+      radius_m: 2000
+    budget:
+      max: 3000
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - 早めに済ませたい
+    - しっかり食べるつもり
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-289
+  user: SU-084
+  raw_text: 今夜浜町でワイン、一緒に行きませんか。のんびり席を温めたい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T22:45:00+09:00'
+      end: '2026-10-10T01:45:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: 2500
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - のんびり席を温めたい
+    - 締めの一杯
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-290
+  user: SU-085
+  raw_text: 仕事終わりに高見馬場あたりでワインに行きたい。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T19:15:00+09:00'
+      end: '2026-10-05T20:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - しっとり静かな店がいい
+    visibility: hidden_until_match
+    notification_level: muted
+- id: SD-291
+  user: SU-086
+  raw_text: 天文館あたりで定食に行きたいです。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T05:30:00+09:00'
+      end: '2026-10-06T06:30:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 2000
+    budget:
+      max: 2500
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - がっつり食べたい
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-292
+  user: SU-087
+  raw_text: 天文館あたりでおしゃれなバルを探してます。しっとり静かな店がいい
+  structured:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T06:15:00+09:00'
+      end: '2026-10-07T07:15:00+09:00'
+    location:
+      name: 天文館
+      radius_m: 2000
+    budget:
+      max: 2500
+    participants:
+      min: 3
+      max: 3
+    soft_constraints:
+    - しっとり静かな店がいい
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-293
+  user: SU-088
+  raw_text: 今夜呉服町で定食、同世代と一緒に。しっかり食べるつもり
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T22:45:00+09:00'
+      end: null
+    location:
+      name: 呉服町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 3
+      max: 4
+    soft_constraints:
+    - しっかり食べるつもり
+    - がっつり食べたい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-294
+  user: SU-089
+  raw_text: 昼に呉服町でビール、一緒に行きませんか。まずは1杯だけ様子を見たい
+  structured:
+    category:
+      primary: drinking
+      secondary: ビール
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T13:00:00+09:00'
+      end: '2026-10-09T15:00:00+09:00'
+    location:
+      name: 呉服町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まずは1杯だけ様子を見たい
+    visibility: summary_only
+    notification_level: nearby_also
+- id: SD-295
+  user: SU-090
+  raw_text: 仕事終わりに高見馬場あたりでカフェを食べたい。がっつり食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: カフェ
+    alcohol_involved: false
+    time:
+      start: '2026-10-05T19:45:00+09:00'
+      end: '2026-10-05T20:45:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: 2000
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - がっつり食べたい
+    - 昼は手早く
+    visibility: hidden_until_match
+    notification_level: nearby_also
+- id: SD-296
+  user: SU-091
+  raw_text: 昼に高見馬場あたりでしゃぶしゃぶを食べたい。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: しゃぶしゃぶ
+    alcohol_involved: false
+    time:
+      start: '2026-10-06T13:15:00+09:00'
+      end: '2026-10-06T14:15:00+09:00'
+    location:
+      name: 高見馬場
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 昼はサクッと
+    visibility: summary_only
+    notification_level: muted
+- id: SD-297
+  user: SU-092
+  raw_text: 仕事終わりに浜町あたりで定食を食べたい。昼はサクッと
+  structured:
+    category:
+      primary: meal
+      secondary: 定食
+    alcohol_involved: false
+    time:
+      start: '2026-10-07T18:30:00+09:00'
+      end: '2026-10-07T21:30:00+09:00'
+    location:
+      name: 浜町
+      radius_m: null
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 2
+    soft_constraints:
+    - 昼はサクッと
+    - 早めに済ませたい
+    visibility: summary_only
+    notification_level: muted
+- id: SD-298
+  user: SU-093
+  raw_text: 仕事終わりに城山でバー、一緒に行きませんか。しっぽりと飲みたい
+  structured:
+    category:
+      primary: drinking
+      secondary: バー
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T19:30:00+09:00'
+      end: '2026-10-08T21:30:00+09:00'
+    location:
+      name: 城山
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - しっぽりと飲みたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-299
+  user: SU-094
+  raw_text: 昼に浜町でとんこつラーメン、同世代と一緒に。さっと食べたい
+  structured:
+    category:
+      primary: meal
+      secondary: とんこつラーメン
+    alcohol_involved: false
+    time:
+      start: '2026-10-09T12:15:00+09:00'
+      end: '2026-10-09T15:15:00+09:00'
+    location:
+      name: 浜町
+      radius_m: 1000
+    budget:
+      max: null
+    participants:
+      min: 2
+      max: 4
+    soft_constraints:
+    - さっと食べたい
+    visibility: hidden_until_match
+    notification_level: proposals_only
+- id: SD-300
+  user: SU-095
+  raw_text: 加治屋町あたりで日本酒を探してます。まったり語りたい
+  structured:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T19:30:00+09:00'
+      end: '2026-10-05T21:30:00+09:00'
+    location:
+      name: 加治屋町
+      radius_m: null
+    budget:
+      max: 5000
+    participants:
+      min: 2
+      max: 3
+    soft_constraints:
+    - まったり語りたい
+    visibility: summary_only
+    notification_level: muted
+intended_reject_cases:
+- id: EX-029
+  user: SU-003
+  raw_text: 今夜ワインを飲みたい。落ち着いた雰囲気で
+  structured_intent:
+    category:
+      primary: drinking
+      secondary: ワイン
+    alcohol_involved: true
+    time:
+      start: '2026-10-05T20:00:00+09:00'
+    location:
+      name: 天文館
+  expected_status: 422
+  expected_code: UNDER_AGE
+  basis: 'D-10(10 §3 #27)・05 §5(年齢検証)'
+- id: EX-030
+  user: SU-004
+  raw_text: 居酒屋でしっぽりと飲みたい
+  structured_intent:
+    category:
+      primary: drinking
+      secondary: 居酒屋
+    alcohol_involved: true
+    time:
+      start: '2026-10-06T20:00:00+09:00'
+    location:
+      name: 呉服町
+  expected_status: 422
+  expected_code: UNDER_AGE
+  basis: 同上
+- id: EX-031
+  user: SU-005
+  raw_text: ハイボール片手に1杯だけ。ちょい飲みして帰りたい
+  structured_intent:
+    category:
+      primary: drinking
+      secondary: ハイボール
+    alcohol_involved: true
+    time:
+      start: '2026-10-07T18:00:00+09:00'
+    location:
+      name: 高見馬場
+  expected_status: 422
+  expected_code: UNDER_AGE
+  basis: 同上
+- id: EX-032
+  user: SU-006
+  raw_text: 焼肉のあと日本酒を飲みたい。まったり語りたい
+  structured_intent:
+    category:
+      primary: drinking
+      secondary: 日本酒
+    alcohol_involved: true
+    time:
+      start: '2026-10-08T20:00:00+09:00'
+    location:
+      name: 加治屋町
+  expected_status: 422
+  expected_code: UNDER_AGE
+  basis: 同上
+- id: EX-033
+  user: SU-007
+  raw_text: おしゃれなバルでバル巡り。まずは1杯だけ様子を見たい
+  structured_intent:
+    category:
+      primary: drinking
+      secondary: おしゃれなバル
+    alcohol_involved: true
+    time:
+      start: '2026-10-09T19:00:00+09:00'
+    location:
+      name: 鹿児島駅前
+  expected_status: 422
+  expected_code: UNDER_AGE
+  basis: 同上
+expectations:
+  cases:
+  - id: EX-001
+    kind: pair
+    intents:
+    - SD-001
+    - SD-002
+    expected: fail
+    fail_reason: self_pair
+    basis: 10 §3(FR-17自己ペア)・06 §2(自己除外)
+  - id: EX-002
+    kind: pair
+    intents:
+    - SD-003
+    - SD-004
+    expected: fail
+    fail_reason: self_pair
+    basis: 同上
+  - id: EX-003
+    kind: pair
+    intents:
+    - SD-005
+    - SD-006
+    expected: fail
+    fail_reason: self_pair
+    basis: 同上
+  - id: EX-004
+    kind: pair
+    intents:
+    - SD-007
+    - SD-008
+    expected: fail
+    fail_reason: age_alcohol
+    basis: 'D-10(10 §3 #27)・06 §2(飲酒は双方20歳以上)'
+  - id: EX-005
+    kind: pair
+    intents:
+    - SD-009
+    - SD-010
+    expected: fail
+    fail_reason: age_alcohol
+    basis: 同上
+  - id: EX-006
+    kind: pair
+    intents:
+    - SD-011
+    - SD-012
+    expected: pass
+    fail_reason: null
+    basis: 06 §2(end nullはstart+3h補完で交差成立)
+  - id: EX-007
+    kind: pair
+    intents:
+    - SD-013
+    - SD-014
+    expected: fail
+    fail_reason: time0
+    basis: 06 §2(時間交差・境界隣接は交差0)
+  - id: EX-008
+    kind: pair
+    intents:
+    - SD-015
+    - SD-016
+    expected: pass
+    fail_reason: null
+    basis: 06 §2(交差1分は境界以上で通る)
+  - id: EX-009
+    kind: pair
+    intents:
+    - SD-017
+    - SD-018
+    expected: fail
+    fail_reason: time0
+    basis: 06 §2(完全非交差)
+  - id: EX-010
+    kind: pair
+    intents:
+    - SD-019
+    - SD-020
+    expected: pass
+    fail_reason: null
+    basis: 06 §2(ST_DWithin・半径和>=実距離[切り上げ])
+  - id: EX-011
+    kind: pair
+    intents:
+    - SD-021
+    - SD-022
+    expected: fail
+    fail_reason: distance
+    basis: 06 §2(半径和<実距離[切り下げ])
+  - id: EX-012
+    kind: pair
+    intents:
+    - SD-023
+    - SD-024
+    expected: fail
+    fail_reason: distance
+    basis: 06 §2(radius null補完1000+1000<実距離約2530m)
+  - id: EX-013
+    kind: pair
+    intents:
+    - SD-025
+    - SD-026
+    expected: pass
+    fail_reason: null
+    basis: 06 §2(radius null補完1000+1000>=実距離約1590m)
+  - id: EX-014
+    kind: pair
+    intents:
+    - SD-027
+    - SD-028
+    expected: fail
+    fail_reason: budgetmin
+    basis: 06 §2(LEAST=400<500)
+  - id: EX-015
+    kind: pair
+    intents:
+    - SD-029
+    - SD-030
+    expected: pass
+    fail_reason: null
+    basis: 06 §2(500ちょうどは通る)
+  - id: EX-016
+    kind: pair
+    intents:
+    - SD-031
+    - SD-032
+    expected: fail
+    fail_reason: budgetmin
+    basis: 06 §2(NULL無視=実効499)
+  - id: EX-017
+    kind: pair
+    intents:
+    - SD-033
+    - SD-034
+    expected: pass
+    fail_reason: null
+    basis: 06 §2(双方NULL=予算制約なし)
+  - id: EX-018
+    kind: pair
+    intents:
+    - SD-035
+    - SD-036
+    expected: fail
+    fail_reason: people
+    basis: 06 §2(2∉[3,4])
+  - id: EX-019
+    kind: pair
+    intents:
+    - SD-037
+    - SD-038
+    expected: fail
+    fail_reason: people
+    basis: 06 §2(2∉[1,1])
+  - id: EX-020
+    kind: pair
+    intents:
+    - SD-039
+    - SD-040
+    expected: pass
+    fail_reason: null
+    basis: 06 §2(2∈[2,4])
+  - id: EX-021
+    kind: pair
+    intents:
+    - SD-041
+    - SD-043
+    expected: pass
+    fail_reason: null
+    basis: 10 §3(競合クローズ素材・同一ユーザーの2 Intentが同一相手と双方候補)
+  - id: EX-022
+    kind: pair
+    intents:
+    - SD-042
+    - SD-043
+    expected: pass
+    fail_reason: null
+    basis: 同上(SD-041×SD-042は同一ユーザーでself_pair)
+  - id: EX-023
+    kind: pair
+    intents:
+    - SD-044
+    - SD-045
+    expected: fail
+    fail_reason: category_mismatch
+    basis: 06 §2(category完全一致)
+  - id: EX-024
+    kind: pair
+    intents:
+    - SD-046
+    - SD-047
+    expected: fail
+    fail_reason: category_mismatch
+    basis: 同上
+  - id: EX-025
+    kind: group_cluster
+    intents:
+    - SD-048
+    - SD-049
+    - SD-050
+    - SD-051
+    expected:
+      distinct_users: 3
+      all_min_ge_3: true
+      note: 同一ユーザー(SU-040)の2 Intentを含む構成要件 — group_candidatesに生成されないこと(FR-17自己重複集合)。集合生成自体はws-3で確認
+    basis: 10 §3(FR-17)・design §2.2
+  - id: EX-026
+    kind: group_cluster
+    intents:
+    - SD-052
+    - SD-053
+    - SD-054
+    - SD-055
+    - SD-056
+    - SD-057
+    expected:
+      distinct_users: 6
+      all_min_ge_3: true
+      same_bucket: night
+      same_place: 天文館
+      same_category: drinking
+      note: 同Bucket・同地域・同カテゴリのmin≧3×6件 — 複数集合が立つ通知順序素材(D-06)をws-3で消費
+    basis: 10 §3(通知順序)・design §2.2
+  - id: EX-027
+    kind: group_cluster
+    intents:
+    - SD-058
+    - SD-059
+    - SD-060
+    - SD-061
+    expected:
+      distinct_users: 4
+      all_min_ge_3: true
+      all_pairs_pass_l1: true
+      note: 部分YESクラスタ(3〜4人集合素材) — 一部のみyes回答でresponse_deadline後へ(10 §3)をws-3で消費
+    basis: 10 §3(部分YES)・design §2.2
+  - id: EX-028
+    kind: group_cluster
+    intents:
+    - SD-062
+    - SD-063
+    - SD-064
+    expected:
+      distinct_users: 3
+      all_min_ge_3: true
+      all_pairs_pass_l1: true
+      note: 同上(3人集合)
+    basis: 同上
+  aggregate:
+    pair_total: 44850
+    layer1_pass: 576
+    layer1_fail: 44274
+    fail_breakdown:
+      self_pair: 305
+      category_mismatch: 25926
+      time0: 17263
+      distance: 80
+      people: 574
+      budgetmin: 9
+      blocked: 0
+      age_alcohol: 117

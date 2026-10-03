@@ -9,6 +9,8 @@
 |---|---|---|
 | g1-parser-struct.yaml | Parser構造化精度ゲート入力セット(自然文入力+5フィールド期待値) | 測定対象32件+エラー付帯3件 |
 | g1-alcohol.yaml | 飲酒判定(alcohol_involved)精度ゲート入力セット | 36件(true 24 / false 12) |
+| m4-seed.yaml | M4シード300件+合成ユーザー100人+期待値表(EX-xxx 33件+aggregate)。生成器`make seed-generate`の決定的生成物 | intents 300件 / users 100人 |
+| m4-seed-plan.md | m4-seedの生成規則・分布実測・検証方式の記録 | — |
 
 ## 形式と置き場の判断根拠(規定が曖昧な部分)
 
@@ -80,3 +82,24 @@ Parserやプロンプトを変更するたびに再実行する(09 §4.3)。
 ## 要確認(needs_review)の扱い
 
 各ケースの `needs_review: true` は、期待値の判断が07 §2の規則の明示的な文言から導けない(規則の空白領域に判断が入る)ことを示す。理由は各ファイル末尾にまとめた。ユーザー確認で期待値を修正した場合は、当該ケースのneeds_reviewをfalseへ戻し、修正の経緈をコメントへ残すこと。
+
+## M4シード(m4-seed)
+
+10 §2の規定(シードIntent 200〜300件・分布完全一致・18〜19歳含む)を満たす機能・非機能試験用のシード。**決定的生成器**(backend/src/latch/testassets/・`make seed-generate`/`make seed-verify`)で生成し、YAMLには生成コマンド引数(base_datetime・seed 42)を記録 — 同一引数での再生成はバイト同一。期待値表は2層(EX-xxx個別期待33件+aggregate集計)で、Layer 1の機械突合はbackend/src/latch/testassets/reference_l1.py(06 §2確定表のPython独立実装)が担う。詳細はm4-seed-plan.md。
+
+### 既存3資産との関係整理
+
+| 資産 | 状態 | m4-seedとの関係 |
+|---|---|---|
+| g2-jev-goldset.yaml(304 Intent+520ペア) | confirmed・**不変** | 評価ペア500件以上(09 §4.1)を充足済み。ペア構成を変えるとG2評価結果の前提が崩れるため一切編集しない。intents側は語彙・時刻パターン・カテゴリ配分の母集合として参照(g2-plan §7「母集合に再編」は「母集合を参照した決定的配分」の意・supervisor承認2026-10-03)。なお地名はg2実績値をそのまま使わず、正転ヒット実査済みの7地名へ差し替えた(下記のid規約と基準日時・supervisor裁定2026-10-03) |
+| g1-alcohol.yaml(36件) | confirmed・**不変** | 飲酒判定専用入力セット30件以上(10 §2 FR-20)を充足済み。期待値表はこれを参照(新規作成しない) |
+| g1-parser-struct.yaml(32+3件) | confirmed・**不変** | Parser構造化精度ゲート(09 §4.3)。m4-seedは新prefix(SU-/SD-/EX-)でid衝突を回避(上記のid一意規約どおり) |
+
+10 §2の「シードIntentは09のゴールドセットを共用」の読み: 09側の評価ペア=g2(520ペア)、10側の機能試験素材=m4-seed。両方が本ディレクトリ配下でバージョン管理される状態が「同一の資産を参照する」の意。g2 intentsをそのまま機能試験に投入しない根拠(実測): 10 §2分布からの乖離(時間帯その他23%〔目標10%〕・activity 21%〔目標10%〕・夜20-22時台29%〔目標40%〕)+FR-17自己重複配置・合成users(生年月日)・raw_textを欠くため、そのままでは10 §3の配置ケースに使えない。
+
+### id規約と基準日時
+
+- ユーザー=SU-xxx・Intent=SD-xxx・期待値ケース=EX-xxx(既存P-/A-/E-/SI-/U-と衝突しない)
+- 地名は検証済み7地名(vocab.LOCATIONS・ci-db代表点・2026-10-03 supervisor実査: 正転geocode_forwardはnormalized_name完全一致のため正転ヒット済みのみ。座標はstaging投入時にサーバの正転が返す代表点と同一値・全点geo_osm_bbox内)
+- 基準日時はYAML metaのbase_datetime(生成コマンド引数)。対象時刻は基準日のD+1〜D+5。staging投入(ws-3)の直前に同一コマンドで再生成する(YAML差分は対象日付のみ)
+- 合成ユーザーは実在しない氏名(「合成+仮名+番号」)・連絡先フィールドは実装契約(users: display_name/birth_date/profile.bioのみ)に存在しないため持たない(10 §2は精神規定として充足)
