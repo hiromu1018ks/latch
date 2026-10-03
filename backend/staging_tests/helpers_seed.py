@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import yaml
 
-from conftest import SEED_PATH, auth_header, ensure_env_prerequisites
+from conftest import SEED_PATH, auth_header, ensure_env_prerequisites, get_clock
 from latch.testassets.reference_l1 import judge_all
 
 JST = timezone(timedelta(hours=9))
@@ -115,8 +115,19 @@ async def wait_pipeline_settled(db) -> None:  # noqa: ANN001
     import asyncio
     from time import monotonic
 
-    n = await _n_created_processed(db)
-    assert n == 300, f"created processedが300でない: {n}(投入直後でなければリセット)"
+    from helpers_wait import wait_until
+
+    # created Event 300件のprocessed完了待ち(計画コードの即時assertからの
+    # 適応: 投入直後はdebounce 10秒分の未処理が残るため・報告書に記録)
+    async def all_processed() -> bool:
+        return await _n_created_processed(db) == 300
+
+    await wait_until(
+        all_processed,
+        timeout_s=180,
+        interval_s=10,
+        what="created Event 300件のprocessed完了(debounce 10秒+worker処理)",
+    )
 
     # 安定確認(評価行数が10秒間隔で2回連続不変になるまで・上限90秒)
     prev = await _evaluated_count(db)
@@ -140,6 +151,14 @@ async def seed_all(api, db) -> dict:  # noqa: ANN001
     await ensure_env_prerequisites(db)
     seed = load_seed()
     meta_base = seed["meta"]["base_datetime"]
+
+    # 仮想Clockをbase_datetimeへ設定(旅路Step 1「D0の実時間=仮想時刻そのまま」
+    # の実装・計画コードからの適応として報告書に記録)。実行日がD0以前でも
+    # 7日上限・年齢検証がbase基準で決定的になり、S1以降の前進旅路
+    # (base+1日→D+6)との整合が保たれる。後退は行わない規律どおり・setは
+    # Redis不在(=オフセット0=実時間)からの前進にあたる
+    clock = await get_clock()
+    clock.set(_p(meta_base))
 
     su_to_uuid: dict[str, str] = {}
     users_ok = 0
@@ -184,6 +203,7 @@ async def seed_all(api, db) -> dict:  # noqa: ANN001
     users, intents = to_reference_view(seed)
     judged = judge_all(intents, users, now=_p(meta_base))
     l1_pass = {k for k, (ok, _reason) in judged.items() if ok}
+    l1_fail = {k for k, (ok, _reason) in judged.items() if not ok}
 
     # D-08事前集計(設計§2.2対抗策(c)・再実測: 6件超え84件)
     intent_user = {i["id"]: i["user"] for i in intents}
@@ -203,6 +223,7 @@ async def seed_all(api, db) -> dict:  # noqa: ANN001
         "su_to_uuid": su_to_uuid,
         "sd_to_uuid": sd_to_uuid,
         "l1_pass": l1_pass,
+        "l1_fail": l1_fail,
         "ex_pass_sample": set(EX_PASS_SAMPLE),
         "pass_pairs_per_user_day": per_user_day,
         "users_ok": users_ok,

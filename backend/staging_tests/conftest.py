@@ -112,9 +112,6 @@ async def get_clock() -> ControlledClock:
     return _clock
 
 
-_tokens: dict[str, str] = {}
-
-
 def issue_token(subject: str) -> str:
     """staging鍵でIdP JWTを発行し/v1/auth/tokenでaccess_tokenへ交換する。
 
@@ -122,14 +119,22 @@ def issue_token(subject: str) -> str:
     authenticate)でありIdP JWT(RS256)は直接使えないため、ws-1と同一の
     交換経路(POST /v1/auth/token)を踏む(計画コードからの適応・報告書に
     記録)。交換はユーザー行を作らない(profile_completeはUser行の存在から
-    導出のみ)ためシード投入と干渉しない。access tokenはsubject毎にキャッシュ
-    (TTL=ACCESS_TTL_S・フル実行45分目標に対して十分)。
+    導出のみ)ためシード投入と干渉しない。
+
+    キャッシュしない(仮想Clock前進対策): access tokenのexpは発行時の
+    仮想時刻+1h(ACCESS_TTL_S)であり、Clock前進(S1#8で+13時間・S3で
+    D+6)で即失効する。IdPトークン側はexpires_in=30日(REFRESH_TTL_S相当)
+    で発行し、仮想時刻が最終前進値(base+6日)を超えても交換が通るように
+    する。1呼び出し毎の交換コストはローカル数十ms・auth制限
+    (60req/分/subject)に対して余裕。
     """
-    cached = _tokens.get(subject)
-    if cached:
-        return cached
     pem = (KEYS_DIR / "idp_test_private.pem").read_bytes()
-    idp_token = issue_idp_token(provider="google", subject=subject, private_key_pem=pem)
+    idp_token = issue_idp_token(
+        provider="google",
+        subject=subject,
+        private_key_pem=pem,
+        expires_in=30 * 24 * 3600,
+    )
     r = httpx.post(
         f"{API_BASE}/v1/auth/token",
         json={"provider": "google", "idp_token": idp_token},
@@ -137,9 +142,7 @@ def issue_token(subject: str) -> str:
     )
     if r.status_code != 200:
         raise AssertionError(f"auth/token交換失敗 {subject}: {r.status_code} {r.text}")
-    token = r.json()["access_token"]
-    _tokens[subject] = token
-    return token
+    return r.json()["access_token"]
 
 
 def auth_header(subject: str) -> dict[str, str]:
@@ -163,3 +166,44 @@ async def ensure_env_prerequisites(db) -> None:  # noqa: ANN001
         )
     if not (KEYS_DIR / "idp_test_private.pem").exists():
         raise AssertionError(".staging/keysがありません。make staging-keysを実行")
+
+
+def publish_created(intent_id: str, *, version: int = 1) -> None:
+    """Match Event(created)を手動発行する(10 §1「疑似イベント注入」)。
+
+    make staging-publishと同一経路(python -m latch.events publish・
+    EventBus.publish_match_event)。グループ生成はイベント処理時の
+    embedding揃いに依存し、Pool空のまま再試行されない(実測・報告書に
+    記録)ため、embedding完備を確認したうえでcreatedを再発行し
+    GroupEngine.handleを再実行させる。
+    """
+    import os
+    import subprocess
+
+    env = dict(os.environ)
+    env["LATCH_PUBSUB_EMULATOR_HOST"] = "127.0.0.1:18085"
+    env["LATCH_PUBSUB_PROJECT_ID"] = "latch-staging"
+    r = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "latch.events",
+            "publish",
+            "created",
+            "--intent-id",
+            str(intent_id),
+            "--version",
+            str(version),
+        ],
+        cwd=REPO_ROOT / "backend",
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode != 0:
+        raise AssertionError(
+            f"created再発行失敗 intent={intent_id}: {r.returncode} {r.stderr}"
+        )

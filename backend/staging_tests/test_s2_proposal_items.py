@@ -47,9 +47,9 @@ async def test_s2_item13_proposal_notification_and_muted(api, db):
         db,
         key="s2-13",
         name="p13",
-        when="2026-10-05T06:30:00+09:00",
+        when="2026-10-07T06:30:00+09:00",
         notification_level="muted",
-        raw_text="早朝に天文館で静かに朝食をしたい",
+        raw_text="早朝に天文館で静かに散策したい",
     )
     latch = await wait_for_latch(api, muted["subjects"][0], status="proposed")
     latch_id = str(latch["id"])
@@ -116,7 +116,9 @@ async def test_s2_item14_responses_record(api, db):
         latch_id,
     )
     seq = [(e["from_status"], e["to_status"]) for e in events]
-    assert seq and seq[0][1] == "proposed", f"遷移系列: {seq}"
+    # 先頭はlatch INSERT時の(None, candidate)イベントが入る(実測)・
+    # candidate→proposedの昇格イベントを検査する(計画コードからの適応)
+    assert ("candidate", "proposed") in seq, f"遷移系列: {seq}"
     assert rows["status"] != "proposed", "no回答後にproposedのまま(終端遷移なし)"
     record_item(
         item_id="02#14",
@@ -138,6 +140,9 @@ async def test_s2_item17_before_match_visibility(api, db):
         key="s4-17",
         name="p17",
         when="2026-10-11T06:30:00+09:00",  # D+7(S3の前進後も回答可)
+        # 明示expires_at: S4のmatched遷移(_MATCH_INTENTSはactive/paused対象)
+        # までIntentを存活させる(既定のnearest候補はClock前進前に切れる)
+        expires_at="2026-10-11T23:30:00+09:00",
         raw_text="7日後の早朝に天文館で散策したい",
     )
     latch = await wait_for_latch(api, pair["subjects"][0], status="proposed")
@@ -164,18 +169,20 @@ async def test_s2_item22_visibility_branch(api, db):
         db,
         key="s2-22h",
         name="p22h",
-        when="2026-10-06T06:30:00+09:00",
+        when="2026-10-05T06:30:00+09:00",
+        category="drinking",
         visibility="hidden_until_match",
-        raw_text="翌朝に天文館で散歩したい",
+        raw_text="朝食がてら静かに一杯だけ飲みたい",
     )
     summary = await make_scenario_pair(
         api,
         db,
         key="s2-22s",
         name="p22s",
-        when="2026-10-06T06:30:00+09:00",
+        when="2026-10-09T06:30:00+09:00",
+        category="meal",
         visibility="summary_only",
-        raw_text="翌朝に天文館で朝食を兼ねて歩きたい",
+        raw_text="朝食を兼ねて天文館を歩きたい",
     )
     lh = await wait_for_latch(api, hidden["subjects"][0])
     ls = await wait_for_latch(api, summary["subjects"][0])
@@ -199,8 +206,8 @@ async def test_s2_item23_no_precise_coordinates(api, db):
         db,
         key="s2-23",
         name="p23",
-        when="2026-10-06T06:30:00+09:00",
-        raw_text="翌朝に呉服町で散歩したい",
+        when="2026-10-09T06:30:00+09:00",
+        raw_text="朝の天文館を散歩したい",
     )
     latch = await wait_for_latch(api, summary["subjects"][0])
     r = await api.get(
@@ -255,8 +262,9 @@ async def test_s2_fr21_push_content(api, db):
         db,
         key="s2-fr21s",
         name="fr21s",
-        when="2026-10-06T06:30:00+09:00",
-        raw_text="翌朝に天文館で朝食をしたい",
+        when="2026-10-08T06:30:00+09:00",
+        category="drinking",
+        raw_text="朝食がてら静かに飲みたい",
     )
     latch = await wait_for_latch(api, summary["subjects"][0])
     notif = await db.fetchrow(

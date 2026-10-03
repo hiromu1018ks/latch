@@ -42,22 +42,33 @@ async def _create_intent(  # noqa: ANN001
     alcohol_involved: bool = False,
     budget_max: int | None = 3000,
     raw_text: str | None = None,
+    expires_at: str | None = None,
 ) -> str:
+    """シナリオIntent 1件を作る。
+
+    expires_at: 明示期限(API契約のstructured_intent.expires_at・03 §3
+    FR-13)。既定のnearest_expires_atは作成時の仮想時刻から72時間以内の
+    候補しか選ばないため、Clock前進後まで存活が必要なIntent
+    (#17用ペア・#20用ペア)は呼び出し側で明示する。
+    """
+    structured: dict = {
+        "category": {"primary": category, "secondary": secondary},
+        "alcohol_involved": alcohol_involved,
+        "time": {"start": when},
+        "location": {"name": location, "radius_m": 1000},
+        "budget": {"max": budget_max} if budget_max is not None else None,
+        "participants": {"min": participants[0], "max": participants[1]},
+        "soft_constraints": [],
+        "visibility": visibility,
+        "notification_level": notification_level,
+    }
+    if expires_at is not None:
+        structured["expires_at"] = expires_at
     body = {
         "raw_text": raw_text
         or f"{when}に{location}で{secondary}。よろしくお願いします。",
         "status": "active",
-        "structured_intent": {
-            "category": {"primary": category, "secondary": secondary},
-            "alcohol_involved": alcohol_involved,
-            "time": {"start": when},
-            "location": {"name": location, "radius_m": 1000},
-            "budget": {"max": budget_max} if budget_max is not None else None,
-            "participants": {"min": participants[0], "max": participants[1]},
-            "soft_constraints": [],
-            "visibility": visibility,
-            "notification_level": notification_level,
-        },
+        "structured_intent": structured,
     }
     r = await api.post("/v1/intents", headers=auth_header(subject), json=body)
     assert r.status_code == 201, (
@@ -167,3 +178,29 @@ async def wait_for_latch(
         what=f"{subject}のlatch status={status}の出現(昇格待ち・tickの2〜3倍)",
     )
     return dict(found)
+
+
+async def wait_embeddings(
+    db, intent_ids: list[str], *, timeout_s: float = 120.0
+) -> None:
+    """全Intentのembedding完備を待つ(グループPool検索の前提)。
+
+    Pool検索はembedding NULL行を拾わないため、作成直後の同時処理では
+    他メンバーが未embeddingでPool空になる競合がある(実測・報告書に記録)。
+    """
+    from helpers_wait import wait_until
+
+    async def all_embedded() -> bool:
+        n = await db.fetchval(
+            "SELECT count(*) FROM intents"
+            " WHERE id = ANY($1::uuid[]) AND embedding IS NOT NULL",
+            intent_ids,
+        )
+        return n == len(intent_ids)
+
+    await wait_until(
+        all_embedded,
+        timeout_s=timeout_s,
+        interval_s=10,
+        what=f"embedding完備({len(intent_ids)}件)",
+    )
