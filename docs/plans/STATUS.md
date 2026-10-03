@@ -443,6 +443,7 @@
   - 修正後: **マージ後main test-ci 1596 passed**(exit 0を明示取得・6:40・ws5残存0件)・alembic head=0007
   - G4証拠(10 §5): ②許可リスト機械検査=unit常設で5 passed(2026-10-03実行記録)。①同意フローのstaging手順観察=ws-3のS0が同意APIを叩くため自然カバー。③llm.sendログのサンプル照合はstaging(ws-3)で実施
   - 引継ぎ(ws-3向け): ciのapiコンテナログにはlatch.llm.send行が観測されなかった(parse実行2341回中・原因は未調査: 経路かロギング設定か)。stagingでllm.sendを観察する計画がある場合はまず1件投げて出力を確認すること
+- 学習資産追従: ws-5分 c38f792(第27章『使っていい条件と出していい条件を、形で固定する: 同意とログ許可リスト』+Lab 13〔同意をcurlで一巡: 422×2→draft 201→同意→active化・psql列確認・番人試験24件まで全手順ci実行検証〕新設・既存10ファイル更新〔README順路・00-environment〔1327/1596/233〕・第11章Layer1の9条件化・第5/6章・第20/23章・Lab 10〕。agent4がmake test 1327・npm test 233・natural-japanese lint 12ファイル収束・DB残存掃除を確認)
 
 ## G2判定資料(2026-09-30・承認済み)
 
