@@ -154,3 +154,26 @@ async def test_cli_issue_token_verifies():
         provider="google", idp_token=token, clock=FakeClock(NOW)
     )
     assert (provider, subject) == ("google", "demo")
+
+
+async def test_testkeys_dir_env_swaps_keypair_for_both_sides(monkeypatch, tmp_path):
+    """LATCH_AUTH_TESTKEYS_DIRで発行側と検証側が同一のstaging鍵ペアへ揃うこと
+    (M4 ws-1 design §2.4・10 §1「認証のテスト構成」)。"""
+    generate_keypair(out_dir=tmp_path)
+    monkeypatch.setenv("LATCH_AUTH_TESTKEYS_DIR", str(tmp_path))
+    # 発行側(load_private_key)が生成鍵を見る
+    token = issue_idp_token(
+        provider="google", subject="staging-u1", iat=int(NOW.timestamp())
+    )
+    # 検証側(load_jwks)も同一ディレクトリを見る → 検証が通る
+    provider, subject = await _verifier().verify(
+        provider="google", idp_token=token, clock=FakeClock(NOW)
+    )
+    assert (provider, subject) == ("google", "staging-u1")
+    # 環境変数を外すと同梱JWKSでは検証できない(鍵が本当に差し替わっている
+    # ことの裏付け — 片側だけ差し替わる実装を禁止するピン)
+    monkeypatch.delenv("LATCH_AUTH_TESTKEYS_DIR")
+    with pytest.raises(InvalidIdpTokenError):
+        await _verifier().verify(
+            provider="google", idp_token=token, clock=FakeClock(NOW)
+        )
