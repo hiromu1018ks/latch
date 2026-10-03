@@ -1,0 +1,123 @@
+# load環境(10 第1節「load=隔離」・M4 ws-1)。stagingと同種構成で完全隔離
+# (別プロジェクト・別ボリューム・別ポート28000系)。ws-6(負荷・総当たり)と
+# ws-7(可用性=api 2台+nginxが必要)が使う。負荷試験実行中のci停止運用は
+# ws-6/ws-7の手順の前段(design §2.6・supervisor承認A4)。
+name: latch-load
+
+x-backend-env: &backend-env
+  LATCH_APP_ENV: load
+  LATCH_DATABASE_URL: postgresql+asyncpg://latch:latch@db:5432/latch
+  LATCH_REDIS_URL: redis://redis:6379/0
+  LATCH_PUBSUB_EMULATOR_HOST: pubsub:8085
+  LATCH_PUBSUB_PROJECT_ID: latch-load
+  LATCH_LLM_MODE: stub
+  LATCH_PUSH_MODE: stub
+  LATCH_CLOCK_MODE: controlled
+  LATCH_AUTH_TESTKEYS_DIR: /keys
+
+x-api-common: &api-common
+  build:
+    context: backend
+  command: uvicorn latch.main:app --host 0.0.0.0 --port 8000
+  environment:
+    <<: *backend-env
+  volumes:
+    - ./.staging/keys:/keys:ro
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    pubsub:
+      condition: service_started
+  healthcheck:
+    test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 10s
+  restart: unless-stopped
+
+x-worker-common: &worker-common
+  build:
+    context: backend
+  command: python -m latch.worker
+  environment:
+    <<: *backend-env
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    pubsub:
+      condition: service_started
+  restart: unless-stopped
+
+services:
+  db:
+    build:
+      context: docker/postgres
+    environment:
+      POSTGRES_USER: ${LATCH_DB_USER:-latch}
+      POSTGRES_PASSWORD: ${LATCH_DB_PASSWORD:-latch}
+      POSTGRES_DB: ${LATCH_DB_NAME:-latch}
+    ports:
+      - "127.0.0.1:25432:5432"
+    volumes:
+      - latch-load-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "127.0.0.1:26379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: ["gcloud", "beta", "emulators", "pubsub", "start", "--host-port=0.0.0.0:8085"]
+    ports:
+      - "127.0.0.1:28085:8085"
+    restart: unless-stopped
+
+  api1:
+    <<: *api-common
+    ports:
+      - "127.0.0.1:28001:8000"
+
+  api2:
+    <<: *api-common
+    ports:
+      - "127.0.0.1:28002:8000"
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./docker/nginx/staging.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:28000:80"
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker1:
+    <<: *worker-common
+
+  worker2:
+    <<: *worker-common
+
+volumes:
+  latch-load-db:
