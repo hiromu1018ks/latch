@@ -11,7 +11,7 @@
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **wave2(ws-3∥ws-5)着手はユーザーGoサイン待ち**(M3 ws-6∥ws-7と同型。ws-1・ws-2は完了)。G3繰越2件=02#13〜#23 staging再実行〔ws-3〕・FCM実機送信〔ws-9・資材待ち〕をM4内で回収。M2繰越のD-16上限試験はws-7。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
+- 次の着手: **ws-3実装中**(wave2・2026-10-03ユーザーGoサイン受領・ws-5は同日完了=設計bb6194c・計画c2de6fe・マージ18a6d88+fix 153ec50・test-ci 1596 passed。実装順序はws-5先の直列化裁定どおり)。G3繰越2件=02#13〜#23 staging再実行〔ws-3〕・FCM実機送信〔ws-9・資材待ち〕をM4内で回収。M2繰越のD-16上限試験はws-7。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -35,7 +35,7 @@
 | ws-2 | 共有テスト資産: シードIntent 200〜300件生成(10 §2の分布=時間帯・カテゴリ・人数志向・18〜19歳含む・自己重複検出の意図的配置)+期待値表・既存3資産(評価ペア520・飲酒36・Parser35)との関係整理・docs/testassets/でバージョン管理 | M4-2 / 10 §2・09 §4 | — | 完了 |
 | ws-3 | 機能試験27項目のstagingフル実行: staging振り分け項目(#5スモーク・#6〜#13・#15〜#19・#26)の自動化ハーネス・配置ケース(自己ペア除外・自己重複集合・部分YES・通知順序)・**G3繰越の02#13〜#23 staging再実行を回収**・ci分はtest-ci常設で緑維持 | M4-3 / 10 §3・02 §4 | ws-1・ws-2 | 未着手 |
 | ws-4 | Observability: 計測3群(パイプライン/Jev/提案と行動)のメトリクス実装+アクセス系基本計測(**POST /v1/sessions新設**)・ダッシュボード定義・MLR日次/週次集計(latch_status_eventsから)・09 §2.2のKPI導出 | M4-5 / 09 §2.1〜2.2・04 §7 | 実装は独立・稼働確認はws-1後 | 未着手 |
-| ws-5 | 告知・同意フロー+ログ許可リスト: オンボーディング同意のUI+API(同意記録・マッチング利用条件化)・設定画面からの再確認・構造化ログの許可リストSerializer(列挙型固定・raw_text/geo/constraints不許可) | M4-6 / 08 D-14・§2.4・§3 | — | 未着手 |
+| ws-5 | 告知・同意フロー+ログ許可リスト: オンボーディング同意のUI+API(同意記録・マッチング利用条件化)・設定画面からの再確認・構造化ログの許可リストSerializer(列挙型固定・raw_text/geo/constraints不許可) | M4-6 / 08 D-14・§2.4・§3 | — | 完了 |
 | ws-6 | load負荷試験+総当たり検出: 負荷ツール(Intent保存50rps・Event 100evt/sバースト)・レイテンシ注入(Parser p50 1s/p95 2.5s・Jev p50 2s/p95 5s=スタブで実運用模擬)・性能5目標測定(層別予算トレース分離)・総当たり検出(Active 1万→5万→10万・Vector件数K_v=50以内安定) | M4-4 / 10 §4.1〜4.2 | ws-1〜ws-3・ws-4(測定基盤前提) | 未着手 |
 | ws-7 | 非機能試験(障害系): 可用性(99.5%・インスタンス強制停止・合成監視プローブ)・バックアップ復旧(embedding識別子から再エンベディング+cross-check)・縮退(D-16上限到達と80% alert・月次Clock操作・resume/Bucket遅延回収=**M2繰越**)・Queue障害(毒ペイロード・lag alert発報) | M4-4 / 10 §4.3〜4.5・§4.7 | ws-1・ws-3・ws-4(ws-6と環境共有のため直列) | 未着手 |
 | ws-8 | ロールバック手順+G4証拠整備: ロールバック手順書(11 §7の運用手順化・デプロイ単位・DB拡張のみ原則)・G4 7項目の証拠一覧とdocs/testassets/results/への整理・担当・連絡経路の確定欄(人間領域の入力用) | M4-7 / 11 §5・§7 | ws-3〜ws-7 | 未着手 |
@@ -435,6 +435,14 @@
   - スーパーバイザー独立検証: worktree lint緑・**unit 1257 passed**(1219+38=計画1255+judge_pair_group系2)・basename一意・3資産+backend既存コード無変更(diff 0)・**seed-verify再実行OK・バイト同一再生成でgit status差分ゼロ**・vocab地名=裁定7点の座標どおり。**マージ後main test-ci 1561 passed**(=1523+38・api/worker再ビルド後・451.46秒)
   - 生成資産: docs/testassets/m4-seed.yaml(users100+intents300+reject5+EX33+aggregate{pair_total 44850・layer1_pass 576・blocked=0})・m4-seed-plan.md・README更新(status: draft・confirmed化はws-3での実使用後)
   - ws-3への引継ぎ: 投入はusers→intents順・structured_intent明示(EX-004/005素材はraw_text経由だとParser規則7でalcohol true化し422のため必須)・投入直前に同一コマンドで再生成(差分は対象日付のみ)・突合はreference_l1で無向化比較
+- ws-5 / 設計 bb6194c(supervisor承認: §6の5件=①同意文言は2026-10-03ユーザー承認〔草案どおり・texts.jsで確定〕②取り消し非実装はユーザー了承③並走ws-3との直列化=**実装順序をws-5先としws-3のworktreeは0007適用後mainから作る**〔helpers_seed.pyの同意API呼び出しはws-3側実装・headピンは0007〕④422 CONSENT_REQUIRED確定⑤origin前段スキップ省略・明示残置。users列追加=consent_at 1値・API+Layer1の2層担保・許可リスト=既存2ログを登録表へ無変更登録+機械検査)/ 2026-10-03
+- ws-5 / 計画 c2de6fe(2,334行・Task 1〜10・実コード全文。機械チェック合格: basename一意・headピン=test_geo.pyの1件のみ・UserRow構築7箇所=実査一致・LAYER1_WHEREピンは合成/substring比較で無傷・integration同意ヘルパー全数表=supervisor実査21ファイルと一致〔表題カウントを20ファイル21ヘルパーへ訂正〕・Self-Review記録つき)/ 2026-10-03
+- ws-5 / マージ 18a6d88(設計bb6194c・計画c2de6fe・実装は3985b27まで・9コミット+supervisor検証fix 153ec50)/ docs/plans/M4/ws-5-report.md / 2026-10-03
+  - agent3実装(26分)。supervisor独立検証: worktree unit 1327 passed再実行一致・frontend vitest 233+build成功・lint緑・collect 269・差分53ファイル=計画§2どおり・禁止ファイル無変更(git diff空)・Layer1条件・同意ゲート位置・文言=承認版との一致を確認
+  - マージ後test-ci初回で2失敗 → **supervisor直接修正153ec50(いずれも試験コード側・実装コードは無欠陥)**: ①test_consent_api.pyへFK順teardown追加(残存ws5-Intent 6件が後続sweeper系試験のrun_once件数期待を壊す=3≠1・DB実査で全件ws5-prefixと特定しg3_acceptanceのfield teardownと同一形式で解消) ②test_ratelimit_api test_3のGETループ60→59(_registerの同意POSTがuserバケットを1消費する追随漏れ)
+  - 修正後: **マージ後main test-ci 1596 passed**(exit 0を明示取得・6:40・ws5残存0件)・alembic head=0007
+  - G4証拠(10 §5): ②許可リスト機械検査=unit常設で5 passed(2026-10-03実行記録)。①同意フローのstaging手順観察=ws-3のS0が同意APIを叩くため自然カバー。③llm.sendログのサンプル照合はstaging(ws-3)で実施
+  - 引継ぎ(ws-3向け): ciのapiコンテナログにはlatch.llm.send行が観測されなかった(parse実行2341回中・原因は未調査: 経路かロギング設定か)。stagingでllm.sendを観察する計画がある場合はまず1件投げて出力を確認すること
 
 ## G2判定資料(2026-09-30・承認済み)
 
