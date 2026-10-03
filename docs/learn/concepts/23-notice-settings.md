@@ -25,7 +25,9 @@
   `blockFlow.js`・`settings.js`(新設)と `view.js`・`texts.js`・`router.js`・
   `main.js`・`index.html`・`styles.css`(追記)。試験は `tests/latch-notice.test.js`
   等のunit試験(ws-8で5ファイル・47件。その後の2026-10-02のm3-g3fixで
-  `latch-notice.test.js` に6件が加わり、フロントのunitは223件)。**ws-8の単位ではbackendの変更は1行もありませんでした**。
+  `latch-notice.test.js` に6件が加わり、フロントのunitは223件。さらに
+  2026-10-03のM4 ws-5で `latch-consent.test.js` が加わり、233件です・第27章)。
+  **ws-8の単位ではbackendの変更は1行もありませんでした**。
   お知らせの応答に my_response が加わったことと、成立通知が書かれるように
   なったことは、同じ日のマージ m3-g3fix です(23.2・23.3で読みます)
 - 設計の根拠: `docs/plans/M3/ws-8-design.md`・`ws-8-report.md`、my_response
@@ -357,6 +359,9 @@ accountPopover(右上のアカウントメニュー)の「設定」ボタンを�
 要素(プロフィール編集・ログアウト・テーマ変更)は置きませんでした——
 作らないものまで決めて作らない。第7章7.9の「何を導入しないかまで記録する」
 作法の画面版です。
+(この章を書いた時点では2つでした。その後のM4 ws-5で第3セクション
+「LLM送信の同意」が加わっています。表示専用の再確認ブロックで、通知許可とは
+根拠も効果も別物として分離してあります。第27章27.5)
 
 ### 通知許可: 本当のブラウザ機能を、注入して扱う
 
