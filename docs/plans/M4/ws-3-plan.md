@@ -88,10 +88,10 @@
 
 m4-seed.yaml(base_datetime=2026-10-04T11:00:00+09:00)にreference_l1.judge_allを実行した結果:
 
-- L1 passペア: **576組**(seed-verifyのaggregate一致)
-- passペアの対象日分布(start日): 10-05: 170件・10-06: 73件・10-07: 83件・10-08: 134件・10-09: 116件
-- ユーザー×日あたりのpassペア関与数: **最大35件**(SU-010×10-05)・上位はSU-011×10-05: 31件・SU-066×10-05: 26件
-- **6件(D-08日次上限)超えのユーザー×日: 74件** → would=0.90固定では保留が大量発生する(設計§2.2の予測どおり)
+- L1 passペア: **627組**(seed-verifyのaggregate一致。**2026-10-03スーパーバイザー裁定後の再実測値** — 当初の576組は若年×drinking Intentが作成不能だった旧シードの値・シード修正の詳細はws-3-report「設計からの読み替え・逸脱の記録」)
+- passペアの対象日分布(start日): 10-05: 176件・10-06: 96件・10-07: 74件・10-08: 134件・10-09: 147件(再実測)
+- ユーザー×日あたりのpassペア関与数: **最大34件**(SU-010×10-05)・上位はSU-019×10-08: 29件・SU-061×10-05: 27件(再実測)
+- **6件(D-08日次上限)超えのユーザー×日: 84件**(再実測・旧値74件)→ would=0.90固定では保留が大量発生する(設計§2.2の予測どおり)
 
 この集計はS0で機械再計算して証拠に記録する(test_s0_d08_retention_forecast・Task 5)。固定期待を置く検査は「reference_l1で数えられる決定的な量」(候補集合・EX個別ペア・集合構成)に限定し、提案の成否に依存する検査(#15〜#19・D-23等)は専用シナリオIntentで行う(§2.3)。
 
@@ -1070,7 +1070,7 @@ async def seed_all(api, db) -> dict:  # noqa: ANN001
     judged = judge_all(intents, users, now=_p(meta_base))
     l1_pass = {k for k, (ok, _reason) in judged.items() if ok}
 
-    # D-08事前集計(設計§2.2対抗策(c)・計画時実測: 6件超え74件)
+    # D-08事前集計(設計§2.2対抗策(c)・再実測: 6件超え84件)
     intent_user = {i["id"]: i["user"] for i in intents}
     per_user_day: dict[tuple[str, str], int] = {}
     for (a, b) in l1_pass:
@@ -1705,7 +1705,7 @@ async def test_s1_item08_retention_promotion(api, db):
         " WHERE from_status='candidate' AND to_status='proposed'"
     )
     assert before_retained > 0, (
-        "保留中candidateが0件 — D-08事前集計(計画§2.2: 6件超え74件)と不整合"
+        "保留中candidateが0件 — D-08事前集計(計画§2.2: 6件超え84件)と不整合"
     )
     # D1 00:05 JST へ前進(base_datetimeの翌日・ISO明示・後退は行わない)
     base = datetime.fromisoformat(state["meta_base"])
@@ -2814,7 +2814,7 @@ git commit -m "docs: add ws-3 report and staging result evidence"
 
 ## D-08保留の実測(計画§2.2との突合)
 
-- S0集計: 6件超えのユーザー×日=<実測>件(計画時実測74件)・max=<実測>件/ユーザー×日
+- S0集計: 6件超えのユーザー×日=<実測>件(再実測84件)・max=<実測>件/ユーザー×日
 - #8の昇格件数: <実測>
 
 ## 期待値の確定記録(§0「staging検査の期待値確定手順」)
@@ -2844,7 +2844,7 @@ git commit -m "docs: add ws-3 report and staging result evidence"
 | §2.2 stub判定値固定(settings+gateway+compose 0.90/3.6) | Task 1〜3 |
 | §2.2対抗策(a)(固定期待=reference_l1で数えられる量) | §2.5+Task 5〜9の検査設計 |
 | §2.2対抗策(b)(専用シナリオ隔離) | §2.3+helpers_scenario(Task 5) |
-| §2.2対抗策(c)(D-08事前集計) | §2.2(計画時実測74件)+test_s0_d08_retention_forecast(Task 5) |
+| §2.2対抗策(c)(D-08事前集計) | §2.2(再実測84件)+test_s0_d08_retention_forecast(Task 5) |
 | §2.3観測経路3種(API/DB SELECT専用/pushログ) | conftest fixtures+helpers_pushlog(Task 4) |
 | §2.4 tick 60秒既定・待ち上限120〜180秒・ISO明示 | §2.4旅路表+helpers_wait・Task 6〜9の前進実装 |
 | §2.5シナリオ→02#対応表(20項目+追加3件+配置) | Task 5〜9の検査ID(record_itemに02#IDを記録) |

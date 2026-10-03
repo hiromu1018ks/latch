@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish load-up load-down load-ps seed-generate seed-verify
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test load-up load-down load-ps seed-generate seed-verify
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -109,3 +109,12 @@ seed-generate: ## M4シード生成(決定的。ローカル・DB不要。ARGS="
 
 seed-verify: ## M4シード機械検査(構造・分布・意図的配置・aggregate照合・地名。ローカル・DB不要)
 	cd backend && uv run python -m latch.testassets.verify $(ARGS)
+
+staging-reset: ## staging環境をフルリセット(down -v→up→migrate→geo-import。latch-stagingボリュームのみ削除・ci無干渉。ハーネス実行の前提)
+	$(STAGING_COMPOSE) down -v
+	$(STAGING_COMPOSE) up -d --wait
+	$(MAKE) staging-migrate
+	$(MAKE) staging-geo-import
+
+staging-test: ## staging機能試験ハーネス全実行(M4 ws-3・staging-reset直後のフル実行が前提・証拠YAMLをdocs/testassets/results/へ出力)
+	cd backend && uv run pytest staging_tests

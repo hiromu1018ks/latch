@@ -1,0 +1,328 @@
+unit: M4-ws-3
+executed_at: '2026-10-03T23:15:05.945325+09:00'
+environment: latch-staging
+items:
+- id: S0-env
+  name: 環境前提(8サービス・head・geo・鍵)
+  test: test_s0_environment_prerequisites
+  verdict: pass
+  observed:
+    alembic_head: '0007'
+    health: ok
+- id: S0-seed
+  name: シード投入(100人×consent+300 Intent・422/429=0)
+  test: test_s0_seed_ingestion
+  verdict: pass
+  observed:
+    base_datetime: '2026-10-04T11:00:00+09:00'
+- id: 02#6-土台
+  name: L1無向突合(生成集合⊆pass集合+代表EX実在)
+  test: test_s0_l1_unidirectional_match
+  verdict: pass
+  observed:
+    pass_pairs: 627
+    db_pairs: 699
+    sample_ok: 7
+- id: S0-D08
+  name: D-08保留予測の事前集計(設計§2.2対抗策c)
+  test: test_s0_d08_retention_forecast
+  verdict: pass
+  observed:
+    over_count: 84
+    top5:
+    - - SU-010@2026-10-05
+      - 34
+    - - SU-019@2026-10-08
+      - 29
+    - - SU-061@2026-10-05
+      - 27
+    - - SU-020@2026-10-09
+      - 23
+    - - SU-021@2026-10-05
+      - 22
+- id: S0-s20
+  name: '#20素材ペア作成(171側のみ・172はS5で作成)'
+  test: test_s0_s20_pair_prepared
+  verdict: pass
+  observed:
+    subjects:
+    - HS-p20-1
+    - HS-p20-2
+    intents:
+    - 3b0a7d10-6098-4b66-9a1a-f8add89471ce
+- id: 02#5
+  name: 総当たりスモーク(K_v=50以内・K_j記録照合)
+  test: test_s1_item05_smoke
+  verdict: pass
+  observed:
+    max_candidates_per_intent: 16
+    jev_evaluated_total: 626
+    max_jev_per_intent: 15
+- id: 02#6
+  name: EX passペアの生成記録(無向実在7組・有向1方向の観察)
+  test: test_s1_item06_ex_pass_bidirectional
+  verdict: pass
+  observed:
+    sample:
+    - EX-006
+    - EX-008
+    - EX-010
+    - EX-013
+    - EX-015
+    - EX-017
+    - EX-020
+    directed_rows: 699
+- id: 02#7
+  name: PATCH再評価(生成/不生成の記録)
+  test: test_s1_item07_patch_reevaluation
+  verdict: pass
+  observed:
+    before: 0
+    after_patch: 1
+    final_after_leaving: 1
+    note: 旧version行は残存(実装の決定的挙動)
+- id: 02#9
+  name: Hard Filter E2E(EX failペア不生成+pass組はS0突合済み)
+  test: test_s1_item09_hard_filter_e2e
+  verdict: pass
+  observed:
+    checked:
+    - EX-007
+    - EX-009
+    - EX-011
+    - EX-012
+    - EX-014
+    - EX-016
+    - EX-018
+    - EX-019
+    - EX-023
+    - EX-024
+    db_pairs: 699
+- id: 02#10
+  name: '意味近接ペアの候補生成(案A: L1通過ゆえの生成)'
+  test: test_s1_item10_near_semantic_pair
+  verdict: pass
+  observed:
+    pair:
+    - 6c55ef98-47e4-4b7d-9ce6-d8ffb43cd418
+    - e8b0d7ea-4bbb-4380-807c-1ee41b1cc308
+- id: 02#11
+  name: 密集配置(30件・L3通過K_c=20以内・Jev K_j=8以内)
+  test: test_s1_item11_dense_cluster
+  verdict: pass
+  observed:
+    cluster_intents: 30
+    origin_candidates: 18
+    origin_jev: 14
+- id: 02#12
+  name: jev_result記録(双方判定値+provider/model)
+  test: test_s1_item12_jev_result_record
+  verdict: pass
+  observed:
+    noul: 0.9
+    provider: typesafe_jev
+    model: jev-1.13.0
+- id: 02#8
+  name: 時刻到来再評価(保留→proposed昇格)
+  test: test_s1_item08_retention_promotion
+  verdict: pass
+  observed:
+    retained_before: 406
+    promoted_delta: 23
+    clock_set_to: '2026-10-05T00:05:00+09:00'
+- id: 02#13
+  name: 提案通知(先行書き込み+pushドライラン)+muted(push 0件・proposed・回答可)
+  test: test_s2_item13_proposal_notification_and_muted
+  verdict: pass
+  observed:
+    proposed: 261
+    notifications: 391
+    push_total: 391
+    muted_push: 0
+- id: 02#14
+  name: yes/no回答の記録と遷移
+  test: test_s2_item14_responses_record
+  verdict: pass
+  observed:
+    responses:
+    - 'no'
+    - 'yes'
+    transitions:
+    - - null
+      - candidate
+    - - candidate
+      - proposed
+    - - proposed
+      - partial_accept
+    - - partial_accept
+      - rejected
+    final: rejected
+- id: 02#17
+  name: '可視範囲比較(提案時: participants非解放・サマリあり)'
+  test: test_s2_item17_before_match_visibility
+  verdict: pass
+  observed:
+    proposal_keys:
+    - area_name
+    - budget
+    - category_primary
+    - category_secondary
+    - headcount
+    - match_level
+    - time_summary
+- id: 02#22
+  name: visibility分岐(hidden 2キー/summary_only 7キー)
+  test: test_s2_item22_visibility_branch
+  verdict: pass
+  observed:
+    hidden:
+    - headcount
+    - match_level
+    summary_only:
+    - area_name
+    - budget
+    - category_primary
+    - category_secondary
+    - headcount
+    - match_level
+    - time_summary
+- id: 02#23
+  name: 座標精度の非表示(キー集合+値パターン)
+  test: test_s2_item23_no_precise_coordinates
+  verdict: pass
+  observed:
+    detail_url: /v1/latches/7afe1691-c0ef-4878-aa82-674ec4e3004f
+- id: FR-21
+  name: push表示規制(汎用文バイト一致・サマリ不含・drinking同一様式)
+  test: test_s2_fr21_push_content
+  verdict: pass
+  observed:
+    distinct_bodies:
+    - 'LATCH候補があります。
+
+      詳細はアプリでご確認ください。'
+    summary_notif_keys:
+    - area_name
+    - budget
+    - category_primary
+    - category_secondary
+    - headcount
+    - match_level
+    - time_summary
+- id: 02#26
+  name: MLR算出(分母=proposed遷移・分子=matched遷移)
+  test: test_s2_item26_mlr_computation
+  verdict: pass
+  observed:
+    denominator: 315
+    numerator: 0
+    mlr: 0.0
+- id: 02#18
+  name: グループ集合生成+全員YES成立(participants 3人)
+  test: test_s3_item18_group_all_yes
+  verdict: pass
+  observed:
+    group_candidate_status: proposed
+    members: 3
+- id: 通知順序(EX-026)
+  name: 同一Pool複数集合→proposed 1つ(group_candidates記録)
+  test: test_s3_notification_order_ex026
+  verdict: pass
+  observed:
+    cluster_rows: 8
+    statuses:
+    - candidate
+    - proposed
+- id: FR-17-自己重複
+  name: 自己重複集合不生成(EX-025)+対照生成(EX-026)
+  test: test_s3_self_duplication_ex025
+  verdict: pass
+  observed:
+    ex025_selfdup_rows: 0
+    ex026_rows: 8
+- id: 02#16
+  name: 部分YESの期限確定(proposed→expired・1人yes+2人無回答)
+  test: test_s3_item16_partial_yes_deadline
+  verdict: pass
+  observed:
+    transitions:
+    - - null
+      - candidate
+    - - candidate
+      - proposed
+    - - proposed
+      - partial_accept
+    - - partial_accept
+      - expired
+    expired_delta: 300
+    clock_set_to: '2026-10-06T06:00:00+09:00'
+- id: 02#16-Intent期限
+  name: Intent期限切れバッチ(D+6前進でsweeper発火)
+  test: test_s3_intent_expiry_batch
+  verdict: pass
+  observed:
+    expired_before: 90
+    expired_total: 190
+    clock_set_to: '2026-10-10T00:10:00+09:00'
+- id: 02#15
+  name: 双方YES→matched+チャット解放
+  test: test_s4_item15_matched_and_chat
+  verdict: pass
+  observed:
+    latch: e77c6cc0-d57f-4298-8599-47b1940ff48d
+    status: matched
+- id: 02#19
+  name: 成立LATCHの双方向送受信
+  test: test_s4_item19_bidirectional_chat
+  verdict: pass
+  observed:
+    messages: 2
+- id: 02#17-成立後
+  name: '可視範囲比較(成立後: participants解放・サマリ維持)'
+  test: test_s4_item17_after_match
+  verdict: pass
+  observed:
+    participants: 2
+- id: 02#21
+  name: 成立LATCHからの通報受付
+  test: test_s4_item21_report
+  verdict: pass
+  observed:
+    report_status: pending
+- id: D-23
+  name: 成立後ブロック(チャット読み取り専用・matchedは維持)
+  test: test_s4_d23_block_cancels_latch
+  verdict: pass
+  observed:
+    latch_status: matched
+    chat_error: CHAT_READONLY
+- id: 02#20
+  name: ブロック後の一致Intentは候補生成されない
+  test: test_s5_item20_block_prevents_candidates
+  verdict: pass
+  observed:
+    blocked_pair_candidates: 0
+- id: D-10
+  name: 年齢制限(422 UNDER_AGE 5件+EX-004/005非生成)
+  test: test_s5_d10_under_age
+  verdict: pass
+  observed:
+    rejects:
+    - id: EX-029
+      code: UNDER_AGE
+    - id: EX-030
+      code: UNDER_AGE
+    - id: EX-031
+      code: UNDER_AGE
+    - id: EX-032
+      code: UNDER_AGE
+    - id: EX-033
+      code: UNDER_AGE
+- id: 02#26-最終
+  name: MLR最終集計(全シーン終了時点)
+  test: test_s5_item26_final_mlr
+  verdict: pass
+  observed:
+    denominator: 496
+    numerator: 2
+    mlr: 0.004032258064516129

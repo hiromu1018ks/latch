@@ -9,6 +9,7 @@ LLMTimeoutError、プロバイダ例外はLLMProviderErrorで送出する。
 from __future__ import annotations
 
 import asyncio
+import copy
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
@@ -31,7 +32,7 @@ from latch.llm.gemini import GeminiEmbeddingProvider
 from latch.llm.jev import JevJudgment, validate_and_normalize
 from latch.llm.providers import EmbeddingProvider, JevProvider, ParserProvider
 from latch.llm.records import SendRecord, SendStatus, SystemName, send_log
-from latch.llm.stub import StubLLM
+from latch.llm.stub import DEFAULT_JEV_RESPONSE, StubLLM
 from latch.llm.typesafe import TypeSafeJevProvider
 from latch.settings import Settings
 
@@ -303,6 +304,29 @@ def _envelope_model(envelope: object) -> str | None:
     return str(model) if model is not None else None
 
 
+_NOUL_KEYS = ("would_a_accept_b", "would_b_accept_a", "latent_yes")
+_SCORE_KEYS = ("purpose_fit", "mood_fit", "timing_fit", "social_fit")
+
+
+def _stub_jev_response(settings: Settings) -> dict:
+    """settingsのstub判定値からDEFAULT_JEV_RESPONSE同一形状の応答を組む(ws-3)。
+
+    10 §3表staging行「Jevスタブで双方向判定値を固定」のenv→settings→
+    stub応答の経路。既定値(0.5/2.0)のときはDEFAULT_JEV_RESPONSEと値が
+    完全一致する(ci/test-ci挙動不変・回帰ピン:
+    tests/unit/test_llm_stub_response_settings.py)。confidence・model・
+    usageはstub定数のまま — 応答形状の知識はこの1関数にのみ集約する
+    (design §2.2案A・envへJSON全体を差し込む方式は不採用)。
+    渡した先のStubLLMがdeepcopyするためこの辞書を消費者へ露出しない。
+    """
+    response = copy.deepcopy(DEFAULT_JEV_RESPONSE)
+    for key in _NOUL_KEYS:
+        response["answers"][key]["noul"] = settings.llm_stub_jev_noul
+    for key in _SCORE_KEYS:
+        response["answers"][key]["score"] = settings.llm_stub_jev_score
+    return response
+
+
 def build_llm_gateway(
     clock: Clock,
     settings: Settings,
@@ -321,6 +345,7 @@ def build_llm_gateway(
         delay_parser_ms=settings.llm_stub_delay_parser_ms,
         delay_embedding_ms=settings.llm_stub_delay_embedding_ms,
         delay_jev_ms=settings.llm_stub_delay_jev_ms,
+        jev_response=_stub_jev_response(settings),
     )
     if settings.llm_mode == "stub":
         return LLMGateway(clock=clock, parser=stub, embedding=stub, jev=stub)
@@ -356,6 +381,7 @@ def build_worker_gateway(clock: Clock, settings: Settings) -> LLMGateway:
         delay_parser_ms=settings.llm_stub_delay_parser_ms,
         delay_embedding_ms=settings.llm_stub_delay_embedding_ms,
         delay_jev_ms=settings.llm_stub_delay_jev_ms,
+        jev_response=_stub_jev_response(settings),
     )
     if settings.llm_mode == "stub":
         return LLMGateway(

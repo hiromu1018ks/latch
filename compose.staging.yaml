@@ -14,6 +14,11 @@ x-backend-env: &backend-env
   LATCH_PUBSUB_EMULATOR_HOST: pubsub:8085
   LATCH_PUBSUB_PROJECT_ID: latch-staging
   LATCH_LLM_MODE: stub
+  # stub Jev判定値の固定(10 §3表staging行「Jevスタブで双方向判定値を
+  # 固定」・M4 ws-3。latch_score=C×0.90=0.90で提案閾値0.60を超え・
+  # match_level=high(≥0.90)経路も通る)
+  LATCH_LLM_STUB_JEV_NOUL: "0.90"
+  LATCH_LLM_STUB_JEV_SCORE: "3.6"
   LATCH_PUSH_MODE: stub
   LATCH_CLOCK_MODE: controlled
   LATCH_AUTH_TESTKEYS_DIR: /keys

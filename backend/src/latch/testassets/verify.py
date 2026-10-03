@@ -187,15 +187,31 @@ def verify(path: str) -> list[str]:
             if v not in seen:
                 errs.append(f"{field}={v}が1件もない(全値カバレッジ)")
     # 18-19歳ユーザーの全intentがalcohol false(design §2.4・規則7の例外)
+    # +drinkingカテゴリを含まない(2026-10-03スーパーバイザー裁定)。drinkingは
+    # 実行時(mapping.py resolve_for_active)でalcohol trueへ強制され、20歳未満は
+    # 作成検証(service.py _require_age_20)で422 UNDER_AGEになる — シードの
+    # 全IntentがAPIで作成可能であることの前提(ws-3 BLOCKED事由の再発防止)
+    underage_ids = {
+        u["id"]
+        for u in users
+        if age_years_at(_p(u["birth_date"]).date(), base.astimezone(JST).date()) < 20
+    }
     for i in intents:
-        if i["user"] in {
+        if i["user"] in underage_ids:
+            if i["structured"]["alcohol_involved"]:
+                errs.append(f"{i['id']}: 18-19歳ユーザー×alcohol true")
+            if i["structured"]["category"]["primary"] == "drinking":
+                errs.append(f"{i['id']}: 18-19歳ユーザー×drinking")
+    # alcohol_involved=trueのIntentは作成者が20歳以上(実行時作成契約との
+    # 同値検査・alcohol true×20歳未満は422 UNDER_AGEで作成できない)
+    for i in intents:
+        if i["structured"]["alcohol_involved"] and i["user"] not in {
             u["id"]
             for u in users
             if age_years_at(_p(u["birth_date"]).date(), base.astimezone(JST).date())
-            < 20
+            >= 20
         }:
-            if i["structured"]["alcohol_involved"]:
-                errs.append(f"{i['id']}: 18-19歳ユーザー×alcohol true")
+            errs.append(f"{i['id']}: alcohol true×作成者20歳未満(作成不可能)")
 
     # (c) 意図的配置の成立(EX突合)
     for c in cases:
