@@ -208,7 +208,8 @@ async def test_3_api_per_min_and_401_priority(api_client, db_engine):
             resp = await api_client.get("/v1/intents", headers=headers)
             assert resp.status_code == 200, (i, resp.text)
         # 61リクエスト目(=60回目のGET): JST分バケットの切替を跨いでいた場合は
-        # 200に戻るため、429に到達するまで連打する(それまでの応答はすべて200であることを保証)
+        # 200に戻るため、429に到達するまで連打する(それまでの応答は
+        # すべて200であることを保証)
         exceeded = None
         for i in range(60, 180):
             resp = await api_client.get("/v1/intents", headers=headers)
