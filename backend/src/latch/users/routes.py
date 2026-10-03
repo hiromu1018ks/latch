@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from latch.auth.deps import require_authenticated
 from latch.auth.tokens import AccessTokenClaims
 from latch.ratelimit.deps import api_rate_limited
+from latch.users.consent import ConsentService, ConsentState
 from latch.users.service import UserCreated, UserMe, UserService
 
 logger = logging.getLogger("latch.users")
@@ -35,6 +36,17 @@ users_router = APIRouter(
 def get_users_service(request: Request) -> UserService:
     """app.state.users_service へのアクセス(lifespanまたはテスト注入で載る)。"""
     return request.app.state.users_service
+
+
+def get_consent_service(request: Request) -> ConsentService:
+    """app.state.consent_service へのアクセス(lifespanまたはテスト注入)。"""
+    return request.app.state.consent_service
+
+
+class ConsentStateResponse(BaseModel):
+    """GET/POST /v1/users/me/consent の200応答(設計§2.3)。"""
+
+    consented_at: datetime | None
 
 
 class UserProfileInput(BaseModel):
@@ -118,3 +130,25 @@ async def delete_users_me(
     1トランザクションで同期実行し、コミット後にセッションを失効する。"""
     await svc.delete_account(claims=claims)
     logger.info("users.delete_me ok")
+
+
+@users_router.post("/me/consent", response_model=ConsentStateResponse)
+async def record_consent(
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[ConsentService, Depends(get_consent_service)],
+) -> ConsentStateResponse:
+    """同意の記録(冪等・後勝ちで時刻更新。08 D-14)。ログはイベント名のみ。"""
+    state: ConsentState = await svc.record(claims=claims)
+    logger.info("users.consent_record ok")
+    return ConsentStateResponse(consented_at=state.consented_at)
+
+
+@users_router.get("/me/consent", response_model=ConsentStateResponse)
+async def get_consent(
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[ConsentService, Depends(get_consent_service)],
+) -> ConsentStateResponse:
+    """同意状態(未同意も200 null。08 D-14「設定画面から常に再確認できる」)。"""
+    state: ConsentState = await svc.get(claims=claims)
+    logger.info("users.consent_state ok")
+    return ConsentStateResponse(consented_at=state.consented_at)

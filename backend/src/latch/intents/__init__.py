@@ -9,6 +9,7 @@ from latch.intents.completion import (
 )
 from latch.intents.errors import (
     ActiveIntentLimitError,
+    ConsentRequiredError,
     DependencyUnavailableError,
     ForbiddenError,
     GeocodingFailedError,
@@ -65,6 +66,7 @@ from latch.intents.store import IntentRow, IntentStore, UserRow
 
 __all__ = [
     "ActiveIntentLimitError",
+    "ConsentRequiredError",
     "DEFAULT_PARTICIPANTS",
     "DEFAULT_RADIUS_M",
     "DependencyUnavailableError",

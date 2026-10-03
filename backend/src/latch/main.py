@@ -47,6 +47,7 @@ from latch.safety import (
     safety_router,
 )
 from latch.settings import Settings
+from latch.users.consent import ConsentService, make_consent_service
 from latch.users.errors import UsersError
 from latch.users.routes import users_router
 from latch.users.service import make_user_service
@@ -72,6 +73,7 @@ async def _lifespan(app: FastAPI):
     build_rate_limit = not hasattr(app.state, "rate_limiter")
     build_events = not hasattr(app.state, "event_bus")
     build_safety = not hasattr(app.state, "safety_service")
+    build_consent = not hasattr(app.state, "consent_service")
     if not (
         build_auth
         or build_users
@@ -82,6 +84,7 @@ async def _lifespan(app: FastAPI):
         or build_rate_limit
         or build_events
         or build_safety
+        or build_consent
     ):
         yield
         return
@@ -123,11 +126,16 @@ async def _lifespan(app: FastAPI):
             engine=engine,
             sessions=SessionStore(redis_client) if redis_client is not None else None,
         )
+    if build_consent:
+        app.state.consent_service = make_consent_service(
+            clock=app.state.clock, engine=engine
+        )
     if build_intents:
         app.state.intent_parse_service = make_intent_parse_service(
             clock=app.state.clock,
             settings=settings,
             user_lookup=user_lookup,
+            consent_lookup=app.state.consent_service.consented,
         )
     event_relay_task = None
     event_relay_stop = None
@@ -214,6 +222,7 @@ def create_app(
     latches_service=None,
     notifications_service=None,
     safety_service=None,
+    consent_service: ConsentService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.settings = settings if settings is not None else Settings()
@@ -222,6 +231,8 @@ def create_app(
         app.state.auth_service = auth_service
     if users_service is not None:
         app.state.users_service = users_service
+    if consent_service is not None:
+        app.state.consent_service = consent_service
     if intent_parse_service is not None:
         app.state.intent_parse_service = intent_parse_service
     if intent_service is not None:

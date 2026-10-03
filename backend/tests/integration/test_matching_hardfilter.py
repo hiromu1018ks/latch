@@ -66,6 +66,8 @@ async def _register(api_client, subject: str, birth_date: str):
         json={"display_name": "m2ws3", "birth_date": birth_date, "profile": {}},
     )
     assert created.status_code == 201, created.text
+    consented = await api_client.post("/v1/users/me/consent", headers=headers)
+    assert consented.status_code == 200, consented.text
     return headers, created.json()["user"]["id"]
 
 
@@ -587,3 +589,29 @@ async def test_13_run_retrieval_excludes_fail_pairs(api_client, db_engine, field
     assert len(rows) == 1
     assert rows[0][2] == "pending"  # Layer 1〜2時点(05 §2)
     assert float(rows[0][3]) == pytest.approx(1.0)  # E1×E1 = cosine 1
+
+
+async def test_14_consent_required_for_peer(api_client, db_engine, field):
+    """M4 ws-5: 同意なしユーザーのIntentは他条件が揃ってもpeer抽出対象外
+    (08 D-14「同意はマッチング機能の利用条件」・Layer 1 Hard条件)。
+
+    同意済みの同条件ペアが通ることの対照(既存試験の期待値が変わらない
+    ことの実証を兼ねる)→ 対象ユーザーのconsent_atをDB直接UPDATEでNULLへ
+    戻して除外されること(test_7と同じAPI検証バイパスの手法)。
+    """
+    clock = _clock()
+    h, _ = await _user(api_client, field)
+    o = await _intent(api_client, db_engine, h, _payload(_structured()))
+    h1, t_user = await _user(api_client, field)
+    t = await _intent(api_client, db_engine, h1, _payload(_structured()))
+
+    ids = await _hard_ids(db_engine, clock, o["id"])
+    assert t["id"] in ids  # 対照: 双方同意済みなら通る(既存期待値どおり)
+
+    async with db_engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE users SET consent_at = NULL WHERE id = CAST(:u AS uuid)"),
+            {"u": t_user},
+        )
+    ids = await _hard_ids(db_engine, clock, o["id"])
+    assert t["id"] not in ids  # 対象が未同意 → peer除外

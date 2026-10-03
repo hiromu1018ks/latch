@@ -16,6 +16,7 @@ from latch.auth.tokens import AccessTokenClaims
 from latch.core.clock import FakeClock
 from latch.main import create_app
 from latch.settings import Settings
+from latch.users.consent import ConsentService, ConsentState
 from latch.users.errors import UnderAgeError, UserNotFoundError
 from latch.users.service import UserCreated, UserMe
 
@@ -233,3 +234,87 @@ async def test_delete_users_me_returns_204(client, stub):
     assert resp.status_code == 204
     assert resp.content == b""
     assert stub.deleted == [CLAIMS]
+
+
+# --- M4 ws-5: 同意API(計画Task 4) -----------------------------------------
+
+
+class StubConsentService(ConsentService):
+    """ルーティング試験用のConsentServiceスタブ(記録呼び出しを数える)。"""
+
+    def __init__(self, *, state=None, error=None):
+        super().__init__(
+            clock=FakeClock(NOW),
+            record_consent=None,
+            fetch_consent=None,
+            consented=None,
+            exists_fn=None,
+        )
+        self.state = state if state is not None else ConsentState(consented_at=NOW)
+        self.error = error
+        self.recorded = 0
+        self.fetched = 0
+
+    async def record(self, *, claims):
+        self.recorded += 1
+        if self.error is not None:
+            raise self.error
+        return self.state
+
+    async def get(self, *, claims):
+        self.fetched += 1
+        if self.error is not None:
+            raise self.error
+        return self.state
+
+
+async def test_consent_post_returns_200_with_timestamp():
+    stub = StubConsentService(state=ConsentState(consented_at=NOW))
+    app = create_app(
+        clock=FakeClock(NOW),
+        settings=Settings(app_env="ci"),
+        users_service=StubUserService(),
+        consent_service=stub,
+    )
+    app.dependency_overrides[require_authenticated] = lambda: CLAIMS
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.post("/v1/users/me/consent", headers={"Authorization": "b"})
+    assert resp.status_code == 200, resp.text
+    # Pydantic v2はUTCをZ形式で直列化する(birth_date試験と同型のリテラル比較)
+    assert resp.json() == {"consented_at": "2026-09-27T12:00:00Z"}
+    assert stub.recorded == 1
+
+
+async def test_consent_get_returns_null_when_not_consented():
+    """未同意は200 null(404ではない — 計画§5-3)。"""
+    stub = StubConsentService(state=ConsentState(consented_at=None))
+    app = create_app(
+        clock=FakeClock(NOW),
+        settings=Settings(app_env="ci"),
+        users_service=StubUserService(),
+        consent_service=stub,
+    )
+    app.dependency_overrides[require_authenticated] = lambda: CLAIMS
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/v1/users/me/consent", headers={"Authorization": "b"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"consented_at": None}
+    assert stub.fetched == 1
+
+
+async def test_consent_unregistered_maps_to_404_envelope():
+    stub = StubConsentService(error=UserNotFoundError("user not found"))
+    app = create_app(
+        clock=FakeClock(NOW),
+        settings=Settings(app_env="ci"),
+        users_service=StubUserService(),
+        consent_service=stub,
+    )
+    app.dependency_overrides[require_authenticated] = lambda: CLAIMS
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.post("/v1/users/me/consent", headers={"Authorization": "b"})
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "NOT_FOUND"

@@ -65,7 +65,7 @@ class StubStore:
         self.version = 1
 
     async def fetch_user_row(self, provider, subject):
-        return UserRow(id=USER_ID, birth_date=date(2000, 1, 1))
+        return UserRow(id=USER_ID, birth_date=date(2000, 1, 1), consent_at=NOW)
 
     async def fetch(self, conn, intent_id):
         return self._row()

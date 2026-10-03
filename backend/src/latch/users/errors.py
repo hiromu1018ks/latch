@@ -23,6 +23,17 @@ class UnderAgeError(UsersError):
     code = "UNDER_AGE"
 
 
+class ConsentRequiredError(UsersError):
+    """同意なしでの利用(422 CONSENT_REQUIRED・08 D-14)。
+
+    本単位では送出経路なし(intents側が送出)。05 §5のusers系エラー列挙に
+    対向する配置(UnderAgeErrorの二重配置先例と同型 — 計画§4-4)。
+    """
+
+    http_status = 422
+    code = "CONSENT_REQUIRED"
+
+
 class UserExistsError(UsersError):
     """登録済みauth_subjectでの初回登録(05 第5節)。"""
 

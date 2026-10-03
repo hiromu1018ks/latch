@@ -13,6 +13,7 @@ import pytest
 
 from latch.core.clock import FakeClock
 from latch.intents.errors import (
+    ConsentRequiredError,
     DependencyUnavailableError,
     LLMUnavailableError,
     UnstructurableError,
@@ -240,3 +241,90 @@ async def test_error_messages_contain_no_user_text():
     with pytest.raises(UnstructurableError) as ei:
         await svc.parse(text=secret, auth_provider="google", auth_subject="s")
     assert secret not in str(ei.value)
+
+
+# --- M4 ws-5: parse同意ゲート(計画Task 6・08 D-14) -------------------------
+
+USER_ID_PARSE = uuid.uuid4()
+
+
+def _consent_lookup_returning(ok: bool):
+    async def lookup(user_id):
+        return ok
+
+    return lookup
+
+
+async def test_parse_blocked_without_consent_and_parser_not_called():
+    """同意なし(登録済み)=422 CONSENT_REQUIRED・LLM呼び出し前に遮断。"""
+    parser = StubParser()
+    svc = IntentParseService(
+        clock=_clock(),
+        parser=parser,
+        user_lookup=_lookup_returning(USER_ID_PARSE),
+        consent_lookup=_consent_lookup_returning(False),
+    )
+    with pytest.raises(ConsentRequiredError) as ei:
+        await svc.parse(text="t", auth_provider="google", auth_subject="s")
+    assert ei.value.http_status == 422
+    assert ei.value.code == "CONSENT_REQUIRED"
+    assert parser.calls == []  # 送信前に遮断(D-14の本体)
+
+
+async def test_parse_proceeds_when_consented():
+    parser = StubParser()
+    svc = IntentParseService(
+        clock=_clock(),
+        parser=parser,
+        user_lookup=_lookup_returning(USER_ID_PARSE),
+        consent_lookup=_consent_lookup_returning(True),
+    )
+    result = await svc.parse(text="t", auth_provider="google", auth_subject="s")
+    assert result.structured_intent.category is not None
+
+
+async def test_parse_without_consent_lookup_keeps_current_behavior():
+    """consent_lookup=None=検査なし(limiter=Noneと同型の無効パターン)。"""
+    parser = StubParser()
+    svc = IntentParseService(
+        clock=_clock(),
+        parser=parser,
+        user_lookup=_lookup_returning(USER_ID_PARSE),
+    )
+    await svc.parse(text="t", auth_provider="google", auth_subject="s")
+    assert len(parser.calls) == 1
+
+
+async def test_parse_unregistered_jwt_skips_consent_check():
+    """未登録JWT(user_lookup=None)は検査せず現行どおり(g1gate資産保護・計画§4-2)。"""
+    parser = StubParser()
+    called = []
+
+    async def lookup(user_id):
+        called.append(user_id)  # 呼ばれたら記録(呼ばれないことが期待)
+        return False
+
+    svc = IntentParseService(
+        clock=_clock(),
+        parser=parser,
+        user_lookup=_lookup_none,
+        consent_lookup=lookup,
+    )
+    result = await svc.parse(text="t", auth_provider="google", auth_subject="s")
+    assert result.structured_intent is not None
+    assert called == []  # 未登録には同意検査を掛けない
+
+
+async def test_parse_consent_lookup_failure_maps_to_503():
+    async def broken(user_id):
+        raise RuntimeError("db down")
+
+    svc = IntentParseService(
+        clock=_clock(),
+        parser=StubParser(),
+        user_lookup=_lookup_returning(USER_ID_PARSE),
+        consent_lookup=broken,
+    )
+    with pytest.raises(DependencyUnavailableError) as ei:
+        await svc.parse(text="t", auth_provider="google", auth_subject="s")
+    assert ei.value.http_status == 503
