@@ -5,6 +5,7 @@ users_router・例外を利用する(design §3.1)。
 """
 
 from latch.users.errors import (
+    ConsentRequiredError,
     DependencyUnavailableError,
     UnderAgeError,
     UserExistsError,
@@ -22,6 +23,7 @@ from latch.users.service import (
 )
 
 __all__ = [
+    "ConsentRequiredError",
     "DependencyUnavailableError",
     "UnderAgeError",
     "UserCreated",
