@@ -197,10 +197,10 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **1262件を約8秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **1300件を約8〜10秒**(`make test`)。フロントエンドも
   **223件を約1秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
 - integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 261件を含め計
-  **1523件**(2026-10-03のM4 ws-1マージ検証で全件グリーンを確認。ci環境の起動を
+  **1561件**(2026-10-03のM4 ws-2マージ検証で全件グリーンを確認。ci環境の起動を
   待つ分、実行には数分かかります)
 
 数秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
@@ -273,7 +273,7 @@ latch/
 | `make ps` | 5サービスの状態一覧。`(healthy)` は健康診断合格の印 |
 | `make logs` | 5サービスのログを流し見る。Ctrl+Cで停止 |
 | `make lint` | コードの書式・静的検査(ruff)。コミット前に緑を確認 |
-| `make test` | unit テスト1262件。約8秒。最もよく使う |
+| `make test` | unit テスト1300件。約8〜10秒。最もよく使う |
 | `make test-ci` | unit+integration。実DB・実Redis・実Pub/Subエミュレータを使う。実行中は常設workerを一時停止し、終わると復帰する(第9章9.8)。終了時には溜まった知らせを掃除してから復帰する(2026-09-30追加) |
 | `make migrate` | DB定義を最新版に更新(Alembic) |
 | `make geo-import` | 鹿児島の地物データをDBへ取り込み(数分) |
@@ -282,6 +282,8 @@ latch/
 | `make g2-gate` | G2日本語評価harness(実APIでJev両経路の判定品質を測定)。`.env` に `LATCH_LLM_MODE=real` と3つの鍵が必要。**引数は `make g2-gate ARGS="--limit 2 --route both"` の形で渡す**(makeの文法上、`--` のあとに書いても渡らない。全520ペアを実行すると$4.75程度の課金になるので、引数を付け忘れないこと) |
 | `make embed-smoke` | Embeddingの実APIスモーク(1呼び出し・約$0.000015)。`.env` に `LATCH_LLM_MODE=real` と `LATCH_GEMINI_API_KEY` が必要(第10章10.4) |
 | `make jev-smoke` | Jevの実APIスモーク(1呼び出し・課金)。`.env` に `LATCH_LLM_MODE=real` と3つの鍵が必要。`FALLBACK=1` でフォールバック側の直接呼び出し(第13章13.8) |
+| `make seed-generate ARGS="--base-datetime 2026-10-04T11:00:00+09:00"` | M4シード(テスト用のIntent300件+ユーザー100人)を決定的に生成。ローカルで完結・DB不要・無料。同一引数での再生成はバイト同一(第26章・Lab 12) |
+| `make seed-verify` | 生成したシードYAMLの機械検査(構造・分布・意図的配置・集計照合・地名)。壊れはFAILの一覧で教えてくれる(第26章・Lab 12) |
 | `make staging-keys` → `make staging-up` | staging環境(本番と同じ構成を小さくした、ciとは別プロジェクトの常設環境)の鍵生成と起動。コンテナ名・データ置き場・ポートがci環境と分かれているため、ci環境には干渉しない(第25章・Lab 11) |
 | `make staging-clock ARGS="show"` | staging環境の共有時計を操作する(ほかに `set <ISO>`・`advance <秒>`)。動いている環境の時計の針を、プロセスの再起動なしに動かす道具(第25章・Lab 11) |
 | `make staging-down` / `make load-up` / `make load-down` | staging環境の停止 / load環境(負荷試験用・stagingと同構成を完全分離)の起動と停止 |
