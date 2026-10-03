@@ -180,6 +180,18 @@ def test_layer1_where_keeps_participants_and_unchanged_pins():
     assert "i.participants_max >= 2" in layer1.LAYER1_WHERE
 
 
+def test_layer1_where_requires_peer_consent():
+    """同意なしユーザーのIntentはpeer抽出対象外(M4 ws-5・08 D-14)。
+
+    HEADに入るためLAYER1_WHERE_BASE(グループPool検索・緩和H再検証)にも
+    効く。peer側のみを検査する(起点側はAPI遮断が担保 — 計画§4-1)。
+    """
+    assert "AND u.consent_at IS NOT NULL" in layer1.LAYER1_WHERE
+    assert "AND u.consent_at IS NOT NULL" in layer1.LAYER1_WHERE_BASE
+    # 検査対象はu(peer側ユーザー)・origin側のユーザー行は条件に現れない
+    assert ":origin" not in layer1.LAYER1_WHERE.split("u.consent_at")[1][:40]
+
+
 # -- candidates.upsert_pair(M2 ws-7・design §2.3) --
 
 _PAIR_KEYS = (

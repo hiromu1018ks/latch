@@ -138,6 +138,8 @@ async def _user(api_client, prefix: str, birth_date: str = "1990-04-01"):
         json={"display_name": "m2ws5", "birth_date": birth_date, "profile": {}},
     )
     assert created.status_code == 201, created.text
+    consented = await api_client.post("/v1/users/me/consent", headers=headers)
+    assert consented.status_code == 200, consented.text
     return headers
 
 

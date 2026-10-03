@@ -34,6 +34,7 @@ _BUDGET_PAIR = """(
 
 # design §2.2: 人数行のみを分離した最小分割。HEAD+ONE_ON_ONE+TAIL は
 # 従来の LAYER1_WHERE とバイト同一(1対1検索の文字列不変・承認事項1)
+# 08 D-14: 同意はマッチング機能の利用条件(M4 ws-5。peer側検査 — 計画§4-1)
 LAYER1_WHERE_HEAD = f"""
     i.status = 'active'
     AND i.embedding IS NOT NULL
@@ -52,6 +53,7 @@ LAYER1_WHERE_HEAD = f"""
             AS double precision))
     AND ({_BUDGET_PAIR} IS NULL
          OR {_BUDGET_PAIR} >= {PAIR_BUDGET_MIN_YEN})
+    AND u.consent_at IS NOT NULL
 """
 ONE_ON_ONE_PARTICIPANTS = """    AND i.participants_min <= 2
     AND i.participants_max >= 2
