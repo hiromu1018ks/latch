@@ -11,7 +11,7 @@
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **ws-1(staging・load環境構築)の設計から着手**(M4単位表承認済み2026-10-03・実行waveはM4単位表参照。G3繰越2件=02#13〜#23 staging再実行〔ws-3〕・FCM実機送信〔ws-9・資材待ち〕をM4内で回収。M2繰越のD-16上限試験はws-7)。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
+- 次の着手: **ws-2の実装継続(地名7地点差し替え裁定の反映中)→検証・マージ**。その次のwave2(ws-3∥ws-5)着手は**ユーザーGoサイン待ち**(M3 ws-6∥ws-7と同型)。G3繰越2件=02#13〜#23 staging再実行〔ws-3〕・FCM実機送信〔ws-9・資材待ち〕をM4内で回収。M2繰越のD-16上限試験はws-7。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -31,7 +31,7 @@
 
 | 単位 | 内容 | 出典(12) | 依存 | 状態 |
 |---|---|---|---|---|
-| ws-1 | staging・load環境構築: composeプロファイル分離(staging=縮小API1〜2/Worker0〜2・load=隔離)・Clock制御注入(10 §1の6適用範囲)・疑似イベントパブリッシャー(Event 5種+embedding_completed手動発火)・staging鍵ペア/JWT発行ツールはM0資産再利用・既知欠陥(compose workerのLATCH_DATABASE_URL不在)解消 | M4-1 / 10 §1 | — | 未着手 |
+| ws-1 | staging・load環境構築: composeプロファイル分離(staging=縮小API1〜2/Worker0〜2・load=隔離)・Clock制御注入(10 §1の6適用範囲)・疑似イベントパブリッシャー(Event 5種+embedding_completed手動発火)・staging鍵ペア/JWT発行ツールはM0資産再利用・既知欠陥(compose workerのLATCH_DATABASE_URL不在)解消 | M4-1 / 10 §1 | — | 完了 |
 | ws-2 | 共有テスト資産: シードIntent 200〜300件生成(10 §2の分布=時間帯・カテゴリ・人数志向・18〜19歳含む・自己重複検出の意図的配置)+期待値表・既存3資産(評価ペア520・飲酒36・Parser35)との関係整理・docs/testassets/でバージョン管理 | M4-2 / 10 §2・09 §4 | — | 未着手 |
 | ws-3 | 機能試験27項目のstagingフル実行: staging振り分け項目(#5スモーク・#6〜#13・#15〜#19・#26)の自動化ハーネス・配置ケース(自己ペア除外・自己重複集合・部分YES・通知順序)・**G3繰越の02#13〜#23 staging再実行を回収**・ci分はtest-ci常設で緑維持 | M4-3 / 10 §3・02 §4 | ws-1・ws-2 | 未着手 |
 | ws-4 | Observability: 計測3群(パイプライン/Jev/提案と行動)のメトリクス実装+アクセス系基本計測(**POST /v1/sessions新設**)・ダッシュボード定義・MLR日次/週次集計(latch_status_eventsから)・09 §2.2のKPI導出 | M4-5 / 09 §2.1〜2.2・04 §7 | 実装は独立・稼働確認はws-1後 | 未着手 |
@@ -419,6 +419,14 @@
 
 - M4開始 / 2026-10-03ユーザー単位表承認(ws-1〜ws-9)+運用指示(起動モデル: main=Opus・agent1〜4=Sonnet)。設計前提=staging/load/ダッシュボードはローカルdocker compose別プロジェクト(計測はOSSツールで代替)・LLM試験はスタブ+レイテンシ注入で実課金ゼロ。G3繰越(staging再実行=ws-3・FCM実機送信=ws-9資材待ち)とM2繰越(D-16上限試験=ws-7)の回収先を確定
 - docs/interview/(面接説明原稿3ファイル)をgit管理外へ(.gitignore追記・マージ 426b00a・ユーザー指示)
+- ws-1 / 設計 f3ea653(supervisor承認: design §5の5件=①別ファイル+別プロジェクト〔latch-staging/latch-load・単位表「composeプロファイル分離」はこの実現方式と確定〕②nginx:alpine前段〔10 §4.3可用性試験の入口1つ+api2台構成・04本番LBとの対応=模倣3点/非模倣3点をdesignに明記〕③ダッシュボードの器はws-4が追加〔ws-1は後追加しやすさのみ保証〕④負荷試験中のci一時停止運用⑤既知欠陥LATCH_DATABASE_URLは9268a73で修正済み→「再発防止YAMLアンカー+worker実稼働確認」へ組み替え。QUESTIONS 4件はいずれもdocs根拠内の実装・運用解釈としてsupervisor裁定)/ 2026-10-03
+- ws-1 / 計画 e1eabca(1,996行・Task 1〜9・実コード全文。機械チェック合格: basename一意〔新規4ファイル既存と衝突なし〕・既存試験影響の事前特定〔test_settings・test_worker・test_app_health・arch test・主張をsupervisorが実コード突合〕・DB干渉なし〔マイグレーション追加なし・独立DB〕。Review Focus 5点=Redis障害時の静かな実時間化・naive ISO8601の9時間ずれ・raw-payload二重発行・testkeys片側差し替え・worker env欠落再発)/ 2026-10-03実装着手(worktree wE・a3-ws1)
+- ws-1 / マージ 165242e(実装はf4acf65まで・10コミット)/ docs/plans/M4/ws-1-report.md / 2026-10-03
+  - 実装中BLOCKED 1件(計画書内部矛盾): settingsへauth_testkeys_dir追加がtest_auth_settings.py::test_auth_settings_are_exactly_eight_fields(auth_*集合一致の機械検査)と衝突 → supervisor裁定・案A(期待集合へ1行追記の機械的追従・M1 ws-5/M2 ws-2と同型)。あわせて「同種は機械的追従なら実装継続可・期待値の意味変更時のみBLOCKED」と運用改善
+  - agent3実装(裁定込み36分38秒)。逸脱記録は誠実(docstringのE501・**arch testのFORBIDDEN_TOKENSにdocstringの説明文自体がヒット**・手順4のClock advanceでアクセストークン期限切れ401=Clock追随の副次立証・compose config出力形式への検証コマンド読み替え)
+  - スーパーバイザー独立検証: worktree lint緑・**unit 1262 passed**(1219+43=計画期待値)・basename一意・ci無変更(compose.yaml・docker/postgres・alembic・依存・.env.example)・Makefile追記のみ(.PHONY行更新=計画許可分)・diff 20ファイル=§4+裁定1件どおり。**マージ後main test-ci 1523 passed**(=1480+43・api/worker再ビルド後・2回実行〔1回目exit 0・2回目1523 passed 468.91秒〕)
+  - staging受け入れをsupervisorが独立再実行: staging-up 8サービス・nginx/health・staging鍵→token交換→users登録201・**Clock set/advance/戻しにserver_timeが全追従**(Redis共有ControlledClockの実証)・staging-down後もci常設稼働継続(隔離実証)。手順中の401/422はsupervisor側のリクエスト形式ミス(トークン交換省略・display_name欠落)で実装欠陥なし
+  - 環境メモ: .staging/keysはチェックアウト毎に生成(git管理外・worktreeとmainで別実体。staging/loadのボリュームはプロジェクト名単位で共用)
 
 ## G2判定資料(2026-09-30・承認済み)
 
@@ -460,6 +468,7 @@
 3. マージ済みmainでのtest-ci実行がスキーマ状態の唯一の真実。worktreeでのDB状態は検証途中の経過とみなす
 4. make test-ci(compose up)はapiイメージを再ビルドしない(compose.yamlのapiはbuild型・ソースマウントなし)。コード変更後の検証では docker compose build api が先行必須(M1 ws-1で確定。各計画書の報告形式に検証手順として明記)
 5. backend/testsは__init__.pyなし(pytest prepend import mode)のため、テストファイルのbasenameはtests配下全体で一意にすること。並走単位のマージ時は `find backend/tests -name "test_*.py" | awk -F/ '{print $NF}' | sort | uniq -d` が空であることを確認(個別worktreeでは検出できない・M1 ws-2マージで実際に発生)
+6. 負荷試験(ws-6/ws-7)の測定中はci常設環境を一時停止する(make down/up・ボリューム保持。M4 ws-1設計A4・2026-10-03承認)。同一ホストのCPU/ディスク競合が性能測定(p95絶対値合格)へノイズを乗せるため。手順=ci停止→load環境で試験→load-down→ci復帰。staging/loadは独立プロジェクト(latch-staging/latch-load・独立ボリューム・18000/28000系ポート)のため通常時の共存は可(ws-1受け入れ7/8で実証済み)
 
 ## ゲート承認
 
