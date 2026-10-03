@@ -197,10 +197,10 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **1219件を約7〜8秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **1262件を約8秒**(`make test`)。フロントエンドも
   **223件を約1秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
-- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 260件を含め計
-  **1480件**(2026-10-02のM3 m3-g3fixマージ検証で全件グリーンを確認。ci環境の起動を
+- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 261件を含め計
+  **1523件**(2026-10-03のM4 ws-1マージ検証で全件グリーンを確認。ci環境の起動を
   待つ分、実行には数分かかります)
 
 数秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
@@ -273,7 +273,7 @@ latch/
 | `make ps` | 5サービスの状態一覧。`(healthy)` は健康診断合格の印 |
 | `make logs` | 5サービスのログを流し見る。Ctrl+Cで停止 |
 | `make lint` | コードの書式・静的検査(ruff)。コミット前に緑を確認 |
-| `make test` | unit テスト1219件。約7〜8秒。最もよく使う |
+| `make test` | unit テスト1262件。約8秒。最もよく使う |
 | `make test-ci` | unit+integration。実DB・実Redis・実Pub/Subエミュレータを使う。実行中は常設workerを一時停止し、終わると復帰する(第9章9.8)。終了時には溜まった知らせを掃除してから復帰する(2026-09-30追加) |
 | `make migrate` | DB定義を最新版に更新(Alembic) |
 | `make geo-import` | 鹿児島の地物データをDBへ取り込み(数分) |
@@ -282,6 +282,9 @@ latch/
 | `make g2-gate` | G2日本語評価harness(実APIでJev両経路の判定品質を測定)。`.env` に `LATCH_LLM_MODE=real` と3つの鍵が必要。**引数は `make g2-gate ARGS="--limit 2 --route both"` の形で渡す**(makeの文法上、`--` のあとに書いても渡らない。全520ペアを実行すると$4.75程度の課金になるので、引数を付け忘れないこと) |
 | `make embed-smoke` | Embeddingの実APIスモーク(1呼び出し・約$0.000015)。`.env` に `LATCH_LLM_MODE=real` と `LATCH_GEMINI_API_KEY` が必要(第10章10.4) |
 | `make jev-smoke` | Jevの実APIスモーク(1呼び出し・課金)。`.env` に `LATCH_LLM_MODE=real` と3つの鍵が必要。`FALLBACK=1` でフォールバック側の直接呼び出し(第13章13.8) |
+| `make staging-keys` → `make staging-up` | staging環境(本番と同じ構成を小さくした、ciとは別プロジェクトの常設環境)の鍵生成と起動。コンテナ名・データ置き場・ポートがci環境と分かれているため、ci環境には干渉しない(第25章・Lab 11) |
+| `make staging-clock ARGS="show"` | staging環境の共有時計を操作する(ほかに `set <ISO>`・`advance <秒>`)。動いている環境の時計の針を、プロセスの再起動なしに動かす道具(第25章・Lab 11) |
+| `make staging-down` / `make load-up` / `make load-down` | staging環境の停止 / load環境(負荷試験用・stagingと同構成を完全分離)の起動と停止 |
 | `cd frontend && npm install` | フロントエンドの依存を導入。初回と、`package.json` が変わった後に実行 |
 | `cd frontend && npm run dev` | 画面の開発サーバーを起動(http://localhost:5173/)。`/v1` をapiへ転送する |
 | `cd frontend && npm test` | フロントエンドのunit テスト223件。約1秒 |
@@ -343,7 +346,7 @@ LATCHの実装は、人間が仕様を決め、AIエージェントが設計・�
 1. `curl http://127.0.0.1:8000/health` の各部分(`GET`、`/health`、`200`、本文)を、この章の用語で説明してください
 2. 「私の環境では動く」問題に対して、Dockerとuvはそれぞれどこを解決していますか
 3. PostgreSQLとRedisの使い分けを「金庫と付箋」以外の自分の言葉で説明してください
-4. `make test` が2秒で終わることは、開発においてどんな価値がありますか
+4. `make test` が約8秒で終わることは、開発においてどんな価値がありますか
 5. コードを読んでいて「なぜこのような設計?」と思ったとき、このリポジトリではどこをまず調べますか
 
 (解答例は用意していません。自分の言葉で答えられたら合格です。答えに詰まった部分が、読み返すべき節です)
