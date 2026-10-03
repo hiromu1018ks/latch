@@ -11,7 +11,7 @@
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **ws-3実装中**(wave2・2026-10-03ユーザーGoサイン受領・ws-5は同日完了=設計bb6194c・計画c2de6fe・マージ18a6d88+fix 153ec50・test-ci 1596 passed。実装順序はws-5先の直列化裁定どおり)。G3繰越2件=02#13〜#23 staging再実行〔ws-3〕・FCM実機送信〔ws-9・資材待ち〕をM4内で回収。M2繰越のD-16上限試験はws-7。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
+- 次の着手: **ws-4(Observability)の設計着手はユーザーGoサイン待ち**(wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・test-ci 1604・G3繰越02#13〜#23回収済み。ws-5=マージ18a6d88+153ec50・1596)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -33,7 +33,7 @@
 |---|---|---|---|---|
 | ws-1 | staging・load環境構築: composeプロファイル分離(staging=縮小API1〜2/Worker0〜2・load=隔離)・Clock制御注入(10 §1の6適用範囲)・疑似イベントパブリッシャー(Event 5種+embedding_completed手動発火)・staging鍵ペア/JWT発行ツールはM0資産再利用・既知欠陥(compose workerのLATCH_DATABASE_URL不在)解消 | M4-1 / 10 §1 | — | 完了 |
 | ws-2 | 共有テスト資産: シードIntent 200〜300件生成(10 §2の分布=時間帯・カテゴリ・人数志向・18〜19歳含む・自己重複検出の意図的配置)+期待値表・既存3資産(評価ペア520・飲酒36・Parser35)との関係整理・docs/testassets/でバージョン管理 | M4-2 / 10 §2・09 §4 | — | 完了 |
-| ws-3 | 機能試験27項目のstagingフル実行: staging振り分け項目(#5スモーク・#6〜#13・#15〜#19・#26)の自動化ハーネス・配置ケース(自己ペア除外・自己重複集合・部分YES・通知順序)・**G3繰越の02#13〜#23 staging再実行を回収**・ci分はtest-ci常設で緑維持 | M4-3 / 10 §3・02 §4 | ws-1・ws-2 | 未着手 |
+| ws-3 | 機能試験27項目のstagingフル実行: staging振り分け項目(#5スモーク・#6〜#13・#15〜#19・#26)の自動化ハーネス・配置ケース(自己ペア除外・自己重複集合・部分YES・通知順序)・**G3繰越の02#13〜#23 staging再実行を回収**・ci分はtest-ci常設で緑維持 | M4-3 / 10 §3・02 §4 | ws-1・ws-2 | 完了 |
 | ws-4 | Observability: 計測3群(パイプライン/Jev/提案と行動)のメトリクス実装+アクセス系基本計測(**POST /v1/sessions新設**)・ダッシュボード定義・MLR日次/週次集計(latch_status_eventsから)・09 §2.2のKPI導出 | M4-5 / 09 §2.1〜2.2・04 §7 | 実装は独立・稼働確認はws-1後 | 未着手 |
 | ws-5 | 告知・同意フロー+ログ許可リスト: オンボーディング同意のUI+API(同意記録・マッチング利用条件化)・設定画面からの再確認・構造化ログの許可リストSerializer(列挙型固定・raw_text/geo/constraints不許可) | M4-6 / 08 D-14・§2.4・§3 | — | 完了 |
 | ws-6 | load負荷試験+総当たり検出: 負荷ツール(Intent保存50rps・Event 100evt/sバースト)・レイテンシ注入(Parser p50 1s/p95 2.5s・Jev p50 2s/p95 5s=スタブで実運用模擬)・性能5目標測定(層別予算トレース分離)・総当たり検出(Active 1万→5万→10万・Vector件数K_v=50以内安定) | M4-4 / 10 §4.1〜4.2 | ws-1〜ws-3・ws-4(測定基盤前提) | 未着手 |
@@ -444,6 +444,16 @@
   - G4証拠(10 §5): ②許可リスト機械検査=unit常設で5 passed(2026-10-03実行記録)。①同意フローのstaging手順観察=ws-3のS0が同意APIを叩くため自然カバー。③llm.sendログのサンプル照合はstaging(ws-3)で実施
   - 引継ぎ(ws-3向け): ciのapiコンテナログにはlatch.llm.send行が観測されなかった(parse実行2341回中・原因は未調査: 経路かロギング設定か)。stagingでllm.sendを観察する計画がある場合はまず1件投げて出力を確認すること
 - 学習資産追従: ws-5分 c38f792(第27章『使っていい条件と出していい条件を、形で固定する: 同意とログ許可リスト』+Lab 13〔同意をcurlで一巡: 422×2→draft 201→同意→active化・psql列確認・番人試験24件まで全手順ci実行検証〕新設・既存10ファイル更新〔README順路・00-environment〔1327/1596/233〕・第11章Layer1の9条件化・第5/6章・第20/23章・Lab 10〕。agent4がmake test 1327・npm test 233・natural-japanese lint 12ファイル収束・DB残存掃除を確認)
+- ws-3 / 設計 07a565e(supervisor承認6件=pytestスイート方式〔staging_tests・testpaths外〕・stub Jev判定値固定経路〔noul0.90/score3.6・既定値=現行定数でci不変〕・シナリオ対応表・#27読み〔動作面=staging D-10・精度ゲート=ci資産〕・観測経路3種・tick60秒維持。**embedding=案Aスタブは2026-10-03ユーザーコスト承認**) / 2026-10-03
+- ws-3 / 計画 6cd2c6a(2,900行・Task 1〜10・実コード全文。機械チェック合格: basename一意〔test_sN_*接頭辞〕・llm_*9→11項目ピン追随〔test_llm_factory 86行/LLM_ENV_VARS 22行とも実在確認〕・head=0007読み替え・ws-5スコープ分離を禁止節へ明記)/ 2026-10-03
+- ws-3 / マージ 0b1e3a6(設計07a565e・計画6cd2c6a・実装はe157360まで・7コミット+supervisor fix 98d044f・04de147)/ docs/plans/M4/ws-3-report.md(+証拠 docs/testassets/results/ws3-staging-result-20261003-231505.yaml)/ 2026-10-03
+  - agent3実装(4h44m・**7回のフル実行〔staging-resetからの完全やり直し〕で34試験全グリーンに収束**・599秒/run)。実装意味論への適応23件はすべて報告書に記録(検査の緩化でなく契約適合: L1の2経路・deadline=提案+2h以内・グループは3人組のみ・Poolは30分Bucket分割・embedding競合へのcreated再発行・sweeper batch排水600秒待ち等)
+  - **途中BLOCKED 1件(シード15件=18-19歳×drinking×alcohol falseがmapping.py:123のdrinking⇒alcohol強制で422・seed-verifyはYAML内整合のみで検出不能)** → supervisor裁定A(シード生成器修正: 若年×drinking配分撤去・8名は維持・300件規模不変・EX-004/005のD-10構成は20歳以上飲酒×18-19歳非飲酒で正当化)。計画§6禁止の解除とともに実装継続
+  - supervisor直接修正2件(いずれもmain側・ws-3実装外): 98d044f(ws-5スコープ2ファイルのruff format落ち=ws-5検証時のformat --check見落とし)・04de147(test_3修正コメントのE501)
+  - スーパーバイザー独立検証: worktree unit 1335 passed・変更ファイルlint緑・basename一意・**証拠YAML items全pass(02#IDつき)・裁定A反映確認(birth_dateから年齢再計算で若年×drinking 0件)**・**マージ後main test-ci 1604 passed**(exit 0明示・6:39)・lint全体緑(304 files)・head=0007不変・依存追加なし
+  - **G3繰越02#13〜#23のstaging再実行を回収**(証拠YAML+報告書対応表)・MLR最終496/2=0.004・D-08保留超え84件→JST0時跨ぎ昇格23件を実測
+  - staging運用の発見(報告書): staging-resetにイメージbuild不含(明示build必須)・api再作成後はnginx再起動必須(upstream IPキャッシュ)・**latch.llm.sendはworkerログで観測可能**〔ws-5引継ぎの回答: embedding 359行・jev 832行〕
+  - staging環境はdown済み(次回利用時はstaging-resetから)
 
 ## G2判定資料(2026-09-30・承認済み)
 
