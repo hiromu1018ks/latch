@@ -6,6 +6,7 @@ import asyncio
 import logging
 import signal
 
+from latch.core.clock import make_clock
 from latch.settings import Settings
 from latch.worker.main import Worker
 
@@ -16,7 +17,7 @@ def main() -> None:
         level=getattr(logging, settings.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    worker = Worker(settings=settings)
+    worker = Worker(settings=settings, clock=make_clock(settings))
 
     async def run() -> None:
         loop = asyncio.get_running_loop()

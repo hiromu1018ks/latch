@@ -136,3 +136,13 @@ class Settings(BaseSettings):
     push_mode: str = "stub"
     # スタブの遅延注入ms(10 第1節レイテンシ注入・llm_stub_delay_*と同型)
     push_stub_delay_ms: int = 0
+
+    # --- staging/loadのテスト注入経路(M4 ws-1・design §2.2/§2.4)---
+    # "system": SystemClock(既定・ciはこのまま) / "controlled": Redis基準の
+    # 共有制御Clock(latch:clock:control・staging/load composeで設定)。
+    # 未実装値の指定はmake_clockがValueError(push_modeと同一のfail-fast)
+    clock_mode: str = "system"
+    # staging専用テスト鍵ペアのディレクトリ(idp_test_private.pem /
+    # idp_test_jwks.json)。空=同梱ディレクトリ(ci既定・無影響)。発行側
+    # (issue-idp-token)と検証側(JWKS)が同一値を見る(auth/testkeys/_keys_dir)
+    auth_testkeys_dir: str = ""

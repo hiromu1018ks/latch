@@ -42,3 +42,6 @@ skills-lock.json
 
 # Interview drafts (面接説明用原稿・git管理外)
 docs/interview/
+
+# staging/load環境の鍵ペア(M4 ws-1・gen-keypairの出力先)
+.staging/
