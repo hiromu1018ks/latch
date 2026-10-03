@@ -454,6 +454,7 @@
   - **G3繰越02#13〜#23のstaging再実行を回収**(証拠YAML+報告書対応表)・MLR最終496/2=0.004・D-08保留超え84件→JST0時跨ぎ昇格23件を実測
   - staging運用の発見(報告書): staging-resetにイメージbuild不含(明示build必須)・api再作成後はnginx再起動必須(upstream IPキャッシュ)・**latch.llm.sendはworkerログで観測可能**〔ws-5引継ぎの回答: embedding 359行・jev 832行〕
   - staging環境はdown済み(次回利用時はstaging-resetから)
+- 学習資産追従: ws-3分 e17715d(第28章『常設世界で約束全体を証明する: stagingフル実行ハーネス』+Lab 14〔staging-reset→シード→34試験→証拠YAML→片付けの一巡・期待される出力はすべて当日実測〕新設・既存6ファイル更新〔README順路・00-environment〔1335/1604/staging 34〕・第24章のLab再候補回収・第26章裁定A追従・Lab 11/12〕。agent4がstaging一巡34 passed 9分58秒・make test 1335・lint 8ファイル収束・環境返却を確認。追加発見: staging-reset直後のfresh起動ならnginx再起動不要〔apiだけ作り変えた場合のみ必要〕)
 
 ## G2判定資料(2026-09-30・承認済み)
 
