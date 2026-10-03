@@ -9,6 +9,7 @@ fixtureを使わない — pytest-asyncioのloop scope結合を避ける)。
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import asyncpg
@@ -80,6 +81,13 @@ async def api():
 @pytest.fixture
 async def db():
     conn = await asyncpg.connect(DSN)
+    # asyncpgはjsonbをstrで返す(コードベース規約: worker/matching/layer3.py
+    # 「jsonb列はstrで返りうるためjson.loadsで解釈する」)。検査コードは
+    # dict/listとして読むためクライアント側codecで解く(サーバ側の変更なし・
+    # SELECT専用の規律は不変 — 計画コードからの適応・報告書に記録)
+    await conn.set_type_codec(
+        "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
+    )
     await conn.execute("SET default_transaction_read_only = on")
     try:
         yield conn
@@ -104,10 +112,34 @@ async def get_clock() -> ControlledClock:
     return _clock
 
 
+_tokens: dict[str, str] = {}
+
+
 def issue_token(subject: str) -> str:
-    """staging鍵でシード/シナリオユーザーのJWTを発行する(ws-1と同一経路)。"""
+    """staging鍵でIdP JWTを発行し/v1/auth/tokenでaccess_tokenへ交換する。
+
+    保護エンドポイントのBearerはアクセストークン(HS256・auth/service.
+    authenticate)でありIdP JWT(RS256)は直接使えないため、ws-1と同一の
+    交換経路(POST /v1/auth/token)を踏む(計画コードからの適応・報告書に
+    記録)。交換はユーザー行を作らない(profile_completeはUser行の存在から
+    導出のみ)ためシード投入と干渉しない。access tokenはsubject毎にキャッシュ
+    (TTL=ACCESS_TTL_S・フル実行45分目標に対して十分)。
+    """
+    cached = _tokens.get(subject)
+    if cached:
+        return cached
     pem = (KEYS_DIR / "idp_test_private.pem").read_bytes()
-    return issue_idp_token(provider="google", subject=subject, private_key_pem=pem)
+    idp_token = issue_idp_token(provider="google", subject=subject, private_key_pem=pem)
+    r = httpx.post(
+        f"{API_BASE}/v1/auth/token",
+        json={"provider": "google", "idp_token": idp_token},
+        timeout=30.0,
+    )
+    if r.status_code != 200:
+        raise AssertionError(f"auth/token交換失敗 {subject}: {r.status_code} {r.text}")
+    token = r.json()["access_token"]
+    _tokens[subject] = token
+    return token
 
 
 def auth_header(subject: str) -> dict[str, str]:
