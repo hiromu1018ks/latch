@@ -24,6 +24,8 @@ LLM_ENV_VARS = (
     "LATCH_LLM_STUB_DELAY_PARSER_MS",
     "LATCH_LLM_STUB_DELAY_EMBEDDING_MS",
     "LATCH_LLM_STUB_DELAY_JEV_MS",
+    "LATCH_LLM_STUB_JEV_NOUL",
+    "LATCH_LLM_STUB_JEV_SCORE",
     "LATCH_ANTHROPIC_API_KEY",
     "LATCH_ANTHROPIC_BASE_URL",
     "LATCH_TYPESAFE_API_KEY",
@@ -52,6 +54,8 @@ def test_llm_settings_defaults(monkeypatch):
     assert s.llm_stub_delay_parser_ms == 0
     assert s.llm_stub_delay_embedding_ms == 0
     assert s.llm_stub_delay_jev_ms == 0
+    assert s.llm_stub_jev_noul == 0.5  # M4 ws-3(10 §3 stub判定値固定)
+    assert s.llm_stub_jev_score == 2.0
 
 
 def test_llm_settings_env_override(monkeypatch):
@@ -83,12 +87,13 @@ def test_llm_settings_env_reads_anthropic_base_url(monkeypatch):
     assert s.llm_anthropic_base_url == "https://proxy.example/api"
 
 
-def test_llm_settings_are_exactly_nine_fields(monkeypatch):
+def test_llm_settings_are_exactly_eleven_fields(monkeypatch):
     # Review Focus #5: timeout・failフラグのenv経路を作らない(design §2.4・§2.6)。
-    # LLM系設定はこの9項目のみであることを機械検査する(base_urlはdesign §3.2の
+    # LLM系設定はこの11項目のみであることを機械検査する(base_urlはdesign §3.2の
     # supervisor承認済み拡張・ws-6のANTHROPIC_BASE_URL汚染対策。
     # gemini_api_keyはM2 ws-2のsupervisor許可による追従 — 期待値1項目追加のみ。
-    # typesafe_api_key/base_urlはM2 ws-5の機械的追随(supervisor承認事項))。
+    # typesafe_api_key/base_urlはM2 ws-5の機械的追随(supervisor承認事項)。
+    # llm_stub_jev_noul/scoreはM4 ws-3(10 §3 stub判定値固定)の機械的追随)。
     _clean_settings(monkeypatch)
     llm_fields = {f for f in Settings.model_fields if f.startswith("llm_")}
     assert llm_fields == {
@@ -101,6 +106,8 @@ def test_llm_settings_are_exactly_nine_fields(monkeypatch):
         "llm_stub_delay_parser_ms",
         "llm_stub_delay_embedding_ms",
         "llm_stub_delay_jev_ms",
+        "llm_stub_jev_noul",
+        "llm_stub_jev_score",
     }
 
 

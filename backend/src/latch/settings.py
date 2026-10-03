@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     llm_stub_delay_parser_ms: int = 0
     llm_stub_delay_embedding_ms: int = 0
     llm_stub_delay_jev_ms: int = 0
+    # stub Jev判定値の固定(10 §3「Jevスタブで双方向判定値を固定」・M4 ws-3)。
+    # noul=would_a/would_b/latent_yesの3キー共通値・score=4軸(purpose/mood/
+    # timing/social)共通値。既定=stub.py DEFAULT_JEV_RESPONSEの定数と同一
+    # (ci/test-ci挙動不変・回帰ピンはtest_llm_stub_response_settings.py)。
+    # confidence(0.5)・model・usageはstub定数のまま・env出し分け経路は作らない
+    llm_stub_jev_noul: float = 0.5
+    llm_stub_jev_score: float = 2.0
 
     # --- 認証(ws-3。design §2.5)---
     redis_url: str = "redis://127.0.0.1:6379/0"
