@@ -24,7 +24,7 @@ from latch.auth.errors import AuthError
 from latch.auth.routes import logout_router, public_router
 from latch.auth.service import build_auth_service, make_user_lookup
 from latch.auth.sessions import SessionStore
-from latch.core.clock import Clock, SystemClock
+from latch.core.clock import Clock, make_clock
 from latch.core.db import create_db_engine
 from latch.core.deps import get_clock
 from latch.events import FallbackRelay, make_event_bus
@@ -216,8 +216,8 @@ def create_app(
     safety_service=None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
-    app.state.clock = clock if clock is not None else SystemClock()
     app.state.settings = settings if settings is not None else Settings()
+    app.state.clock = clock if clock is not None else make_clock(app.state.settings)
     if auth_service is not None:
         app.state.auth_service = auth_service
     if users_service is not None:
