@@ -156,6 +156,31 @@ def judge_pair(
     return False, reasons[0]  # 優先順位第一のみを記録(D2)
 
 
+def judge_pair_group(
+    a: dict,
+    b: dict,
+    *,
+    users: dict[str, dict],
+    now: datetime,
+) -> tuple[bool, str | None]:
+    """集合クラスタ(EX-025〜028)の相互成立性判定(people条件を除く)。
+
+    people(2∈[min,max]双方)は1対1検索固有の条件のため除外する — 集合検索
+    (group_candidates・起点max≧3)は判定対象外であり、クラスタの人数要件は
+    verifyのall_min_ge_3構成検査が担保する(D9・ws-2-plan §2.0)。
+    people以外の条件はjudge_pairと同一基準(優先順位第一のみ記録・D2)。
+    """
+    canonical: frozenset[tuple[str, str]] = frozenset()
+    reasons = [
+        r
+        for r in _fail_reasons(a, b, users=users, now=now, blocks=canonical)
+        if r != "people"
+    ]
+    if not reasons:
+        return True, None
+    return False, reasons[0]
+
+
 def judge_all(
     intents: list[dict],
     users: dict[str, dict],

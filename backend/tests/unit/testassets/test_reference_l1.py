@@ -13,6 +13,7 @@ from latch.testassets.reference_l1 import (
     age_years_at,
     judge_all,
     judge_pair,
+    judge_pair_group,
 )
 
 BASE = datetime(2026, 10, 4, 11, 0, tzinfo=JST)
@@ -229,3 +230,49 @@ def test_age_years_at_matches_full_age():
     """満年齢(誕生日前は-1)。users.service.age_yearsと同一規則。"""
     assert age_years_at(date(2006, 10, 4), date(2026, 10, 4)) == 20
     assert age_years_at(date(2006, 10, 5), date(2026, 10, 4)) == 19
+
+
+# --- 6. 集合クラスタ用判定(D9・people条件を除く。ws-2-plan固定コードからの逸脱) ---
+
+
+def test_group_judgement_ignores_people_only():
+    """min≧3同士は1対1基準のpeopleで落とさない(D9: 集合検索は判定対象外)。
+
+    judge_pairはpeopleでfailする一方、judge_pair_groupはpeople以外の条件が
+    全て通ればpassする。人数要件そのものはverifyのall_min_ge_3構成検査が担保。
+    """
+    a = _intent("SD-001", "SU-001", pmin=3, pmax=4)
+    b = _intent("SD-002", "SU-002", pmin=3, pmax=4, start="2026-10-05T20:30")
+    assert judge_pair(a, b, users=_users(30, 28), now=BASE) == (False, "people")
+    assert judge_pair_group(a, b, users=_users(30, 28), now=BASE) == (True, None)
+
+
+def test_group_judgement_still_catches_other_reasons():
+    """people以外の条件(time0・budget等)は通常どおり検出する。"""
+    a = _intent("SD-001", "SU-001", pmin=3, pmax=4, budget=400)
+    b = _intent("SD-002", "SU-002", pmin=3, pmax=4, start="2026-10-05T20:30")
+    assert judge_pair_group(a, b, users=_users(30, 28), now=BASE) == (
+        False,
+        "budgetmin",
+    )
+    c = _intent(
+        "SD-003",
+        "SU-003",
+        pmin=3,
+        pmax=4,
+        start="2026-10-05T10:00",
+        end="2026-10-05T11:00",
+        alc=False,
+        budget=None,
+    )
+    d = _intent(
+        "SD-004",
+        "SU-004",
+        pmin=3,
+        pmax=4,
+        start="2026-10-05T15:00",
+        end="2026-10-05T16:00",
+        alc=False,
+        budget=None,
+    )
+    assert judge_pair_group(c, d, users=_users(30, 28), now=BASE) == (False, "time0")
