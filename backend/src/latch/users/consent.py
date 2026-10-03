@@ -148,11 +148,7 @@ def make_consent_service(*, clock: Clock, engine: AsyncEngine) -> ConsentService
     async def consented(user_id: uuid.UUID) -> bool:
         async with engine.connect() as conn:
             return bool(
-                (
-                    await conn.execute(
-                        _SELECT_CONSENTED, {"user_id": user_id}
-                    )
-                ).scalar()
+                (await conn.execute(_SELECT_CONSENTED, {"user_id": user_id})).scalar()
             )
 
     return ConsentService(

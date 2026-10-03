@@ -794,9 +794,7 @@ async def test_patch_category_change_to_drinking_under_age_rejected():
     row = _row(status="active", category_primary="meal", alcohol_involved=False)
     svc19, _, _, _, _ = _service(
         store=StubStore(
-            user_row=UserRow(
-                id=USER_ID, birth_date=date(2006, 9, 28), consent_at=NOW
-            ),
+            user_row=UserRow(id=USER_ID, birth_date=date(2006, 9, 28), consent_at=NOW),
             rows={row.id: row},
         )
     )
