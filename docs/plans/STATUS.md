@@ -11,7 +11,7 @@
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **ws-2の実装継続(地名7地点差し替え裁定の反映中)→検証・マージ**。その次のwave2(ws-3∥ws-5)着手は**ユーザーGoサイン待ち**(M3 ws-6∥ws-7と同型)。G3繰越2件=02#13〜#23 staging再実行〔ws-3〕・FCM実機送信〔ws-9・資材待ち〕をM4内で回収。M2繰越のD-16上限試験はws-7。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
+- 次の着手: **wave2(ws-3∥ws-5)着手はユーザーGoサイン待ち**(M3 ws-6∥ws-7と同型。ws-1・ws-2は完了)。G3繰越2件=02#13〜#23 staging再実行〔ws-3〕・FCM実機送信〔ws-9・資材待ち〕をM4内で回収。M2繰越のD-16上限試験はws-7。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -32,7 +32,7 @@
 | 単位 | 内容 | 出典(12) | 依存 | 状態 |
 |---|---|---|---|---|
 | ws-1 | staging・load環境構築: composeプロファイル分離(staging=縮小API1〜2/Worker0〜2・load=隔離)・Clock制御注入(10 §1の6適用範囲)・疑似イベントパブリッシャー(Event 5種+embedding_completed手動発火)・staging鍵ペア/JWT発行ツールはM0資産再利用・既知欠陥(compose workerのLATCH_DATABASE_URL不在)解消 | M4-1 / 10 §1 | — | 完了 |
-| ws-2 | 共有テスト資産: シードIntent 200〜300件生成(10 §2の分布=時間帯・カテゴリ・人数志向・18〜19歳含む・自己重複検出の意図的配置)+期待値表・既存3資産(評価ペア520・飲酒36・Parser35)との関係整理・docs/testassets/でバージョン管理 | M4-2 / 10 §2・09 §4 | — | 未着手 |
+| ws-2 | 共有テスト資産: シードIntent 200〜300件生成(10 §2の分布=時間帯・カテゴリ・人数志向・18〜19歳含む・自己重複検出の意図的配置)+期待値表・既存3資産(評価ペア520・飲酒36・Parser35)との関係整理・docs/testassets/でバージョン管理 | M4-2 / 10 §2・09 §4 | — | 完了 |
 | ws-3 | 機能試験27項目のstagingフル実行: staging振り分け項目(#5スモーク・#6〜#13・#15〜#19・#26)の自動化ハーネス・配置ケース(自己ペア除外・自己重複集合・部分YES・通知順序)・**G3繰越の02#13〜#23 staging再実行を回収**・ci分はtest-ci常設で緑維持 | M4-3 / 10 §3・02 §4 | ws-1・ws-2 | 未着手 |
 | ws-4 | Observability: 計測3群(パイプライン/Jev/提案と行動)のメトリクス実装+アクセス系基本計測(**POST /v1/sessions新設**)・ダッシュボード定義・MLR日次/週次集計(latch_status_eventsから)・09 §2.2のKPI導出 | M4-5 / 09 §2.1〜2.2・04 §7 | 実装は独立・稼働確認はws-1後 | 未着手 |
 | ws-5 | 告知・同意フロー+ログ許可リスト: オンボーディング同意のUI+API(同意記録・マッチング利用条件化)・設定画面からの再確認・構造化ログの許可リストSerializer(列挙型固定・raw_text/geo/constraints不許可) | M4-6 / 08 D-14・§2.4・§3 | — | 未着手 |
@@ -427,6 +427,14 @@
   - スーパーバイザー独立検証: worktree lint緑・**unit 1262 passed**(1219+43=計画期待値)・basename一意・ci無変更(compose.yaml・docker/postgres・alembic・依存・.env.example)・Makefile追記のみ(.PHONY行更新=計画許可分)・diff 20ファイル=§4+裁定1件どおり。**マージ後main test-ci 1523 passed**(=1480+43・api/worker再ビルド後・2回実行〔1回目exit 0・2回目1523 passed 468.91秒〕)
   - staging受け入れをsupervisorが独立再実行: staging-up 8サービス・nginx/health・staging鍵→token交換→users登録201・**Clock set/advance/戻しにserver_timeが全追従**(Redis共有ControlledClockの実証)・staging-down後もci常設稼働継続(隔離実証)。手順中の401/422はsupervisor側のリクエスト形式ミス(トークン交換省略・display_name欠落)で実装欠陥なし
   - 環境メモ: .staging/keysはチェックアウト毎に生成(git管理外・worktreeとmainで別実体。staging/loadのボリュームはプロジェクト名単位で共用)
+- ws-2 / 設計 f371c6c(supervisor承認§6: **§2.1案B=決定的生成器・g2 intentsは母集合参照**〔g2-plan §7「母集合に再編」の字義は「母集合を参照した決定的配分」の意と確定〕・**§2.3embedding経路をstub既定へ訂正**〔当初の実系統gemini前提はws-1設計§2.6とM4設計前提の実課金ゼロに反するため。実系統はws-3設計時にユーザーコスト承認を経て判断〕)/ 2026-10-03
+- ws-2 / 計画 cba4931(2,253行・Task 1〜8・実コード全文。機械チェック合格: basename一意〔新規2ファイル〕・settings/alembic/依存無変更=ピン試験・DB干渉なし。EX33件+aggregateの期待値2層・バイト同一再生成とverify故障検出の手順まで規定)/ 2026-10-03実装着手(worktree wF・a3-ws2)
+- ws-2 / マージ 398375c(実装はf22bb97まで・7コミット。**Makefile競合=.PHONY行を両側連結で解消**〔ws-1のstaging/load系+ws-2のseed系・make -nで両ターゲット解釈確認〕)/ docs/plans/M4/ws-2-report.md / 2026-10-03
+  - 実装中BLOCKED 1件(計画書内部矛盾): §9のbbox検証(lon≧130.5420)と§2.1固定座標(鹿児島中央駅前130.5390)が不能両立 → **supervisorがci-dbへread-only実査で裁定**: 正転はnormalized_name完全一致・9地名中3つ(天文館通り・鹿児島中央駅前・鹿児島中央駅周辺)はci実データに存在せず設計§2.4「正転ヒット実績」は誤り(g2はオフライン評価で未経験)・駅エリアはgeo_osm_bbox西端の外。**検証済み7地名+ci-db代表点と同一座標へ差し替え**(天文館・高見馬場・呉服町・加治屋町・浜町・城山・鹿児島駅前=YAML期待座標とstaging投入時のサーバ正転結果が一致しL1期待値がE2Eでも妥当)・EX距離境界は実座標で再設計
+  - agent3実装(52分52秒)。**計画書固定コードの内部バグ8件をTDD Red/実行時クラッシュで自力発見・修正**(judge_pairのblocks双方向正規化・judge_pair_group追加〔クラスタpeople条件〕・残余割付の件数スケール化〔--count任意件数対応=ws-6直結〕・alcohol規則の18-19歳優先・OTHER時間帯のD+1制限・verifyの内部表現変換ビュー等・逸脱15件すべて理由つき記録)
+  - スーパーバイザー独立検証: worktree lint緑・**unit 1257 passed**(1219+38=計画1255+judge_pair_group系2)・basename一意・3資産+backend既存コード無変更(diff 0)・**seed-verify再実行OK・バイト同一再生成でgit status差分ゼロ**・vocab地名=裁定7点の座標どおり。**マージ後main test-ci 1561 passed**(=1523+38・api/worker再ビルド後・451.46秒)
+  - 生成資産: docs/testassets/m4-seed.yaml(users100+intents300+reject5+EX33+aggregate{pair_total 44850・layer1_pass 576・blocked=0})・m4-seed-plan.md・README更新(status: draft・confirmed化はws-3での実使用後)
+  - ws-3への引継ぎ: 投入はusers→intents順・structured_intent明示(EX-004/005素材はraw_text経由だとParser規則7でalcohol true化し422のため必須)・投入直前に同一コマンドで再生成(差分は対象日付のみ)・突合はreference_l1で無向化比較
 
 ## G2判定資料(2026-09-30・承認済み)
 
