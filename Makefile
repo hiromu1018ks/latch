@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate seed-generate seed-verify
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -54,3 +54,9 @@ jev-smoke: ## Jev実APIスモーク(1呼び出し・課金。.envにLATCH_LLM_MO
 
 g2-gate: ## G2日本語評価harness(実API・課金。.envにLATCH_LLM_MODE=real+3鍵必須。引数は make g2-gate ARGS="--limit 2 --route both" — makeは--以降の転送をしないため)
 	cd backend && uv run --env-file ../.env python -m latch.g2gate $(ARGS)
+
+seed-generate: ## M4シード生成(決定的。ローカル・DB不要。ARGS="--base-datetime 2026-10-04T11:00:00+09:00" — tz付きISO必須。--count既定300)
+	cd backend && uv run python -m latch.testassets.generator $(ARGS)
+
+seed-verify: ## M4シード機械検査(構造・分布・意図的配置・aggregate照合・地名。ローカル・DB不要)
+	cd backend && uv run python -m latch.testassets.verify $(ARGS)
