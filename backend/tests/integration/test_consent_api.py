@@ -20,6 +20,54 @@ from latch.core.clock import SystemClock
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+async def _purge_ws5_users(db_engine):
+    """各試験後にws5-ユーザー系の行をFK順に全削除する(teardown完全性)。
+
+    consent試験がユーザー・Intentを残すと、後続のsweeper系試験
+    (run_onceの遷移件数を期待するexpiry系)が残存行を処理して
+    期待値を壊す(2026-10-03 test-ci実証。STATUS運用ルールの
+    DB残存干渉と同型)。Intentはイベント発行後にin-process worker系
+    試験へ処理されmatch_candidates等を作りうるため、削除は
+    test_g3_acceptance_e2e.pyのfield teardownと同一のFK順。
+    他試験のデータはprefixで触れない。
+    """
+    yield
+    p = {"p": "ws5-%"}
+    async with db_engine.begin() as conn:
+        for sql in (
+            "DELETE FROM latch_status_events WHERE latch_id IN"
+            " (SELECT id FROM latches WHERE intent_ids && ARRAY("
+            "  SELECT id FROM intents WHERE user_id IN"
+            "  (SELECT id FROM users WHERE auth_subject LIKE :p)))",
+            "DELETE FROM calibration_records WHERE latch_id IN"
+            " (SELECT id FROM latches WHERE intent_ids && ARRAY("
+            "  SELECT id FROM intents WHERE user_id IN"
+            "  (SELECT id FROM users WHERE auth_subject LIKE :p)))",
+            "DELETE FROM notifications WHERE user_id IN"
+            " (SELECT id FROM users WHERE auth_subject LIKE :p)",
+            "DELETE FROM latches WHERE intent_ids && ARRAY("
+            "  SELECT id FROM intents WHERE user_id IN"
+            "  (SELECT id FROM users WHERE auth_subject LIKE :p))",
+            "DELETE FROM match_candidates WHERE intent_a_id IN"
+            " (SELECT id FROM intents WHERE user_id IN"
+            "  (SELECT id FROM users WHERE auth_subject LIKE :p))"
+            " OR intent_b_id IN"
+            " (SELECT id FROM intents WHERE user_id IN"
+            "  (SELECT id FROM users WHERE auth_subject LIKE :p))",
+            "DELETE FROM group_candidates WHERE intent_ids && ARRAY("
+            "  SELECT id FROM intents WHERE user_id IN"
+            "  (SELECT id FROM users WHERE auth_subject LIKE :p))",
+            "DELETE FROM match_events WHERE source_intent_id IN"
+            " (SELECT id FROM intents WHERE user_id IN"
+            "  (SELECT id FROM users WHERE auth_subject LIKE :p))",
+            "DELETE FROM intents WHERE user_id IN"
+            " (SELECT id FROM users WHERE auth_subject LIKE :p)",
+            "DELETE FROM users WHERE auth_subject LIKE :p",
+        ):
+            await conn.execute(text(sql), p)
+
+
 async def _cli_idp_token(provider: str, subject: str) -> str:
     proc = await asyncio.create_subprocess_exec(
         sys.executable,

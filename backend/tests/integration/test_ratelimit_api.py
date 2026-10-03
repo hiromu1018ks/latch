@@ -200,14 +200,17 @@ async def test_3_api_per_min_and_401_priority(api_client, db_engine):
         headers, user_id = await _register(api_client, subject)
         # register(users POST)はuser_lookupがUser行作成前に走るためanonキー側に
         # 計上され、user_idバケットには入らない(計画Task 4のanonフォールバック)。
-        # GET 60回でuserバケットに到達し、61回目が429(INCR先行 — design §2.4)。
-        for i in range(60):
+        # ただし_register内の同意POST(POST /v1/users/me/consent・M4 ws-5)は
+        # 認証済みのためuserバケットを1つ消費する。よってGETは59回で
+        # バケット上限60(consent 1+GET 59)に達し、次のGETが429
+        # (INCR先行 — design §2.4)。
+        for i in range(59):
             resp = await api_client.get("/v1/intents", headers=headers)
             assert resp.status_code == 200, (i, resp.text)
-        # 61回目: JST分バケットの切替を跨いでいた場合は200に戻るため、429に
-        # 到達するまで連打する(それまでの応答はすべて200であることを保証)
+        # 61リクエスト目(=60回目のGET): JST分バケットの切替を跨いでいた場合は
+        # 200に戻るため、429に到達するまで連打する(それまでの応答はすべて200であることを保証)
         exceeded = None
-        for i in range(61, 181):
+        for i in range(60, 180):
             resp = await api_client.get("/v1/intents", headers=headers)
             if resp.status_code == 429:
                 exceeded = resp
