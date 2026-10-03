@@ -177,6 +177,13 @@
             <div class="latch-list" id="matchedList"></div>
           </section>
         </div>
+        <section class="onboarding-view" id="onboardingScreen" hidden>
+          <div class="settings-inner">
+            <p class="section-kicker"><span></span>ONBOARDING</p>
+            <h1>LLM送信の同意</h1>
+            <div id="consentOnboarding"></div>
+          </div>
+        </section>
         <section class="detail-view" id="detailScreen" hidden></section>
         <section class="settings-view" id="settingsScreen" hidden>
           <div class="settings-inner">
@@ -190,6 +197,10 @@
               <div class="section-heading"><span aria-hidden="true"></span><h2 id="blockSettingsTitle">ブロック管理</h2></div>
               <div class="block-list" id="blockList"></div>
               <button class="more-button" id="blockMoreButton" type="button" hidden>もっと見る</button>
+            </section>
+            <section class="settings-section" aria-labelledby="consentSettingsTitle">
+              <div class="section-heading"><span aria-hidden="true"></span><h2 id="consentSettingsTitle">LLM送信の同意</h2></div>
+              <div id="consentControl"></div>
             </section>
           </div>
         </section>

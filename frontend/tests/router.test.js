@@ -37,6 +37,12 @@ describe("parseHash(design §2.1)", () => {
     expect(parseHash("#/settings")).toEqual({ name: "settings", id: null });
   });
 
+  it("#/onboarding をonboardingへ解析する(厳密一致・M4 ws-5)", () => {
+    expect(parseHash("#/onboarding")).toEqual({ name: "onboarding", id: null });
+    expect(parseHash("#/onboarding/")).toEqual({ name: "home", id: null });
+    expect(parseHash("#/onboarding/x")).toEqual({ name: "home", id: null });
+  });
+
   it("#/settings/ など末尾に追加がある場合は未知hashとしてホームへ", () => {
     expect(parseHash("#/settings/")).toEqual({ name: "home", id: null });
     expect(parseHash("#/settings/x")).toEqual({ name: "home", id: null });

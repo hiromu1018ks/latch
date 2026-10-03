@@ -15,14 +15,31 @@ import { createPermissionControl } from "./latch/permission.js";
 import { createBlocksSection } from "./latch/blocks.js";
 import { createSettings } from "./latch/settings.js";
 import { createBlockFlow } from "./latch/blockFlow.js";
+import { createConsent } from "./latch/consent.js";
 
 const $ = (selector) => document.querySelector(selector);
 
 const session = createSession();
-const client = createClient({
+// 422 CONSENT_REQUIREDの横断検出(誘導経路(b))。全Intent操作はこのcallを
+// 通るため、個別画面の変更なしで全経路を拾う。consentは後段で生成するため
+// 参照解決は呼び出し時(実行時)。
+let consent;
+const baseClient = createClient({
   session,
   onSessionExpired: () => showTokenPanel(),
 });
+const client = {
+  call: async (method, path, opts) => {
+    try {
+      return await baseClient.call(method, path, opts);
+    } catch (err) {
+      if (err?.status === 422 && err?.code === "CONSENT_REQUIRED") {
+        consent?.notifyRequired();
+      }
+      throw err;
+    }
+  },
+};
 
 // --- 画面装飾(テーマ・popover・トースト・モーダル) -------------------------
 // Active Intent一覧をpopoversへ追加(ws-7 §2.2・関数は無変更)
@@ -65,6 +82,7 @@ $("#tokenConnect").addEventListener("click", async () => {
     session.save(tokens);
     tokenPanel.hidden = true;
     $("#idpToken").value = "";
+    consent.ensureGuidance().catch(() => {}); // (a) 接続後の未同意誘導
   } catch (err) {
     tokenError.textContent =
       err?.status === 401
@@ -137,7 +155,12 @@ const blocks = createBlocksSection({
   modal: $("#unblockModal"),
 });
 $("#blockMoreButton").addEventListener("click", () => blocks.loadMore().catch(() => {}));
-const settings = createSettings({ permissionControl, blocks });
+consent = createConsent({
+  client,
+  chrome,
+  el: { onboarding: $("#consentOnboarding"), settings: $("#consentControl") },
+});
+const settings = createSettings({ permissionControl, blocks, consent });
 $("#settingsButton").addEventListener("click", () => {
   // popoverを閉じて設定画面へ(chromeのclosePopoversと同じ操作をmain.js側で実行)
   location.hash = "#/settings";
@@ -150,6 +173,7 @@ const router = createRouter({
     home: $("#homeScreen"),
     latch: $("#detailScreen"),
     settings: $("#settingsScreen"),
+    onboarding: $("#onboardingScreen"),
   },
   onRoute: (route) => {
     if (route.name === "home") {
@@ -157,9 +181,13 @@ const router = createRouter({
       home.loadIntents().catch(() => {});
     } else if (route.name === "settings") {
       settings.show();
+    } else if (route.name === "onboarding") {
+      consent.show().catch(() => {});
     } else {
       detail.show(route.id).catch(() => {});
     }
   },
 });
 router.start();
+// (a) トークン接続済みで起動した場合も未同意なら誘導
+if (session.hasTokens()) consent.ensureGuidance().catch(() => {});

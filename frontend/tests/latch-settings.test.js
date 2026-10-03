@@ -108,13 +108,15 @@ describe("createPermissionControl(design §2.5・D-18)", () => {
 });
 
 describe("settings画面骨組(design §2.4)", () => {
-  it("showはpermissionControl.renderとblocks.loadを呼ぶ", () => {
+  it("showはpermissionControl.render・blocks.load・consent.loadを呼ぶ", () => {
     const permissionControl = { render: vi.fn() };
     const blocks = { load: vi.fn(async () => {}) };
-    const settings = createSettings({ permissionControl, blocks });
+    const consent = { load: vi.fn(async () => {}) };
+    const settings = createSettings({ permissionControl, blocks, consent });
     settings.show();
     expect(permissionControl.render).toHaveBeenCalledTimes(1);
     expect(blocks.load).toHaveBeenCalledTimes(1);
+    expect(consent.load).toHaveBeenCalledTimes(1);
   });
 
   it("index.html構造: settingsScreen・2セクション・モーダル2種・noticeList・notificationDot初期hidden", () => {
@@ -123,6 +125,7 @@ describe("settings画面骨組(design §2.4)", () => {
       "settingsScreen", "permissionControl", "blockList", "blockMoreButton",
       "settingsButton", "noticeList", "noticeMoreButton",
       "notificationDot", "unblockModal", "blockModal",
+      "onboardingScreen", "consentOnboarding", "consentControl", "consentSettingsTitle",
     ]) {
       expect(html).toContain(`id="${id}"`);
     }
@@ -139,5 +142,8 @@ describe("settings画面骨組(design §2.4)", () => {
     expect(mainJs).toContain('settings: $("#settingsScreen")');
     expect(mainJs).toContain('notice.preload()');
     expect(mainJs).toContain('if (!$("#noticePopover").hidden) notice.open()');
+    expect(mainJs).toContain('from "./latch/consent.js"');
+    expect(mainJs).toContain('onboarding: $("#onboardingScreen")');
+    expect(mainJs).toContain('CONSENT_REQUIRED');
   });
 });

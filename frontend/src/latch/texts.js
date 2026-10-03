@@ -89,3 +89,23 @@ export const BLOCK_SELECT_LABEL = "ブロックする相手";
 export const BLOCK_SELECT_ERROR_TEXT = "相手を選んでください。";
 export const BLOCK_TOAST_TEXT = "ブロックしました";
 export const BLOCK_ERROR_TEXT = "送信できませんでした。";
+
+// --- M4 ws-5追記: 告知・同意(08 D-14・2026-10-03ユーザー承認済み文言) -----
+
+export const CONSENT_TITLE = "LLM送信の同意";
+export const CONSENT_LEAD_TEXT =
+  "LATCHでは、あなたが入力したIntentの内容を、マッチング判定のために外部のAIサービスへ送信します。";
+export const CONSENT_DESTINATIONS_TEXT =
+  "送信先: TypeSafe AI(マッチングの判定)/ Anthropic(条件の読み取り・判定の予備)/ Google Gemini(条件の数値化)";
+export const CONSENT_SCOPE_TEXT =
+  "送信するのは判定に必要な最小限の情報で、送信記録を保持します(お問い合わせいただければ開示します)";
+export const CONSENT_NO_TRAINING_TEXT = "送信データは、AIサービスの学習には利用されません";
+export const CONSENT_CONDITION_TEXT =
+  "この同意は、マッチング機能を利用するための条件です。同意がない場合、Intentを預ける(マッチングに供給する)ことはできません。";
+export const CONSENT_CHECK_LABEL = "上記に同意します";
+export const CONSENT_AGREE_LABEL = "同意する";
+export const CONSENT_STATE_AGREED_TEXT = "同意済み: ";
+export const CONSENT_STATE_NOT_AGREED_TEXT = "同意していません";
+export const CONSENT_TOAST_TEXT = "同意を記録しました";
+export const CONSENT_REQUIRED_TOAST_TEXT =
+  "マッチングの利用には同意が必要です。同意画面へ移動します。";

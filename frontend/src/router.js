@@ -7,6 +7,7 @@ const LATCH_HASH = /^#\/latches\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-
 
 export const parseHash = (hash) => {
   if (hash === "#/settings") return { name: "settings", id: null };
+  if (hash === "#/onboarding") return { name: "onboarding", id: null }; // M4 ws-5・厳密一致
   const match = LATCH_HASH.exec(hash ?? "");
   if (match) return { name: "latch", id: match[1] };
   return { name: "home", id: null };
