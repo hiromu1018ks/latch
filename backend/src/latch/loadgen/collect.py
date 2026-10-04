@@ -16,7 +16,9 @@ import yaml
 from latch.core.clock import Clock
 
 PROM_URL = "http://127.0.0.1:19090"
-RESULTS_DIR = Path("docs/testassets/results")
+# 証拠YAMLの出力先=リポジトリのdocs/testassets/results(cwd相対だとMakefileの
+# cd backend起点で迷い込むためこのファイルの位置から固定・supervisor検証)
+RESULTS_DIR = Path(__file__).resolve().parents[4] / "docs" / "testassets" / "results"
 
 # perf区間のPromQL(§2.5の表・jobはload側のみ)。{WINDOW}は実行時に差し替える。
 # label値はprometheus-clientの露出形式(reprの浮動小数表記・例 le="50.0")

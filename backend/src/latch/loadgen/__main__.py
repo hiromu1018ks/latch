@@ -108,7 +108,11 @@ def _perf_plans(args) -> list[SendPlan]:
 async def cmd_users(args) -> int:
     client = LoadClient(base_url=args.base_url, keys_dir=args.keys)
     created = existing = 0
-    async with httpx.AsyncClient(base_url=args.base_url, timeout=30.0) as http:
+    async with httpx.AsyncClient(
+        base_url=args.base_url,
+        timeout=30.0,
+        limits=httpx.Limits(max_connections=500, max_keepalive_connections=200),
+    ) as http:
         for i in range(args.count):
             subject = LOAD_USER_SUBJECT.format(nnnn=i + 1)
             status = await client.create_user(
@@ -132,7 +136,14 @@ async def cmd_perf(args) -> int:
     client = LoadClient(base_url=args.base_url, keys_dir=args.keys)
     started_at = clock.now()
     plans = _perf_plans(args)
-    async with httpx.AsyncClient(base_url=args.base_url, timeout=60.0) as http_client:
+    async with httpx.AsyncClient(
+        base_url=args.base_url,
+        timeout=60.0,
+        # オープンモデル送出では応答完了を待たないため・遅延注入(parse p95
+        # 2.5秒等)下の同時接続は既定上限100を超える。PoolTimeout対策の上限
+        # 引き上げ(supervisor検証 2026-10-04・初回loadperf ok=470/6090)。
+        limits=httpx.Limits(max_connections=500, max_keepalive_connections=200),
+    ) as http_client:
 
         async def sender(plan: SendPlan) -> None:
             subject = user_subject(plan.seq)
@@ -196,7 +207,11 @@ async def cmd_bruteforce(args) -> int:
     client = LoadClient(base_url=args.base_url, keys_dir=args.keys)
     started_at = clock.now()
     plans = burst_plan(count=args.injected, duration_s=1.0, kind="create")
-    async with httpx.AsyncClient(base_url=args.base_url, timeout=60.0) as http_client:
+    async with httpx.AsyncClient(
+        base_url=args.base_url,
+        timeout=60.0,
+        limits=httpx.Limits(max_connections=500, max_keepalive_connections=200),
+    ) as http_client:
 
         async def sender(plan: SendPlan) -> None:
             subject = LOAD_USER_SUBJECT.format(
