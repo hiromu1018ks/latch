@@ -23,7 +23,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from latch.core.clock import Clock
 from latch.notifications.types import NOTIFICATION_NEARBY, NOTIFICATION_PROPOSAL
-from latch.obs.metrics import observe_latch_score
+from latch.obs.metrics import (
+    observe_initial_e2e,
+    observe_latch_score,
+    observe_notification_latency,
+    observe_pipeline_layer,
+)
 from latch.worker.matching import group_calc, latch_calc, layer4
 from latch.worker.matching import origin as origin_mod
 from latch.worker.matching import proposal as proposal_mod
@@ -31,6 +36,7 @@ from latch.worker.matching.proposal import LatchIntentInputs
 
 if TYPE_CHECKING:
     from latch.notifications.sender import PushSender
+    from latch.worker.matching.origin import Origin
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +212,27 @@ _DRAIN_CANDIDATES = text("""
     ORDER BY target_time ASC, l.score DESC, l.id ASC
 """)
 
+# 初回投入Event(created種・version一致)の起点読取(M4 ws-6)。
+# ux_match_events_idempotency(event_type, source_intent_id, payload->>'version')
+# のUNIQUE索引でピンポイント(05 §2)。created_atはAPI側が遷移tx内のClock値で
+# INSERTするため「Event発火(active化の保存コミット)」そのもの
+_SELECT_INJECTION_ORIGIN = text("""
+    SELECT me.created_at
+    FROM match_events me
+    WHERE me.event_type = 'created'
+      AND me.source_intent_id = CAST(:intent_id AS uuid)
+      AND me.payload->>'version' = :version
+""")
+# 起点Intentの作成時刻(route判定用・active作成ではcreated種Eventと同一now値)
+_SELECT_INTENT_CREATED_AT = text("""
+    SELECT created_at FROM intents WHERE id = CAST(:intent_id AS uuid)
+""")
+# 起点Intentを含むlatches行数(初回提案判定・提案INSERT後に実行=自分を含む)
+_COUNT_PROPOSALS_FOR_ORIGIN = text("""
+    SELECT count(*) FROM latches
+    WHERE intent_ids @> ARRAY[CAST(:intent_id AS uuid)]
+""")
+
 
 def _coerce_uuid(value: object) -> uuid.UUID:
     """SELECT結果のUUID列復元(asyncpgのUUIDサブクラス対策・origin.pyと同一規律)。"""
@@ -222,6 +249,19 @@ class LatchTargetRow:
     intent_a_id: uuid.UUID
     intent_b_id: uuid.UUID
     jev_result: dict  # _parse_structured済み(Gateway検証済みの生JSONB読取のみ)
+
+
+@dataclass(frozen=True)
+class E2eObsContext:
+    """初期判定E2Eの観測コンテキスト(M4 ws-6・初回投入チェーンの初回提案)。
+
+    origin_ts=起点時刻(match_events.created_at・created種version一致=
+    Event発火(active化の保存コミット))。route=投入経路(create=active作成・
+    activate=draft→active化)。
+    """
+
+    origin_ts: datetime
+    route: str
 
 
 @dataclass(frozen=True)
@@ -537,6 +577,38 @@ async def _drain_candidates(
     return [_coerce_uuid(r[0]) for r in rows]
 
 
+async def _read_e2e_context(conn, org: Origin) -> E2eObsContext | None:
+    """初回投入チェーンの観測コンテキスト(M4 ws-6・design §2.3)。
+
+    起点Intentのcreated種Event(起点version一致)が無ければNone(更新Event・
+    Bucket/catch-up再評価由来=観測対象外)。routeはintents.created_atと起点
+    時刻の等値比較で判定: 同一コミット(同一now変数・intents/service.pyの
+    _create・_update_draft実装どおり)ならcreate・不一致ならactivate。
+    """
+    row = (
+        await conn.execute(
+            _SELECT_INJECTION_ORIGIN,
+            {"intent_id": org.intent_id, "version": str(org.version)},
+        )
+    ).first()
+    if row is None:
+        return None
+    intent_row = (
+        await conn.execute(_SELECT_INTENT_CREATED_AT, {"intent_id": org.intent_id})
+    ).first()
+    if intent_row is None:
+        return None
+    origin_ts = row[0]
+    route = "create" if intent_row[0] == origin_ts else "activate"
+    return E2eObsContext(origin_ts=origin_ts, route=route)
+
+
+async def _count_origin_proposals(conn, intent_id: uuid.UUID) -> int:
+    """起点Intentを含むlatches行数(初回提案判定・提案INSERT後に実行)。"""
+    res = await conn.execute(_COUNT_PROPOSALS_FOR_ORIGIN, {"intent_id": intent_id})
+    return int(res.scalar_one())
+
+
 class LatchEngine:
     """Layer 5本体(06 §6・§10・design §2.1案A・§2.9の表)。
 
@@ -562,6 +634,8 @@ class LatchEngine:
 
     async def handle(self, intent_id: uuid.UUID) -> None:
         """フェーズ1(読取)→各行評価→drain(design §2.9のtx分割)。"""
+        t0 = self._clock.now()
+        proposed = False
         async with self._engine.begin() as conn:
             loaded = await origin_mod.load_origin(conn, self._clock, intent_id)
         if loaded.origin is None:
@@ -575,11 +649,23 @@ class LatchEngine:
         async with self._engine.begin() as conn:
             rows = await _select_target_rows(conn, org.intent_id, org.version)
         for row in rows:
-            await self._evaluate_pair(org, row)
+            if await self._evaluate_pair(org, row):
+                proposed = True
         await self.drain()
+        if proposed:
+            # L5+通知区間の観測(M4 ws-6・handle全体=提案を確定したときのみ。
+            # push送信は_evaluate_pair→try_promote内で完了済み。層別予算の
+            # 「Layer 5+通知 ≤2秒」の観測・12 §7)
+            observe_pipeline_layer(
+                layer="proposal",
+                elapsed_s=(self._clock.now() - t0).total_seconds(),
+            )
 
-    async def _evaluate_pair(self, org, row: LatchTargetRow) -> None:
+    async def _evaluate_pair(self, org, row: LatchTargetRow) -> bool:
         """1ペア: 材料読取(tx前)→tx1(H再検証+退避つきUPDATE+D-07+latches+events)。
+
+        戻り値は「提案(candidate以上)を確定したか」(M4 ws-6・handleの
+        proposal層観測の絞り込みに使う・nearby/candidate生成なしはFalse)。
 
         I-1対策(design §2.7-4・承認事項4): 失敗しうる読取をtx前に済ませ、
         計算(latch_score退避UPDATE)と生成物(latches INSERT・status_events)を
@@ -598,7 +684,7 @@ class LatchEngine:
             logger.info(
                 "latch inputs missing row_id=%s peer_id=%s", row.row_id, peer_id
             )
-            return
+            return False
         target = latch_calc.pair_target_time(
             origin_inputs.time_start, peer_inputs.time_start
         )
@@ -615,14 +701,15 @@ class LatchEngine:
         # tx1: H再検証(SELECT) + 退避つきlatch_score UPDATE + 生成物
         latch_id: uuid.UUID | None = None
         nearby_latch_id: uuid.UUID | None = None
+        e2e_ctx: E2eObsContext | None = None
         notified_users: list[uuid.UUID] = []
         async with self._engine.begin() as conn:
             if not await layer4.hard_constraint_holds(conn, org, peer_id):
                 await _close_h_broken(conn, row.row_id, now)
-                return
+                return False
             rec = await _record_score(conn, row.row_id, score, now)
             if rec is None:
-                return
+                return False
             _, prev_latch_score = rec
             if score >= latch_calc.LATCH_THRESHOLD:
                 if not latch_calc.d07_allows(
@@ -634,10 +721,13 @@ class LatchEngine:
                     prev_latch_score=prev_latch_score,
                 ):
                     logger.info("latch d07 denied a=%s b=%s", a_id, b_id)
-                    return
+                    return False
                 # 提案確定(d07通過後・このtxで提案を構築する点)のscore観測
                 # (M4 ws-4・design §2.8。d07 denied・競合負けは分布に入れない)
                 observe_latch_score(shape="pair", score=float(score))
+                # 初回投入チェーンの起点読取(M4 ws-6・提案確定時のみ)。
+                # created種Eventが無い起点(更新Event・再評価)は観測対象外
+                e2e_ctx = await _read_e2e_context(conn, org)
                 proposal = proposal_mod.build_proposal(
                     origin=origin_inputs,
                     peer=peer_inputs,
@@ -661,7 +751,7 @@ class LatchEngine:
                 else:
                     found = await _find_open_latch(conn, a_id, b_id)
                     if found is None:
-                        return
+                        return False
                     lid, status = found
                     if status != "candidate":
                         logger.info(
@@ -669,7 +759,7 @@ class LatchEngine:
                             lid,
                             status,
                         )
-                        return
+                        return False
                     if not latch_calc.d07_allows(
                         has_no_response=has_no,
                         latest_defer_at=latest_defer_at,
@@ -681,12 +771,17 @@ class LatchEngine:
                         logger.info(
                             "latch d07 denied on promotion a=%s b=%s", a_id, b_id
                         )
-                        return
+                        return False
                     if not await _update_for_promotion(
                         conn, lid, score=score, proposal=proposal, deadline=deadline0
                     ):
-                        return
+                        return False
                     latch_id = lid
+                # 初回提案でなければE2E観測から外す(design §2.3条件b・
+                # 提案INSERT後に数える=自分を含み・1件のときが初回)
+                if e2e_ctx is not None:
+                    if await _count_origin_proposals(conn, org.intent_id) != 1:
+                        e2e_ctx = None
             else:
                 # nearbyはtry_promoteしない(candidateのまま・引用#9)
                 nearby_latch_id, notified_users = await self._nearby_in_tx(
@@ -702,12 +797,13 @@ class LatchEngine:
                     now=now,
                 )
         if latch_id is not None:
-            await self.try_promote(latch_id)
+            await self.try_promote(latch_id, e2e_ctx=e2e_ctx)
         if nearby_latch_id is not None:
             # 存在通知の送信もtxコミット後(design §2.1案A・§3.2④)
             await self._send_pushes(
                 [(uid, NOTIFICATION_NEARBY, nearby_latch_id) for uid in notified_users]
             )
+        return latch_id is not None
 
     async def _nearby_in_tx(
         self,
@@ -768,9 +864,14 @@ class LatchEngine:
                 logger.info("latch nearby daily limit uid=%s", u.user_id)
         return latch_id, notified
 
-    async def try_promote(self, latch_id: uuid.UUID) -> None:
+    async def try_promote(
+        self, latch_id: uuid.UUID, *, e2e_ctx: E2eObsContext | None = None
+    ) -> None:
         """提示判定(1tx・design §2.6手順1〜9・Review Focus 4の手順順序)。
 
+        e2e_ctxは初期判定E2Eの観測コンテキスト(初回投入チェーンの初回提案
+        のみ非None・M4 ws-6)。既存呼び出し(GroupEngine.finalize・drain)は
+        既定Noneで非破壊。
         手順: 行ロック→(now採取・参加者読取)→75分ルール→expires_at切れ
         対象外化→D-06重複上位チェック(グループのみ)→D-05再計算(deadline<=nowは
         75分と同一扱い)→D-08日次→D-08同時→条件付きproposed遷移→
@@ -779,6 +880,8 @@ class LatchEngine:
         M3 ws-3: 通知対象はtx内で収集しtxコミット後にプッシュ送信(§2.1案A)。
         """
         pending: list[tuple[uuid.UUID, str, uuid.UUID]] = []
+        proposed_at = None
+        t0 = self._clock.now()  # 通知区間の起点(提案確定=try_promote開始)
         async with self._engine.begin() as conn:
             row = await _select_latch_for_update(conn, latch_id)
             if row is None or row[1] != "candidate":
@@ -836,10 +939,24 @@ class LatchEngine:
                     conn, p.user_id, NOTIFICATION_PROPOSAL, latch_id, now
                 )
                 pending.append((p.user_id, NOTIFICATION_PROPOSAL, latch_id))
+            if pending:
+                proposed_at = now  # 通知記録時刻(E2E終点・10 §4.1)
         # txコミット後のみ送信(§2.1: コミット前に送るとnotifications行が
         # ないままプッシュが飛び得る)。早期return(candidate保留・競合負け)
         # はpending空のままtxを抜けるため送信されない。
         await self._send_pushes(pending)
+        if pending:
+            # 通知区間の観測(M4 ws-6・提案確定→push送信記録。早期return経路は
+            # 観測しない=通知が書き込まれたときのみ)
+            observe_notification_latency(
+                elapsed_s=(self._clock.now() - t0).total_seconds()
+            )
+            if e2e_ctx is not None and proposed_at is not None:
+                # 初期判定E2E(10 §4.1・Event発火の保存コミット→通知記録)
+                observe_initial_e2e(
+                    route=e2e_ctx.route,
+                    elapsed_s=(proposed_at - e2e_ctx.origin_ts).total_seconds(),
+                )
 
     async def _send_pushes(
         self, targets: list[tuple[uuid.UUID, str, uuid.UUID]]
