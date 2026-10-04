@@ -27,7 +27,7 @@ REDIS_URL = "redis://127.0.0.1:16379/0"  # ControlledClock
 KEYS_DIR = REPO_ROOT / ".staging" / "keys"
 SEED_PATH = REPO_ROOT / "docs" / "testassets" / "m4-seed.yaml"
 RESULTS_DIR = REPO_ROOT / "docs" / "testassets" / "results"
-EXPECTED_HEAD = "0007"  # ws-5が0007を追加した後のhead(supervisor裁定2026-10-03)
+EXPECTED_HEAD = "0008"  # ws-4が0008を追加した後のhead(M4 ws-4)
 
 # --- 証拠収集(10 §5の形式・sessionfinishでYAML出力) ---
 
