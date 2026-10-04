@@ -43,8 +43,13 @@ async def test_w4_b1_scenario_matched_and_sessions(api, db):
     pair = await make_scenario_pair(
         api, db, key="w4-b1", name="w4b", when="2026-10-05T06:30:00+09:00"
     )
+
+    async def proposed_appeared() -> bool:  # noqa: ANN202
+        # wait_untilへはcoroutine関数を渡す(lambdaはcoroutineをawaitできない)
+        return await _proposed_exists(db, pair["intent_ids"])
+
     await wait_until(
-        lambda: _proposed_exists(db, pair["intent_ids"]),
+        proposed_appeared,
         timeout_s=180,
         interval_s=10,
         what="専用ペアのproposed遷移",
@@ -62,8 +67,12 @@ async def test_w4_b1_scenario_matched_and_sessions(api, db):
         json={"response": "yes"},
     )
     assert r1.status_code == 200 and r2.status_code == 200, (r1.text, r2.text)
+
+    async def matched_increased() -> bool:  # noqa: ANN202
+        return await _matched_delta(db, before) >= 1
+
     await wait_until(
-        lambda: _matched_delta(db, before) >= 1,
+        matched_increased,
         timeout_s=180,
         interval_s=10,
         what="双方YESのmatched遷移",
