@@ -1,0 +1,42 @@
+unit: M4-ws-6
+test_id: perf-load
+executed_at: '2026-10-04T10:52:03.237286+00:00'
+environment:
+  platform: Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44
+  python: 3.13.15
+  note: ローカルdocker(latch-loadプロジェクト・ci一時停止運用)。絶対値の解釈はG4の人間側が本記録込みで判定(design §2.7)
+input_conditions:
+  load_profile: 相A parse 50rps x60s → 相B save 50rps x60s(active主経路+draft→active化)
+    → 相C burst 100件/1s → 収束待ち
+  window: 15m
+  parse_phase_note: 目標②はparse独立相で採取(負荷条件は相B+相Cで字義どおり)
+  injection_stats:
+    planned: 6090
+    ok: 595
+    error: 5495
+    errors:
+    - 'parse#97: ReadError'
+    - 'parse#98: ReadError'
+    - 'parse#846: ConnectTimeout'
+    - 'parse#847: ConnectTimeout'
+    - 'parse#848: ConnectTimeout'
+    - 'parse#849: ConnectTimeout'
+    - 'parse#850: ConnectTimeout'
+    - 'parse#851: ConnectTimeout'
+    - 'parse#852: ConnectTimeout'
+    - 'parse#853: ConnectTimeout'
+    client_p95_ms: 2032500.1
+verdict: recorded (絶対値5目標の判定はG4の人間側・design §2.7)
+measurements:
+  save_p95_s: null
+  save_p99_s: null
+  parse_p95_s: 2.716826923076923
+  parse_p99_s: 2.943365384615385
+  retrieval_p95_s: null
+  embedding_p95_s: null
+  proposal_p95_s: null
+  jev_p95_s: null
+  e2e_p95_create_s: null
+  e2e_p95_activate_s: null
+  notify_p95_s: .nan
+  queue_pending_max: 0.0

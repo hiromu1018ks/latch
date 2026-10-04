@@ -1,0 +1,33 @@
+unit: M4-ws-6
+test_id: perf-load
+executed_at: '2026-10-04T12:30:06.598130+00:00'
+environment:
+  platform: Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44
+  python: 3.13.15
+  note: ローカルdocker(latch-loadプロジェクト・ci一時停止運用)。絶対値の解釈はG4の人間側が本記録込みで判定(design §2.7)
+input_conditions:
+  load_profile: 相A parse 50rps x60s → 相B save 50rps x60s(active主経路+draft→active化)
+    → 相C burst 100件/1s → 収束待ち
+  window: 60m
+  parse_phase_note: 目標②はparse独立相で採取(負荷条件は相B+相Cで字義どおり)
+  injection_stats:
+    planned: 6090
+    ok: 6090
+    error: 0
+    errors: []
+    client_p95_ms: 1787.5
+    note: 4回目実行(stub Jev判定値0.90/3.6+トークン事前取得後)。投入全成功。パイプラインはD-16日次上限(30000)到達で評価繰越し縮退=仕様動作(提案6316・通知4888生成後に予算枯渇)。収束判定(pending=0安定30秒)は予算枯渇下の30分バケット再評価循環により成立せず2400秒でタイムアウト・採取時点のpending=1476は繰越し分。wait_settled成立を待たずの採取という読み替えをG4判定時に確認のこと(supervisor判断)
+verdict: recorded (絶対値5目標の判定はG4の人間側・design §2.7)
+measurements:
+  save_p95_s: 0.05892857142857133
+  save_p99_s: 0.8031249999999963
+  parse_p95_s: 2.737762237762238
+  parse_p99_s: 2.9475524475524475
+  retrieval_p95_s: 0.6249999999999998
+  embedding_p95_s: 10.0
+  proposal_p95_s: 10.0
+  jev_p95_s: 5.483378378378375
+  e2e_p95_create_s: 10.0
+  e2e_p95_activate_s: null
+  notify_p95_s: 4.922996048513589
+  queue_pending_max: 1486.0

@@ -1,0 +1,21 @@
+unit: M4-ws-6
+test_id: bruteforce-stage-50000
+executed_at: '2026-10-04T13:29:49.254042+00:00'
+environment:
+  platform: Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44
+  python: 3.13.15
+  note: ローカルdocker(latch-loadプロジェクト・ci一時停止運用)。絶対値の解釈はG4の人間側が本記録込みで判定(design §2.7)
+input_conditions:
+  stage_active_intents: 50000
+  injected_events: 100
+  latency_injection: none
+  window: 30m
+verdict:
+  vector_le_50_ok: true
+  note: 正式判定はG4の人間側(段階比較表+増幅率参考値・design §2.7)。量的合格線の新設は10 §6のdocs改版が前提
+measurements:
+  vector_items_le50_rate: 218.8234198151076
+  vector_items_inf_rate: 218.8234198151076
+  retrieval_p95_s: 0.9291665063803897
+  hardfilter_pass_rate: 109.67745522314927
+  jev_executions_total_increase: 1868.5705246814732
