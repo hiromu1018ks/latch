@@ -25,7 +25,7 @@ from latch.llm.gateway import build_worker_gateway
 from latch.notifications.sender import build_push_sender
 from latch.obs.collector import MetricsCollector
 from latch.obs.kpi import KpiJob
-from latch.obs.metrics import observe_retrieval
+from latch.obs.metrics import observe_pipeline_layer, observe_retrieval
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
 from latch.worker.cost import JevCostGuard, JevCostStore, ReevalGuard
@@ -408,8 +408,14 @@ class Worker:
         流用しない)。例外は握らずRunnerへ伝播(Runnerが握って次周期で回収)。
         冪等は各部のガードで担保済み。
         """
+        t0 = self.clock.now()
         async with engine.begin() as conn:
             outcome = await run_candidate_retrieval(conn, self.clock, intent_id)
+        # Retrieval区間の観測(M4 ws-6・Layer 1〜3の区間=層別予算の境界)
+        observe_pipeline_layer(
+            layer="retrieval",
+            elapsed_s=(self.clock.now() - t0).total_seconds(),
+        )
         if outcome is not None:
             observe_retrieval(
                 layer1_pass_count=outcome.layer1_pass_count,
@@ -434,7 +440,13 @@ class Worker:
                 intent_id,
             )
             return
+        t0 = self.clock.now()
         outcome = await run_candidate_retrieval(conn, self.clock, intent_id)
+        # Retrieval区間の観測(M4 ws-6・Layer 1〜3の区間=層別予算の境界)
+        observe_pipeline_layer(
+            layer="retrieval",
+            elapsed_s=(self.clock.now() - t0).total_seconds(),
+        )
         # 戻り値なしスタブ(unit試験)とも非破壊に共存する(観測は本体処理を
         # 壊さない — 本番はrun_candidate_retrievalが常にOutcomeを返す)
         if outcome is not None:

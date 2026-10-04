@@ -27,6 +27,7 @@ from latch.intents.events import EVENT_EMBEDDING_COMPLETED
 from latch.llm.errors import LLMError
 from latch.llm.gemini import GEMINI_EMBEDDING_MODEL
 from latch.llm.providers import EMBEDDING_DIMENSIONS
+from latch.obs.metrics import observe_pipeline_layer
 from latch.worker.embedding_text import EmbeddingTextInput, build_embedding_text
 
 logger = logging.getLogger(__name__)
@@ -79,19 +80,28 @@ class EmbeddingWorker:
         self._model_id = model_id
 
     async def handle(self, intent_id: uuid.UUID, version: int) -> None:
-        row = await self._read_target(intent_id)
-        if row is None:
-            return
-        db_version, status, has_embedding = row[0], row[1], row[2]
-        if db_version != version:
-            return  # 旧Eventの焼き直し(新versionのEventが担当)
-        if status not in _STATUS_TARGETS:
-            return  # 削除済み等(Layer 1〜2の対象外)
-        if has_embedding:
-            # 既存(resume由来 — テキスト不変)は再エンベディングせず直接投入(06 §9)
-            await self._emit_completed(intent_id, version)
-            return
-        await self._embed_and_emit(intent_id, version, row)
+        t0 = self._clock.now()
+        try:
+            row = await self._read_target(intent_id)
+            if row is None:
+                return
+            db_version, status, has_embedding = row[0], row[1], row[2]
+            if db_version != version:
+                return  # 旧Eventの焼き直し(新versionのEventが担当)
+            if status not in _STATUS_TARGETS:
+                return  # 削除済み等(Layer 1〜2の対象外)
+            if has_embedding:
+                # 既存(resume由来 — テキスト不変)は再エンベディングせず直接投入(06 §9)
+                await self._emit_completed(intent_id, version)
+                return
+            await self._embed_and_emit(intent_id, version, row)
+        finally:
+            # Embedding区間の観測(M4 ws-6・LLM込みのhandle全体・早期returnも
+            # 対象=finally。観測は本体を壊さない・design §2.3)
+            observe_pipeline_layer(
+                layer="embedding",
+                elapsed_s=(self._clock.now() - t0).total_seconds(),
+            )
 
     # -- フェーズ1(短トランザクション・readのみ)--
 
