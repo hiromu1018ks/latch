@@ -108,16 +108,16 @@ load-ps: ## load環境の状態
 	$(LOAD_COMPOSE) ps
 
 loadusers: ## load環境へ負荷用ユーザーをAPI経由作成(users+consent。make loadusers ARGS="--count 1000")
-	cd backend && uv run python -m latch.loadgen users $(ARGS)
+	cd backend && uv run python -m latch.loadgen --keys ../.staging/keys users $(ARGS)
 
 loadperf: ## 性能試験区間(相A parse→相B save→相C burst→収束待ち→証拠YAML。§8手順のci一時停止を明示実行してから)
-	cd backend && uv run python -m latch.loadgen perf $(ARGS)
+	cd backend && uv run python -m latch.loadgen --keys ../.staging/keys perf $(ARGS)
 
 loadmass: ## 総当たり母集合投入(Event発行なし。make loadmass ARGS="--stage 10000 --base-datetime <tz付きISO>")
 	cd backend && uv run python -m latch.loadgen massload $(ARGS)
 
 loadbf: ## 総当たり注入100件+収束待ち+証拠YAML(make loadbf ARGS="--stage 10000 --first-user 1")
-	cd backend && uv run python -m latch.loadgen bruteforce $(ARGS)
+	cd backend && uv run python -m latch.loadgen --keys ../.staging/keys bruteforce $(ARGS)
 
 load-stub-flat: ## load環境のstub遅延分布を0へ切替(総当たり区間の前提・api/workerをenv差分で再作成)
 	LATCH_LLM_STUB_LATENCY_PARSER_P50_MS=0 LATCH_LLM_STUB_LATENCY_PARSER_P95_MS=0 LATCH_LLM_STUB_LATENCY_JEV_P50_MS=0 LATCH_LLM_STUB_LATENCY_JEV_P95_MS=0 $(LOAD_COMPOSE) up -d --force-recreate api1 api2 worker1 worker2
