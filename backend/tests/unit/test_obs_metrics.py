@@ -255,3 +255,24 @@ async def test_http_metrics_protected_route_records_204(app, client):
         is not None
     )
     app.dependency_overrides.pop(require_authenticated, None)
+
+
+# -- /metricsマウント(Task 10)--
+
+
+async def test_metrics_endpoint_serves_registry(app, client):
+    """/metricsがtext/plainで既定REGISTRYの内容を返す(ASGIマウント)。"""
+    resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/plain")
+    assert "latch_http_requests_total" in resp.text
+
+
+async def test_metrics_path_itself_is_not_counted(app, client):
+    """/metricsの自己アクセスは計上しない(Review Focus 3・自己増殖防止)。"""
+    resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    for family in REGISTRY.collect():
+        for sample in family.samples:
+            if sample.name == "latch_http_requests_total":
+                assert sample.labels.get("path") != "/metrics"

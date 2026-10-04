@@ -11,8 +11,9 @@ from fastapi.routing import APIRoute
 from latch.main import create_app
 from latch.ratelimit.deps import api_rate_limited
 
-# C3(05 §5): 認証不要はtoken/refreshのみ。/health はv1契約の外(確定値13)
-UNPROTECTED = {"/v1/auth/token", "/v1/auth/refresh", "/health"}
+# C3(05 §5): 認証不要はtoken/refreshのみ。/health と /metrics はv1契約の外
+# (確定値13・/metricsはM4 ws-4追加 — 認証外・無レート制限が承認済みdesign §2.5)
+UNPROTECTED = {"/v1/auth/token", "/v1/auth/refresh", "/health", "/metrics"}
 
 # method別にAPIRouteが分かれるためパス件数で数える(全契約の集合ピン)
 EXPECTED_PROTECTED_RATE_LIMITS = {
