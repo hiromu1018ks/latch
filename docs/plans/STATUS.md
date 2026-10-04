@@ -468,6 +468,7 @@
   - 検証最終値: worktree test-ci **1664 passed×2回連続**(2回構造失敗の根治証明)・**マージ後main test-ci 1664 passed**(api・worker再ビルド後・7:16)・unit 1386・lint緑(327 files)・basename一意・alembic head=0008・依存追加=prometheus-client>=0.26のみ・staging受け入れ10件全pass(75秒・ws4-a/b/c)・kpi_daily残存=常設workerの現在窓のみ(仕様どおり)
   - 運用メモ: ci常設workerがKpiJobでkpi_dailyへ現在窓の集計行を毎分冪等書込(有界・試験は事前掃除で隔離)・マイグレーション適用前のworker起動窓でrelation不存在エラーが一時出る(自己回復)・staging/dashboard環境はdown済み
   - G4時確認事項へ2件記録(下記G4時確認事項節)
+- 学習資産追従: ws-4分 c9a82eb(第29章『システムが自分を数える: 計測の設計と毎日の値の残し方』+Lab 15〔ダッシュボードを立てる・staging-reset→dashboard-up→/metrics→sessions投与→時計前進でKpiJob発火→kpi_daily→Grafana4枚→片付けの一巡・全手順当日実測〕新設・既存2ファイル更新〔README順路43/44番・00-environment〔テーブル16・1386/1664・staging-obs-test・dashboard系〕〕。agent4がlint判断台帳収束・make test 1386 passed・環境返却を確認)
 
 ## G2判定資料(2026-09-30・承認済み)
 
