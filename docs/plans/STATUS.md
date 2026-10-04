@@ -11,7 +11,7 @@
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **ws-4(Observability)実装中**(2026-10-04ユーザーGoサイン→設計8e46d2b・計画c3efa03を経てworktree wJでagent3実装中。wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・test-ci 1604・G3繰越02#13〜#23回収済み。ws-5=マージ18a6d88+153ec50・1596)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
+- 次の着手: **ws-6(load負荷試験+総当たり検出)の設計着手はユーザーGoサイン待ち**(ws-4=2026-10-04完了: マージ89525ca・test-ci 1664・staging受け入れ10件全pass・**ws-6が依存する測定基盤が揃った**。wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・ws-5=マージ18a6d88+153ec50)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -34,7 +34,7 @@
 | ws-1 | staging・load環境構築: composeプロファイル分離(staging=縮小API1〜2/Worker0〜2・load=隔離)・Clock制御注入(10 §1の6適用範囲)・疑似イベントパブリッシャー(Event 5種+embedding_completed手動発火)・staging鍵ペア/JWT発行ツールはM0資産再利用・既知欠陥(compose workerのLATCH_DATABASE_URL不在)解消 | M4-1 / 10 §1 | — | 完了 |
 | ws-2 | 共有テスト資産: シードIntent 200〜300件生成(10 §2の分布=時間帯・カテゴリ・人数志向・18〜19歳含む・自己重複検出の意図的配置)+期待値表・既存3資産(評価ペア520・飲酒36・Parser35)との関係整理・docs/testassets/でバージョン管理 | M4-2 / 10 §2・09 §4 | — | 完了 |
 | ws-3 | 機能試験27項目のstagingフル実行: staging振り分け項目(#5スモーク・#6〜#13・#15〜#19・#26)の自動化ハーネス・配置ケース(自己ペア除外・自己重複集合・部分YES・通知順序)・**G3繰越の02#13〜#23 staging再実行を回収**・ci分はtest-ci常設で緑維持 | M4-3 / 10 §3・02 §4 | ws-1・ws-2 | 完了 |
-| ws-4 | Observability: 計測3群(パイプライン/Jev/提案と行動)のメトリクス実装+アクセス系基本計測(**POST /v1/sessions新設**)・ダッシュボード定義・MLR日次/週次集計(latch_status_eventsから)・09 §2.2のKPI導出 | M4-5 / 09 §2.1〜2.2・04 §7 | 実装は独立・稼働確認はws-1後 | 未着手 |
+| ws-4 | Observability: 計測3群(パイプライン/Jev/提案と行動)のメトリクス実装+アクセス系基本計測(**POST /v1/sessions新設**)・ダッシュボード定義・MLR日次/週次集計(latch_status_eventsから)・09 §2.2のKPI導出 | M4-5 / 09 §2.1〜2.2・04 §7 | 実装は独立・稼働確認はws-1後 | 完了 |
 | ws-5 | 告知・同意フロー+ログ許可リスト: オンボーディング同意のUI+API(同意記録・マッチング利用条件化)・設定画面からの再確認・構造化ログの許可リストSerializer(列挙型固定・raw_text/geo/constraints不許可) | M4-6 / 08 D-14・§2.4・§3 | — | 完了 |
 | ws-6 | load負荷試験+総当たり検出: 負荷ツール(Intent保存50rps・Event 100evt/sバースト)・レイテンシ注入(Parser p50 1s/p95 2.5s・Jev p50 2s/p95 5s=スタブで実運用模擬)・性能5目標測定(層別予算トレース分離)・総当たり検出(Active 1万→5万→10万・Vector件数K_v=50以内安定) | M4-4 / 10 §4.1〜4.2 | ws-1〜ws-3・ws-4(測定基盤前提) | 未着手 |
 | ws-7 | 非機能試験(障害系): 可用性(99.5%・インスタンス強制停止・合成監視プローブ)・バックアップ復旧(embedding識別子から再エンベディング+cross-check)・縮退(D-16上限到達と80% alert・月次Clock操作・resume/Bucket遅延回収=**M2繰越**)・Queue障害(毒ペイロード・lag alert発報) | M4-4 / 10 §4.3〜4.5・§4.7 | ws-1・ws-3・ws-4(ws-6と環境共有のため直列) | 未着手 |
@@ -46,6 +46,11 @@
 設計前提(2026-10-03単位表承認と同時確定): staging・load・ダッシュボードはローカルdocker composeの別プロジェクトで構築(計測はOSSツールで代替)・LLM呼び出しはスタブ+レイテンシ注入で実課金ゼロ。クラウド本番同構成は費用判断のため不採用(Phase 0の本番同環境は別途)
 
 ## G4(完了条件 — 12 M4より・11 第5節の7項目をstagingで先行確認)
+
+## G4時確認事項(実装解釈の累積・ゲート承認時にまとめて確認)
+
+1. ws-4: **HTTP基本メトリクスはdocs 3群への明示的拡張**(04 §7の3群へ全APIのリクエスト数・レイテンシhistogramを追加。ws-6の性能5目標=絶対値合格の測定基盤として必然。labelはmethod・pathテンプレート・statusのみ=08 §2.4と同規律。design §6-1承認)
+2. ws-4: **04 §3本番確定値(Cloud Monitoring+OTLP)に対するローカルOSS代替差分**(prometheus-client直+pull型・Prometheus v3.0+Grafana OSS 11.4・Queue lag=match_events pending計測〔エミュレータがsubscription統計を返さない制約〕。メトリクス生成はobs/metrics.py 1モジュールへ局所化=本番移行時の差し替え面。04 §3自体はPhase 0費用判断まで不変・design §6-2承認)
 
 - [ ] 27項目グリーン(02 §4マッピング・10 §3実行計画どおり)
 - [ ] 追加試験グリーン(D-10・D-23・プッシュ表示規制FR-21)
@@ -457,6 +462,12 @@
 - 学習資産追従: ws-3分 e17715d(第28章『常設世界で約束全体を証明する: stagingフル実行ハーネス』+Lab 14〔staging-reset→シード→34試験→証拠YAML→片付けの一巡・期待される出力はすべて当日実測〕新設・既存6ファイル更新〔README順路・00-environment〔1335/1604/staging 34〕・第24章のLab再候補回収・第26章裁定A追従・Lab 11/12〕。agent4がstaging一巡34 passed 9分58秒・make test 1335・lint 8ファイル収束・環境返却を確認。追加発見: staging-reset直後のfresh起動ならnginx再起動不要〔apiだけ作り変えた場合のみ必要〕)
 - ws-4 / 設計 8e46d2b(supervisor承認4件=①HTTP基本メトリクス追加〔ws-6測定基盤・labelはmethod/path型/statusのみ〕②04 §3本番値に対するOSS代替差分はG4時確認事項へ記録③マイグレーション0008の3テーブル新設〔05 §2追記はdocs改版候補〕④/metrics認証外公開は127.0.0.1明示バインド条件つき。外部OSSはcontext7一次確認済み)/ 2026-10-04
 - ws-4 / 計画 c3efa03(3,861行・Task 1〜14・実コード全文。**KpiJobはReevalRunner同型60秒tick方式へ読み替え**(ResetJob型の実時間sleepではClock操作発火が不可能=ControlledClock docstring実証)・kpi_dailyは(metric_key,day)行持ちで15キー・機械チェックSelf-Review証拠つき(basename一意新規14・headピン0008追従test_geo+staging conftest・ピン影響表11行・DB干渉対抗策=FKなし独立表・now相対時刻)。**supervisor再検証で5事実(basename衝突ゼロ・0007ピン実在・calibration_records列構成・match_candidates値域・Clock docstring)すべて一致確認**)/ 2026-10-04実装着手(worktree wJ・a3-ws4)
+- ws-4 / マージ 89525ca(設計 8e46d2b・計画 c3efa03・実装は2d65c2bまで・17コミット+supervisor fix 2件込み)/ docs/plans/M4/ws-4-report.md(+staging証拠 docs/testassets/results/ws4-staging-result-20261004-124823.yaml)/ 2026-10-04
+  - agent3実装(2h4m・途中BLOCKED 1件=計画書ピン影響表漏れのtest_rate_limit_wiringピンと「rate limit付けない」の両立不能→**supervisor裁定案B: api_rate_limited付与**(04 §5のAPI全体60req/分の傘+認証内包・辞書へ機械的追従))。実装時判断13件(prometheus-client 0.26対応・**scrape経路はhost-gatewayが127.0.0.1バインドポートへ届かずstagingネットワーク参加化**〔design§2.5案Bを採用・承認条件の127.0.0.1バインドは維持〕・/metricsはMountの307リダイレクト回避で通常ルート等)は報告書に記録
+  - スーパーバイザー独立検証で2欠陥を発見・直接修正: (1) **collectorのbreaker状態読取が@propertyをメソッド呼び出し**=常設workerが毎tick TypeErrorでbreaker_state gaugeを一度も公開できず(unitのスタブが素メソッド形状で検出不能・M2 ws-1系統のスタブ乖離4度目。01c29ad) (2) **engine未注入のWorker.run()が実ci-db接続を作りKpiJob即tickがunit試験から固定clock窓[09-23〜26]を書く**→test_obs_kpi_job_ciがtest-ci2回目以降決定的失敗(統合→unitの実行順で1回目合格・unit群の汚染が2回目以降8行化。残り行updated_at=2026-09-27T12:00:00Zきったり=conftest fake_clock署名で特定。test_worker系へkpi=_NoopKpi注入+配送非駆動側へengine=object+試験へ事前掃除。2d65c2b)
+  - 検証最終値: worktree test-ci **1664 passed×2回連続**(2回構造失敗の根治証明)・**マージ後main test-ci 1664 passed**(api・worker再ビルド後・7:16)・unit 1386・lint緑(327 files)・basename一意・alembic head=0008・依存追加=prometheus-client>=0.26のみ・staging受け入れ10件全pass(75秒・ws4-a/b/c)・kpi_daily残存=常設workerの現在窓のみ(仕様どおり)
+  - 運用メモ: ci常設workerがKpiJobでkpi_dailyへ現在窓の集計行を毎分冪等書込(有界・試験は事前掃除で隔離)・マイグレーション適用前のworker起動窓でrelation不存在エラーが一時出る(自己回復)・staging/dashboard環境はdown済み
+  - G4時確認事項へ2件記録(下記G4時確認事項節)
 
 ## G2判定資料(2026-09-30・承認済み)
 
