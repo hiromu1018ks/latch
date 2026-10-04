@@ -46,6 +46,9 @@ from latch.testassets.vocab import (
 SEED = 42
 SEED_CREATED = "2026-10-03"
 USER_COUNT = 100
+# この件数以下は全ペア判定の期待値集計を行う(staging 300件)。超過分
+# (massloadの1万〜10万)はO(n^2)集計を省略(build_seed・supervisor検証)
+AGGREGATE_MAX_COUNT = 2000
 DEFAULT_COUNT = 300
 EX_SLOT_COUNT = 64
 COUNT_MIN = EX_SLOT_COUNT + 1  # 意図的配置64件+残余1件未満は生成不可
@@ -1601,11 +1604,19 @@ def _assign_users(remaining: int, ex_counts: Counter) -> list[str]:
     総intent数をActive上限5件未満に保つ(08 §5.4・参照値14。ws-3の
     staging投入がrate limitに触れない条件)。容量: EX素材ユーザー59人×2+
     その他41人×3=241 >= 残余236(300件時)。
+    remainingが容量を超える場合は1ユーザーあたりceil(remaining/100)件の
+    均等割付へ引き上げる(massloadの1万〜10万母集合用・supervisor検証
+    2026-10-04)。massloadはAPIを通らないためActive 5件制限の対象外で・
+    Layer 1は1ユーザーのintent数を制限しない。300件以下の既定経路の
+    割付はこの分岐に入らず不変。
     """
     caps = {
         f"SU-{i:03d}": (2 if ex_counts.get(f"SU-{i:03d}", 0) > 0 else 3)
         for i in range(1, USER_COUNT + 1)
     }
+    if remaining > sum(caps.values()):
+        per = -(-remaining // USER_COUNT)  # ceil
+        caps = {f"SU-{i:03d}": per for i in range(1, USER_COUNT + 1)}
     counts: dict[str, int] = dict.fromkeys(caps, 0)
     assignments: list[str] = []
     while len(assignments) < remaining:
@@ -1865,9 +1876,26 @@ def build_seed(
         base, rng, count - len(ex_intents), ex_intents
     )
 
-    verdicts = judge_all(intents, users_by_id, now=base)
-    breakdown = Counter(r for ok, r in verdicts.values() if not ok)
-    n_pass = sum(1 for ok, _ in verdicts.values() if ok)
+    # 万件スケール(massload用)は全ペア判定O(n^2)と期待値集計を省略する
+    # (supervisor検証 2026-10-04: count=10000で約280秒・100000で約8時間の
+    # 見積まりのため生成が実用時間を超える。massloadはusers/intentsのみを
+    # 消費しexpectationsは使わない。stagingの300件は閾値内で不変)。
+    pair_total = 0
+    aggregate: dict = {
+        "skipped": True,
+        "reason": "大件数(massload用)は全ペア判定を省略",
+    }
+    if count <= AGGREGATE_MAX_COUNT:
+        verdicts = judge_all(intents, users_by_id, now=base)
+        breakdown = Counter(r for ok, r in verdicts.values() if not ok)
+        n_pass = sum(1 for ok, _ in verdicts.values() if ok)
+        pair_total = len(verdicts)
+        aggregate = {
+            "pair_total": len(verdicts),
+            "layer1_pass": n_pass,
+            "layer1_fail": len(verdicts) - n_pass,
+            "fail_breakdown": {r: breakdown.get(r, 0) for r in FAIL_PRIORITY},
+        }
 
     by_id = {i["id"]: i for i in intents}
     for case in EX_CASES:
@@ -1882,12 +1910,6 @@ def build_seed(
                 f"expected={case['expected']}/{case['fail_reason']} "
                 f"actual={'pass' if ok else 'fail'}/{reason}"
             )
-    aggregate = {
-        "pair_total": len(verdicts),
-        "layer1_pass": n_pass,
-        "layer1_fail": len(verdicts) - n_pass,
-        "fail_breakdown": {r: breakdown.get(r, 0) for r in FAIL_PRIORITY},
-    }
     return {
         "meta": {
             "status": "draft",
@@ -1897,7 +1919,7 @@ def build_seed(
             "random_seed": seed,
             "user_count": len(users),
             "intent_count": len(intents),
-            "pair_total": len(verdicts),
+            "pair_total": pair_total,
             "time_bucket_targets": dict(TIME_TARGETS),
             "category_targets": dict(CATEGORY_TARGETS),
             "orientation_targets": dict(ORIENTATION_TARGETS),
