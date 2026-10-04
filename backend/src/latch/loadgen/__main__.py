@@ -131,6 +131,31 @@ async def cmd_users(args) -> int:
     return 0
 
 
+async def _warm_tokens(
+    client: LoadClient,
+    http: httpx.AsyncClient,
+    subjects: list[str],
+    *,
+    concurrency: int = 8,
+) -> None:
+    """測定相の前にアクセストークンを事前取得してLoadClientへキャッシュ
+    させる(認証エンドポイントの署名スループットが律速になるのを防ぐ。
+    supervisor検証 2026-10-04)。同時8に絞って認証側へ穏やかに流す。"""
+    sem = asyncio.Semaphore(concurrency)
+    done = 0
+
+    async def one(subject: str) -> None:
+        nonlocal done
+        async with sem:
+            await client._ensure_token(http, subject)
+            done += 1
+            if done % 200 == 0:
+                print(f"token warmup: {done}/{len(subjects)}")
+
+    await asyncio.gather(*(one(s) for s in subjects))
+    print(f"token warmup: {len(subjects)}/{len(subjects)} done")
+
+
 async def cmd_perf(args) -> int:
     clock = SystemClock()
     client = LoadClient(base_url=args.base_url, keys_dir=args.keys)
@@ -144,6 +169,15 @@ async def cmd_perf(args) -> int:
         # 引き上げ(supervisor検証 2026-10-04・初回loadperf ok=470/6090)。
         limits=httpx.Limits(max_connections=500, max_keepalive_connections=200),
     ) as http_client:
+        # 測定相の前に全subjectのトークンを事前取得する: トークン交換
+        # (/v1/auth/token)はRSA署名のCPU処理がAPIイベントループで直列化し
+        # 約27req/sが上限。毎リクエストローテーションsubjectで交換していると
+        # 認証が注入レートの律速になる(測定対象はparse/pipeline側)。トークン
+        # はLoadClientがキャッシュ・有効期限1時間(04 D-21)(supervisor検証
+        # 2026-10-04・2回目loadperf ok=595/6090の原因)。
+        await _warm_tokens(
+            client, http_client, sorted({user_subject(p.seq) for p in plans})
+        )
 
         async def sender(plan: SendPlan) -> None:
             subject = user_subject(plan.seq)
@@ -212,6 +246,18 @@ async def cmd_bruteforce(args) -> int:
         timeout=60.0,
         limits=httpx.Limits(max_connections=500, max_keepalive_connections=200),
     ) as http_client:
+        # バースト中のトークン交換も認証上限(~27req/s)に当たるため事前取得
+        # (cmd_perfと同じ理由・supervisor検証 2026-10-04)。
+        await _warm_tokens(
+            client,
+            http_client,
+            sorted(
+                {
+                    LOAD_USER_SUBJECT.format(nnnn=args.first_user + (i % args.users))
+                    for i in range(args.users)
+                }
+            ),
+        )
 
         async def sender(plan: SendPlan) -> None:
             subject = LOAD_USER_SUBJECT.format(
