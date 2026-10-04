@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from latch.core.clock import Clock
 from latch.notifications.types import NOTIFICATION_NEARBY, NOTIFICATION_PROPOSAL
+from latch.obs.metrics import observe_latch_score
 from latch.worker.matching import group_calc, latch_calc, layer4
 from latch.worker.matching import origin as origin_mod
 from latch.worker.matching import proposal as proposal_mod
@@ -634,6 +635,9 @@ class LatchEngine:
                 ):
                     logger.info("latch d07 denied a=%s b=%s", a_id, b_id)
                     return
+                # 提案確定(d07通過後・このtxで提案を構築する点)のscore観測
+                # (M4 ws-4・design §2.8。d07 denied・競合負けは分布に入れない)
+                observe_latch_score(shape="pair", score=float(score))
                 proposal = proposal_mod.build_proposal(
                     origin=origin_inputs,
                     peer=peer_inputs,

@@ -25,6 +25,7 @@ from latch.llm.gateway import build_worker_gateway
 from latch.notifications.sender import build_push_sender
 from latch.obs.collector import MetricsCollector
 from latch.obs.kpi import KpiJob
+from latch.obs.metrics import observe_retrieval
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
 from latch.worker.cost import JevCostGuard, JevCostStore, ReevalGuard
@@ -408,7 +409,12 @@ class Worker:
         冪等は各部のガードで担保済み。
         """
         async with engine.begin() as conn:
-            await run_candidate_retrieval(conn, self.clock, intent_id)
+            outcome = await run_candidate_retrieval(conn, self.clock, intent_id)
+        if outcome is not None:
+            observe_retrieval(
+                layer1_pass_count=outcome.layer1_pass_count,
+                vector_items=len(outcome.pairs),
+            )
         await self._run_post_retrieval(intent_id)
 
     async def _run_matching(self, conn, intent_id: uuid.UUID) -> None:
@@ -428,4 +434,12 @@ class Worker:
                 intent_id,
             )
             return
-        await run_candidate_retrieval(conn, self.clock, intent_id)
+        outcome = await run_candidate_retrieval(conn, self.clock, intent_id)
+        # 戻り値なしスタブ(unit試験)とも非破壊に共存する(観測は本体処理を
+        # 壊さない — 本番はrun_candidate_retrievalが常にOutcomeを返す)
+        if outcome is not None:
+            observe_retrieval(
+                layer1_pass_count=outcome.layer1_pass_count,
+                vector_items=len(outcome.pairs),
+            )
+        return outcome
