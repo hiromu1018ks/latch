@@ -114,9 +114,15 @@ async def test_worker_run_starts_http_server_only_when_port_positive(
 
 
 async def test_worker_run_without_injection_builds_kpi_and_collector(fake_clock):
-    """未注入時はrun()内でKpiJob/collectorが構築されtask化される。"""
+    """未注入時はrun()内でKpiJob/collectorが構築されtask化される。
+
+    engine=object(): 未注入のままだとrun()が実DB(ci-db)へ接続しKpiJobの
+    即tickが共有DBへ書く(unit試験のDB隔離・test_worker.pyの注記参照)。
+    """
     settings = Settings(obs_worker_metrics_port=0)  # 既定=無効(ciと同一)
-    worker = Worker(clock=fake_clock, settings=settings, bus=_FakeBus())
+    worker = Worker(
+        clock=fake_clock, settings=settings, bus=_FakeBus(), engine=object()
+    )
     task = asyncio.create_task(worker.run())
     await asyncio.sleep(0.01)
     assert worker._kpi is not None

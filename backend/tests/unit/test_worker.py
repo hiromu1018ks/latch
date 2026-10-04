@@ -1,4 +1,11 @@
-"""Worker起動経路(FakeClock注入・即時shutdown。design §4.4)+配線(M2 ws-1)。"""
+"""Worker起動経路(FakeClock注入・即時shutdown。design §4.4)+配線(M2 ws-1)。
+
+kpi=_NoopKpi()は必須注入: run()はKpiJob未注入だと実KpiJob(起動時即tick・
+無条件書込み)を構築する。engine未注入のrun()は本物のci-db接続を作るため、
+M4 ws-4以降はunit試験が共有ci-dbへkpi_daily行を書く汚染源になる
+(supervisor検証で発見)。配送経路の試験は実engineを必要とするため
+engineではなくkpi側を差し替える。
+"""
 
 import asyncio
 import uuid
@@ -11,21 +18,21 @@ from latch.worker.stage1 import IntakeResult
 
 
 async def test_worker_accepts_injected_clock_and_stops_immediately(fake_clock):
-    worker = Worker(clock=fake_clock, bus=_FakeBus())
+    worker = Worker(clock=fake_clock, bus=_FakeBus(), kpi=_NoopKpi())
     assert worker.clock is fake_clock  # 注入したClockをそのまま使う
     worker.request_shutdown()  # shutdownイベントを先にセット
     await asyncio.wait_for(worker.run(), timeout=1.0)  # 即座にgraceful終了
 
 
 async def test_worker_defaults_to_system_clock():
-    worker = Worker(bus=_FakeBus())
+    worker = Worker(bus=_FakeBus(), kpi=_NoopKpi())
     assert isinstance(worker.clock, SystemClock)
     worker.request_shutdown()
     await asyncio.wait_for(worker.run(), timeout=1.0)
 
 
 async def test_worker_run_returns_after_shutdown_request():
-    worker = Worker(bus=_FakeBus())
+    worker = Worker(bus=_FakeBus(), kpi=_NoopKpi())
     task = asyncio.create_task(worker.run())
     # run() が待機に入ることを許す(asyncio.sleepは待機であり時刻参照ではない)
     await asyncio.sleep(0)
@@ -35,6 +42,18 @@ async def test_worker_run_returns_after_shutdown_request():
 
 
 # -- 配線(M2 ws-1)。FakeBus+記録Stage1+実debouncer(run()内構成)で検証 --
+
+
+class _NoopKpi:
+    """KpiJobのno-op差し替え(M4 ws-4・モジュールdocstring参照)。
+
+    実KpiJobは起動時即tickでkpi_dailyへ無条件書込むため、engine未注入の
+    run()と組み合わせるとunit試験が共有ci-dbを汚染する。stop待ちのみ。
+    """
+
+    async def run(self, stop=None):  # noqa: ANN001
+        if stop is not None:
+            await stop.wait()
 
 
 class _FakeBus:
@@ -110,7 +129,7 @@ async def _started_worker(fake_clock, stage1):
     """run()を起動し(bus=FakeBus・stage1=スタブ)、subscribe・debouncer構築を待つ。"""
     from latch.worker.main import Worker
 
-    worker = Worker(clock=fake_clock, bus=_FakeBus(), stage1=stage1)
+    worker = Worker(clock=fake_clock, bus=_FakeBus(), kpi=_NoopKpi(), stage1=stage1)
     task = asyncio.create_task(worker.run())
     await asyncio.sleep(0.01)
     return worker, task
@@ -205,7 +224,7 @@ async def test_run_matching_runs_retrieval_when_allowed(fake_clock, monkeypatch)
 
     monkeypatch.setattr("latch.worker.main.run_candidate_retrieval", fake_retrieval)
     guard = _FakeReeval(True)
-    worker = Worker(clock=fake_clock, bus=_FakeBus(), reeval=guard)
+    worker = Worker(clock=fake_clock, bus=_FakeBus(), kpi=_NoopKpi(), reeval=guard)
     await worker._run_matching(None, IID)
     assert called == [(None, fake_clock, IID)]
     assert guard.calls == [IID]
@@ -219,7 +238,7 @@ async def test_run_matching_suppressed_when_reeval_denies(fake_clock, monkeypatc
 
     monkeypatch.setattr("latch.worker.main.run_candidate_retrieval", fake_retrieval)
     guard = _FakeReeval(False)
-    worker = Worker(clock=fake_clock, bus=_FakeBus(), reeval=guard)
+    worker = Worker(clock=fake_clock, bus=_FakeBus(), kpi=_NoopKpi(), reeval=guard)
     await worker._run_matching(None, IID)  # 例外なくreturn(スキップ)
     assert guard.calls == [IID]
 
@@ -241,7 +260,12 @@ async def _started_worker_with_jev(fake_clock, stage1, jev, embedding=None):
     from latch.worker.main import Worker
 
     worker = Worker(
-        clock=fake_clock, bus=_FakeBus(), stage1=stage1, embedding=embedding, jev=jev
+        clock=fake_clock,
+        bus=_FakeBus(),
+        kpi=_NoopKpi(),
+        stage1=stage1,
+        embedding=embedding,
+        jev=jev,
     )
     task = asyncio.create_task(worker.run())
     await asyncio.sleep(0.01)
@@ -313,7 +337,12 @@ async def _started_worker_with_latch(fake_clock, stage1, jev, latch):
     from latch.worker.main import Worker
 
     worker = Worker(
-        clock=fake_clock, bus=_FakeBus(), stage1=stage1, jev=jev, latch=latch
+        clock=fake_clock,
+        bus=_FakeBus(),
+        kpi=_NoopKpi(),
+        stage1=stage1,
+        jev=jev,
+        latch=latch,
     )
     task = asyncio.create_task(worker.run())
     await asyncio.sleep(0.01)
@@ -411,6 +440,7 @@ async def test_run_direct_pipeline_order(fake_clock, monkeypatch):
     worker = Worker(
         clock=fake_clock,
         bus=_FakeBus(),
+        kpi=_NoopKpi(),
         stage1=_RecordingStage1("processed"),
         jev=jev,
         latch=latch,
@@ -465,6 +495,7 @@ async def test_kick_jev_chain_group_jev_latch_finalize(fake_clock):
     worker = Worker(
         clock=fake_clock,
         bus=_FakeBus(),
+        kpi=_NoopKpi(),
         stage1=stage1,
         jev=jev,
         latch=latch,
@@ -515,6 +546,7 @@ async def test_kick_jev_passes_group_ctx_to_jev(fake_clock):
     worker = Worker(
         clock=fake_clock,
         bus=_FakeBus(),
+        kpi=_NoopKpi(),
         stage1=stage1,
         jev=_Jev(),
         latch=None,
@@ -553,6 +585,7 @@ async def test_run_direct_pipeline_uses_post_retrieval(fake_clock, monkeypatch):
     worker = Worker(
         clock=fake_clock,
         bus=_FakeBus(),
+        kpi=_NoopKpi(),
         stage1=_RecordingStage1("processed"),
         jev=_C("jev"),
         latch=_C("latch"),
