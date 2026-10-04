@@ -69,11 +69,14 @@ async def _cleanup_masstest(engine) -> None:
 
 
 async def _massload_20(engine) -> dict:
-    """20件fixtureをmasstest-接頭辞で投入(実施後は呼び出し側で_cleanup)。"""
+    """20件fixtureをmasstest-接頭辞で投入(実施後は呼び出し側で_cleanup)。
+
+    冒頭の自前掃除は行わない: 各試験のfinallyが掃除を担い・べき等試験は
+    1回目と2回目の投入の間で掃除が入ってはならないため(supervisor修正 2026-10-04)。
+    """
     from latch.core.clock import SystemClock
     from latch.loadgen import massload
 
-    await _cleanup_masstest(engine)  # 試験間の残留があっても自浄する
     prev_prefix = massload.USER_PREFIX
     massload.USER_PREFIX = "masstest-"  # 投入元を識別させる(§2.2(c))
     try:
