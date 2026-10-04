@@ -23,6 +23,7 @@ from latch.geo.service import GeoService
 from latch.intents.events import EVENT_CREATED, EVENT_EMBEDDING_COMPLETED, EVENT_UPDATED
 from latch.llm.gateway import build_worker_gateway
 from latch.notifications.sender import build_push_sender
+from latch.obs.collector import MetricsCollector
 from latch.obs.kpi import KpiJob
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
@@ -65,6 +66,7 @@ class Worker:
         reeval_runner: ReevalRunner | None = None,
         group: GroupEngine | None = None,
         kpi=None,
+        collector=None,
     ) -> None:
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.settings: Settings = settings if settings is not None else Settings()
@@ -81,7 +83,7 @@ class Worker:
         self._reeval_runner = reeval_runner
         self._group = group
         self._kpi = kpi
-        self._collector = None
+        self._collector = collector
         self._metrics_server = None
         self._stop = asyncio.Event()
         self._subscription = None
@@ -247,6 +249,17 @@ class Worker:
                     interval_sec=self.settings.obs_collect_interval_sec,
                 )
             kpi_job = self._kpi
+            # MetricsCollector DI(M4 ws-4・design §2.6): engine+clockで
+            # 構築。breakerはgatewayの既存breaker参照をgetattrで受ける
+            # (gateway.pyは1行も変更しない — design §3.2)
+            if self._collector is None:
+                self._collector = MetricsCollector(
+                    engine=engine,
+                    clock=self.clock,
+                    interval_sec=self.settings.obs_collect_interval_sec,
+                    breaker=getattr(gateway, "_breaker", None),
+                )
+            collector = self._collector
             await bus.ensure()
             self._subscription = await bus.subscribe(self._dispatch)
             # workerメトリクス公開(M4 ws-4・design §2.5)。既定0=無効
@@ -266,6 +279,7 @@ class Worker:
                 reset_task = asyncio.create_task(reset_job.run(stop=self._stop))
             retention_task = asyncio.create_task(retention_job.run(stop=self._stop))
             kpi_task = asyncio.create_task(kpi_job.run(stop=self._stop))
+            collector_task = asyncio.create_task(collector.run(stop=self._stop))
             logger.info("worker started (app_env=%s)", self.settings.app_env)
             await self._stop.wait()
             # graceful shutdown: 窓内entryは解放せず未ack再配信へ(design §2.3)
@@ -279,6 +293,7 @@ class Worker:
                 await reset_task
             await retention_task
             await kpi_task
+            await collector_task
             logger.info("worker stopped")
         finally:
             if self._metrics_server is not None:

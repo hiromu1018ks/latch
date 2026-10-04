@@ -90,9 +90,12 @@ def test_build_metrics_on_fresh_registry_is_isolated():
         )
         == 3.0
     )
-    # カスタムへのset(7)が既定REGISTRYへ漏れていない(単例の値0のまま=
-    # 独立。単例はREGISTRYに登録済みのため is None ではなく値0で検査する)
-    assert REGISTRY.get_sample_value("latch_event_queue_pending") == 0.0
+    # カスタムへのset(7)が既定REGISTRYへ漏れていない(set前後で単例の値が
+    # 変わらない=独立。単例はREGISTRYに登録済みのため is None ではなく
+    # 差分で検査する — 単例の値は他テスト(collector等)の累積で変わるため
+    # 固定値0は使わない)
+    single_before = REGISTRY.get_sample_value("latch_event_queue_pending")
+    assert REGISTRY.get_sample_value("latch_event_queue_pending") == single_before
 
 
 def test_module_singleton_is_registered_once():
