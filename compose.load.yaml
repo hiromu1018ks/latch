@@ -14,6 +14,13 @@ x-backend-env: &backend-env
   LATCH_PUSH_MODE: stub
   LATCH_CLOCK_MODE: controlled
   LATCH_AUTH_TESTKEYS_DIR: /keys
+  # stub遅延分布(M4 ws-6・10 §4.1値を既定・`${VAR:-既定}`でホスト環境変数
+  # 上書き可)。perf区間はこの既定のままで・総当たり区間はmake load-stub-flat
+  # で0へ切替する(§2.1読み替え5)。既存固定ms env(llm_stub_delay_*)は設定しない
+  LATCH_LLM_STUB_LATENCY_PARSER_P50_MS: ${LATCH_LLM_STUB_LATENCY_PARSER_P50_MS:-1000}
+  LATCH_LLM_STUB_LATENCY_PARSER_P95_MS: ${LATCH_LLM_STUB_LATENCY_PARSER_P95_MS:-2500}
+  LATCH_LLM_STUB_LATENCY_JEV_P50_MS: ${LATCH_LLM_STUB_LATENCY_JEV_P50_MS:-2000}
+  LATCH_LLM_STUB_LATENCY_JEV_P95_MS: ${LATCH_LLM_STUB_LATENCY_JEV_P95_MS:-5000}
 
 x-api-common: &api-common
   build:
@@ -95,11 +102,19 @@ services:
     <<: *api-common
     ports:
       - "127.0.0.1:28001:8000"
+    networks:
+      default:
+        aliases:
+          - load-api1
 
   api2:
     <<: *api-common
     ports:
       - "127.0.0.1:28002:8000"
+    networks:
+      default:
+        aliases:
+          - load-api2
 
   nginx:
     image: nginx:alpine
@@ -118,11 +133,19 @@ services:
     <<: *worker-common
     ports:
       - "127.0.0.1:28101:9100"
+    networks:
+      default:
+        aliases:
+          - load-worker1
 
   worker2:
     <<: *worker-common
     ports:
       - "127.0.0.1:28102:9100"
+    networks:
+      default:
+        aliases:
+          - load-worker2
 
 volumes:
   latch-load-db:

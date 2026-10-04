@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs loadusers loadperf loadbf loadmass load-stub-flat load-migrate load-geo-import
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -59,6 +59,8 @@ g2-gate: ## G2日本語評価harness(実API・課金。.envにLATCH_LLM_MODE=rea
 
 STAGING_COMPOSE = docker compose -f compose.staging.yaml
 LOAD_COMPOSE = docker compose -f compose.load.yaml
+LOAD_DB_URL = postgresql+asyncpg://latch:latch@127.0.0.1:25432/latch
+LOADGEN_DSN = postgresql://latch:latch@127.0.0.1:25432/latch
 DASHBOARD_COMPOSE = docker compose -f compose.dashboard.yaml
 STAGING_DB_URL = postgresql+asyncpg://latch:latch@127.0.0.1:15432/latch
 
@@ -104,6 +106,28 @@ load-down: ## load環境を停止(ボリューム保持)
 
 load-ps: ## load環境の状態
 	$(LOAD_COMPOSE) ps
+
+loadusers: ## load環境へ負荷用ユーザーをAPI経由作成(users+consent。make loadusers ARGS="--count 1000")
+	cd backend && uv run python -m latch.loadgen users $(ARGS)
+
+loadperf: ## 性能試験区間(相A parse→相B save→相C burst→収束待ち→証拠YAML。§8手順のci一時停止を明示実行してから)
+	cd backend && uv run python -m latch.loadgen perf $(ARGS)
+
+loadmass: ## 総当たり母集合投入(Event発行なし。make loadmass ARGS="--stage 10000 --base-datetime <tz付きISO>")
+	cd backend && uv run python -m latch.loadgen massload $(ARGS)
+
+loadbf: ## 総当たり注入100件+収束待ち+証拠YAML(make loadbf ARGS="--stage 10000 --first-user 1")
+	cd backend && uv run python -m latch.loadgen bruteforce $(ARGS)
+
+load-stub-flat: ## load環境のstub遅延分布を0へ切替(総当たり区間の前提・api/workerをenv差分で再作成)
+	LATCH_LLM_STUB_LATENCY_PARSER_P50_MS=0 LATCH_LLM_STUB_LATENCY_PARSER_P95_MS=0 LATCH_LLM_STUB_LATENCY_JEV_P50_MS=0 LATCH_LLM_STUB_LATENCY_JEV_P95_MS=0 $(LOAD_COMPOSE) up -d --force-recreate api1 api2 worker1 worker2
+
+load-migrate: ## load DBをheadまでマイグレーション(25432宛・staging-migrateの対称形)
+	cd backend && LATCH_DATABASE_URL=$(LOAD_DB_URL) uv run alembic upgrade head
+
+load-geo-import: ## load DBへ地物データを取り込み(25432宛。CSV/PBFはbackend/data/geo/・git管理外)
+	cd backend && LATCH_DATABASE_URL=$(LOAD_DB_URL) uv run --group geo python -m latch.geo import-isj --csv data/geo/isj.csv
+	cd backend && LATCH_DATABASE_URL=$(LOAD_DB_URL) uv run --group geo python -m latch.geo import-osm --pbf data/geo/kyushu-latest.osm.pbf
 
 seed-generate: ## M4シード生成(決定的。ローカル・DB不要。ARGS="--base-datetime 2026-10-04T11:00:00+09:00" — tz付きISO必須。--count既定300)
 	cd backend && uv run python -m latch.testassets.generator $(ARGS)
