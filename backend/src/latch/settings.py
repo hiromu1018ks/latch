@@ -49,6 +49,17 @@ class Settings(BaseSettings):
     llm_stub_jev_noul: float = 0.5
     llm_stub_jev_score: float = 2.0
 
+    # --- レイテンシ注入の分布(M4 ws-6・10 §4.1)---
+    # stub遅延のp50/p95分布注入(決定的ハッシュ割付・stub.py
+    # distributed_delay_ms)。p50_ms>0で有効・優先順位は「分布 > 既存固定ms
+    # (llm_stub_delay_*)」。既定0=無効(ci/test-ci既存挙動不変)。load compose
+    # は10 §4.1値を既定とする(compose.load.yaml・§2.1読み替え5)。embedding
+    # 系統は分布を作らない(10 §4.1に注入規定なし・YAGNI)
+    llm_stub_latency_parser_p50_ms: int = 0
+    llm_stub_latency_parser_p95_ms: int = 0
+    llm_stub_latency_jev_p50_ms: int = 0
+    llm_stub_latency_jev_p95_ms: int = 0
+
     # --- 認証(ws-3。design §2.5)---
     redis_url: str = "redis://127.0.0.1:6379/0"
     # HS256用secret。空=同梱テスト鍵(ci/staging)。prodで空/テスト鍵は起動拒否
