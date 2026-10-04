@@ -11,7 +11,7 @@
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **ws-4(Observability)の設計着手はユーザーGoサイン待ち**(wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・test-ci 1604・G3繰越02#13〜#23回収済み。ws-5=マージ18a6d88+153ec50・1596)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
+- 次の着手: **ws-4(Observability)実装中**(2026-10-04ユーザーGoサイン→設計8e46d2b・計画c3efa03を経てworktree wJでagent3実装中。wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・test-ci 1604・G3繰越02#13〜#23回収済み。ws-5=マージ18a6d88+153ec50・1596)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -455,6 +455,8 @@
   - staging運用の発見(報告書): staging-resetにイメージbuild不含(明示build必須)・api再作成後はnginx再起動必須(upstream IPキャッシュ)・**latch.llm.sendはworkerログで観測可能**〔ws-5引継ぎの回答: embedding 359行・jev 832行〕
   - staging環境はdown済み(次回利用時はstaging-resetから)
 - 学習資産追従: ws-3分 e17715d(第28章『常設世界で約束全体を証明する: stagingフル実行ハーネス』+Lab 14〔staging-reset→シード→34試験→証拠YAML→片付けの一巡・期待される出力はすべて当日実測〕新設・既存6ファイル更新〔README順路・00-environment〔1335/1604/staging 34〕・第24章のLab再候補回収・第26章裁定A追従・Lab 11/12〕。agent4がstaging一巡34 passed 9分58秒・make test 1335・lint 8ファイル収束・環境返却を確認。追加発見: staging-reset直後のfresh起動ならnginx再起動不要〔apiだけ作り変えた場合のみ必要〕)
+- ws-4 / 設計 8e46d2b(supervisor承認4件=①HTTP基本メトリクス追加〔ws-6測定基盤・labelはmethod/path型/statusのみ〕②04 §3本番値に対するOSS代替差分はG4時確認事項へ記録③マイグレーション0008の3テーブル新設〔05 §2追記はdocs改版候補〕④/metrics認証外公開は127.0.0.1明示バインド条件つき。外部OSSはcontext7一次確認済み)/ 2026-10-04
+- ws-4 / 計画 c3efa03(3,861行・Task 1〜14・実コード全文。**KpiJobはReevalRunner同型60秒tick方式へ読み替え**(ResetJob型の実時間sleepではClock操作発火が不可能=ControlledClock docstring実証)・kpi_dailyは(metric_key,day)行持ちで15キー・機械チェックSelf-Review証拠つき(basename一意新規14・headピン0008追従test_geo+staging conftest・ピン影響表11行・DB干渉対抗策=FKなし独立表・now相対時刻)。**supervisor再検証で5事実(basename衝突ゼロ・0007ピン実在・calibration_records列構成・match_candidates値域・Clock docstring)すべて一致確認**)/ 2026-10-04実装着手(worktree wJ・a3-ws4)
 
 ## G2判定資料(2026-09-30・承認済み)
 
