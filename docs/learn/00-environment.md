@@ -199,10 +199,10 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **1386件を約8〜10秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **1438件を約8〜10秒**(`make test`)。フロントエンドも
   **233件を約1秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
-- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 278件を含め計
-  **1664件**(2026-10-04のM4 ws-4マージ検証で全件グリーンを確認。ci環境の起動を
+- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 282件を含め計
+  **1720件**(2026-10-04のM4 ws-6マージ検証で全件グリーンを確認。ci環境の起動を
   待つ分、実行には数分かかります)
 
 この2つに加えて、M4から3つ目の層があります。**staging環境**(本番と同じ構成を小さくした
@@ -266,10 +266,12 @@ latch/
 │   │   ├── geo/           地名⇔座標の変換(ジオコーディング)
 │   │   ├── events/        知らせの運搬(EventBusポート・Pub/Sub実装・回収リレー)(第9章)
 │   │   ├── obs/           計測(メトリクスの単一真実・HTTP計測middleware・/v1/sessions・60秒のcollector・日次集計KpiJob)(第29章)
+│   │   ├── loadgen/       負荷注入器(時刻駆動スケジューラ・母集合投入・証拠採取)(第30章)
 │   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチングとコスト保護・提案・グループ・期限切れバッチとリセットジョブ・30日定期削除・プッシュ送信・計測のcollectorとKpiJobの配線)(第9章〜第15章・第18章〜第19章・第22章・第29章)
 │   └── tests/             テスト(unit/=部品単体, integration/=組み合わせ)
 ├── compose.yaml           5サービス(db/redis/pubsub/api/worker)の定義
 ├── compose.staging.yaml   staging環境の定義(第25章・第28章)
+├── compose.load.yaml      load環境(負荷試験用・stagingと同構成を完全分離)の定義(第30章)
 ├── compose.dashboard.yaml ダッシュボード環境(prometheus+grafana)の定義(第29章)
 ├── Makefile               よく使うコマンドのショートカット集
 ├── docker/postgres/       DBイメージの定義(PostGIS+pgvector同梱)
@@ -307,6 +309,12 @@ latch/
 | `make dashboard-ps` / `make dashboard-logs` | ダッシュボード環境の状態一覧 / ログの流し見(直近30行) |
 | `make staging-clock ARGS="show"` | staging環境の共有時計を操作する(ほかに `set <ISO>`・`advance <秒>`)。動いている環境の時計の針を、プロセスの再起動なしに動かす道具(第25章・Lab 11) |
 | `make staging-down` / `make load-up` / `make load-down` | staging環境の停止 / load環境(負荷試験用・stagingと同構成を完全分離)の起動と停止 |
+| `make loadusers ARGS="--count 1000"` | load環境へ負荷用ユーザー(users+consent)をAPI経由で作成(第30章) |
+| `make loadperf` | 性能試験区間(parse 50rps→保存50rps→バースト100件→収束待ち→証拠YAML)をload環境へ注入。実行はci一時停止(`make down`→試験→`make up`で復帰)の手順を伴う(第30章) |
+| `make loadmass ARGS="--stage 10000 --base-datetime <tz付きISO>"` | 総当たりの母集合(Eventを発行しないDB直接投入)を段階的に投入(第30章) |
+| `make loadbf ARGS="--stage 10000 --first-user 1"` | 総当たりの注入100件+収束待ち+証拠YAML(第30章) |
+| `make load-stub-flat` | load環境のstub遅延分布を0へ切替(総当たり区間の前提。api/workerを再作成する)(第30章) |
+| `make load-migrate` / `make load-geo-import` | load DBのマイグレーション / 地物データの取込(25432宛)(第30章) |
 | `cd frontend && npm install` | フロントエンドの依存を導入。初回と、`package.json` が変わった後に実行 |
 | `cd frontend && npm run dev` | 画面の開発サーバーを起動(http://localhost:5173/)。`/v1` をapiへ転送する |
 | `cd frontend && npm test` | フロントエンドのunit テスト233件。約1秒 |

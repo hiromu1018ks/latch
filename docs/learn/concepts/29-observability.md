@@ -74,9 +74,9 @@
 という新しい窓口で、受け取れるのはuser_idと時刻だけです。
 
 さらに、この単位で**全APIのリクエスト数と応答時間**を数える仕組みが
-3群への拡張として足されました(29.6節)。これは後の単位で「APIの応答時間の
-95パーセント点(p95)が500ミリ秒以内」という性能の約束を測るための
-基盤になります。
+3群への拡張として足されました(29.6節)。この基盤は、後の単位(M4 ws-6)で
+「APIの応答時間の95パーセント点(p95)が500ミリ秒以内」という性能の約束を
+実際に測るときの器になりました(第30章)。
 
 この「3群+アクセス系」という切り分けの意図は、**数の消費者から考える**ことです。
 パイプライン群は「流れが詰まっていないか」を見る人の数、Jev群は「お金と時間が
@@ -128,9 +128,14 @@ class Metrics:
     score: Histogram
     kpi_daily_numerator: Gauge
     kpi_daily_denominator: Gauge
+    pipeline_layer_seconds: Histogram
+    latch_initial_e2e_seconds: Histogram
+    notification_latency_seconds: Histogram
 ```
 
-(`backend/src/latch/obs/metrics.py` 27〜44行。15個の数が宣言されています)
+(`backend/src/latch/obs/metrics.py` 52〜73行。19個の数が宣言されています。
+下の3本のヒストグラムはM4 ws-6で足されたもので、処理の各区間の時間の分布を
+観測します。何のために必要になったかは第30章で読みます)
 
 それぞれがどの群に属するかを見てみましょう。`event_queue_pending`と
 `event_queue_oldest_pending_seconds`と`pipeline_candidates`と
@@ -357,6 +362,10 @@ global:
   scrape_interval: 15s
 
 # targetはstagingのcomposeネットワーク内のコンテナ名直結
+# (compose.dashboard.yamlのstaging-obsネットワーク参加を参照。apiコンテナ内
+# ポート8000・worker内ポート9100)。load環境(28000系)はload-別名でscrapeする
+# (ws-6・compose.dashboard.yamlのload-obsネットワーク参加とcompose.load.yamlの
+# aliases参照 — 同一ネットワーク越しの同名コンテナのDNSあいまい解決を避ける)
 scrape_configs:
   - job_name: latch-staging-api
     static_configs:
@@ -368,16 +377,28 @@ scrape_configs:
       - targets:
           - "worker1:9100"
           - "worker2:9100"
+  - job_name: latch-load-api
+    static_configs:
+      - targets:
+          - "load-api1:8000"
+          - "load-api2:8000"
+  - job_name: latch-load-worker
+    static_configs:
+      - targets:
+          - "load-worker1:9100"
+          - "load-worker2:9100"
   - job_name: prometheus
     static_configs:
       - targets:
           - "localhost:9090"
 ```
 
-(`docker/prometheus/prometheus.yml` 1〜21行)
+(`docker/prometheus/prometheus.yml` 1〜33行。下の2本のload系jobは
+M4 ws-6で足されたもので、load環境(第30章)の数を別のjobラベルで
+分けて取りに行きます)
 
-「15秒ごとに、api1とapi2の8000番、worker1とworker2の9100番へ
-取りに行く」と読めます。apiは8000番(アプリの窓口`/metrics`は
+「15秒ごとに、stagingのapi1とapi2の8000番、worker1とworker2の9100番
+(さらにload環境のload-api1/2・load-worker1/2)へ取りに行く」と読めます。apiは8000番(アプリの窓口`/metrics`は
 その中)、workerは9100番(計測専用の別ポート)です。worker側に
 専用ポートがあるのは、workerがHTTPサーバーを持たない裏方だからです
 (第9章)。設定は `LATCH_OBS_WORKER_METRICS_PORT` という環境変数で
