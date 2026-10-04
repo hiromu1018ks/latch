@@ -4,8 +4,9 @@
 # への参加によるコンテナ名直結(実施時にhost-gateway経由ではホストの
 # 127.0.0.1バインドポートへ届かないため変更・報告書に記録)。ホスト公開
 # ポートの127.0.0.1明示バインド(承認事項4)は本ファイルのportsで維持する。
-# load環境(28000系)のtargetはws-6(性能測定)が追加する(design §3.1どおり
-# staging系のみの初期構成)。
+# load環境(28000系)のtargetもprometheus.ymlへ追加した(ws-6)。scrape経路は
+# loadのcomposeネットワーク(latch-load_default)への参加+load側コンテナの
+# 別名(load-api1等・同一ネットワーク名のDocker DNSあいまい解決を避ける)。
 name: latch-dashboard
 
 services:
@@ -22,6 +23,7 @@ services:
     networks:
       - default
       - staging-obs
+      - load-obs
     restart: unless-stopped
 
   grafana:
@@ -43,3 +45,9 @@ networks:
   staging-obs:
     external: true
     name: latch-staging_default
+  # loadのcomposeが作る既定ネットワーク(ws-6・external。load-up後に存在する
+  # ため起動順序は load-up → dashboard-up。dashboard稼働中にload-upした場合は
+  # prometheus再起動〔dashboard-down/up〕を手順§8で明示する)
+  load-obs:
+    external: true
+    name: latch-load_default

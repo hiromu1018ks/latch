@@ -42,6 +42,18 @@ EXPECTED_SAMPLE_NAMES = {
     "latch_score_bucket",
     "latch_score_count",
     "latch_score_sum",
+    # 負荷試験の計測(M4 ws-6・design §2.3。designの「latch_initial_e2e_seconds」
+    # は露出名(=namespace接頭辞込み)なので・metrics.pyの定義名は
+    # initial_e2e_secondsとして露出名latch_initial_e2e_seconds_*を揃える)
+    "latch_pipeline_layer_seconds_bucket",
+    "latch_pipeline_layer_seconds_count",
+    "latch_pipeline_layer_seconds_sum",
+    "latch_initial_e2e_seconds_bucket",
+    "latch_initial_e2e_seconds_count",
+    "latch_initial_e2e_seconds_sum",
+    "latch_notification_latency_seconds_bucket",
+    "latch_notification_latency_seconds_count",
+    "latch_notification_latency_seconds_sum",
     # KPI(design §2.3)
     "latch_kpi_daily_numerator",
     "latch_kpi_daily_denominator",
@@ -276,3 +288,134 @@ async def test_metrics_path_itself_is_not_counted(app, client):
         for sample in family.samples:
             if sample.name == "latch_http_requests_total":
                 assert sample.labels.get("path") != "/metrics"
+
+
+# -- 負荷試験の計測(Task 3・M4 ws-6)--
+# observe3関数は下の試験でobs_metrics_module経由で呼ぶ(既存observe_*試験と
+# 同一作法のためimportしない)
+
+from latch.obs.metrics import (  # noqa: E402
+    HTTP_BUCKETS,
+    LATENCY_BUCKETS,
+    NOTIFY_BUCKETS,
+)
+
+
+def test_http_buckets_keep_defaults_and_add_3s_8s():
+    """httpのbucketは既定DEFAULT_BUCKETSの写しに3.0と8.0を追加した列
+    (既存値は1つも変えない・§2.3の表)。"""
+    # 既定DEFAULT_BUCKETSの値と順序を直接書く(既存値不変の機械確認)
+    assert HTTP_BUCKETS[:10] == (
+        0.01,
+        0.025,
+        0.05,
+        0.075,
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        1.0,
+        2.5,
+    )
+    assert HTTP_BUCKETS[10:] == (3.0, 5.0, 7.5, 8.0, 10.0)
+
+
+def test_latency_buckets_contain_injection_targets_and_budgets():
+    """層別・E2Eのbucketに注入値(p50 1秒/2秒・p95 2.5秒/5秒)と目標境界10秒が
+    ある(histogram_quantileの補間推定が注入値と一致する位置・§2.3)。"""
+    assert 1.0 in LATENCY_BUCKETS
+    assert 2.0 in LATENCY_BUCKETS
+    assert 2.5 in LATENCY_BUCKETS
+    assert 5.0 in LATENCY_BUCKETS
+    assert LATENCY_BUCKETS[-1] == 10.0
+
+
+def test_notify_buckets_contain_5s_target():
+    assert 5.0 in NOTIFY_BUCKETS
+    assert NOTIFY_BUCKETS[0] == 0.001
+
+
+def test_new_histograms_are_registered_with_labels():
+    """新3本がlabelつきで登録される(layer=embedding等でseriesが生える)。"""
+    registry = CollectorRegistry()
+    m = build_metrics(registry)
+    m.pipeline_layer_seconds.labels(layer="retrieval").observe(0.4)
+    m.latch_initial_e2e_seconds.labels(route="create").observe(2.1)
+    m.notification_latency_seconds.observe(0.01)
+    assert (
+        registry.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "retrieval"}
+        )
+        == 1.0
+    )
+    assert (
+        registry.get_sample_value(
+            "latch_initial_e2e_seconds_count", {"route": "create"}
+        )
+        == 1.0
+    )
+    assert registry.get_sample_value("latch_notification_latency_seconds_count") == 1.0
+
+
+def test_injection_value_buckets_are_exposed():
+    """露出bucketのleに注入値と目標境界が現れる(クエリ側の前提)。"""
+    registry = CollectorRegistry()
+    m = build_metrics(registry)
+    # prometheus-client 0.26はlabels()/observe()までsampleを持たない(遅延生成。
+    # 冒頭_sample_namesのdocstringと同一の実挙動)ため・seriesを1つ生らせて
+    # からle集合を集める(そのseriesに全bucketのleが載る)
+    m.pipeline_layer_seconds.labels(layer="embedding").observe(0.5)
+    m.latch_initial_e2e_seconds.labels(route="create").observe(2.1)
+    les_pipeline: set[str] = set()
+    les_e2e: set[str] = set()
+    for family in registry.collect():
+        for sample in family.samples:
+            if sample.name == "latch_pipeline_layer_seconds_bucket":
+                les_pipeline.add(sample.labels["le"])
+            if sample.name == "latch_initial_e2e_seconds_bucket":
+                les_e2e.add(sample.labels["le"])
+    # prometheus-clientはleをrepr形式の文字列で出す
+    assert {"1.0", "2.0", "2.5", "5.0", "10.0"} <= les_pipeline
+    assert {"1.0", "2.0", "2.5", "5.0", "10.0"} <= les_e2e
+
+
+def test_observe_helpers_for_load_metrics_increment_the_right_series():
+    """observe3関数が単例のseriesを増やす(既存observe_*と同型の差分検証)。"""
+    from latch.obs import metrics as obs_metrics_module
+
+    before = (
+        REGISTRY.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "embedding"}
+        )
+        or 0
+    )
+    obs_metrics_module.observe_pipeline_layer(layer="embedding", elapsed_s=0.5)
+    after = (
+        REGISTRY.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "embedding"}
+        )
+        or 0
+    )
+    assert after == before + 1
+
+    before_e2e = (
+        REGISTRY.get_sample_value(
+            "latch_initial_e2e_seconds_count", {"route": "activate"}
+        )
+        or 0
+    )
+    obs_metrics_module.observe_initial_e2e(route="activate", elapsed_s=3.2)
+    after_e2e = (
+        REGISTRY.get_sample_value(
+            "latch_initial_e2e_seconds_count", {"route": "activate"}
+        )
+        or 0
+    )
+    assert after_e2e == before_e2e + 1
+
+    before_notify = REGISTRY.get_sample_value(
+        "latch_notification_latency_seconds_count"
+    )
+    obs_metrics_module.observe_notification_latency(elapsed_s=0.002)
+    after_notify = REGISTRY.get_sample_value("latch_notification_latency_seconds_count")
+    assert (after_notify or 0) == (before_notify or 0) + 1

@@ -132,6 +132,8 @@ def _patch(
     insert_result=_DEFAULT,
     find_open_result=None,
     daily: dict | None = None,
+    e2e_context=None,
+    origin_proposals=2,
 ):
     """LatchEngineのDB部品を記録スタブへ差し替え(戻り値=呼び出し記録log)。
 
@@ -153,6 +155,8 @@ def _patch(
         "daily": [],
         "promote": [],
         "drain": [],
+        "promote_ctx": [],
+        "e2e": [],
     }
     if inputs is None:
         inputs = {_uid(1): _inputs(1), _uid(101): _inputs(101)}
@@ -220,8 +224,17 @@ def _patch(
         log["daily"].append((tuple(user_ids), day_start, day_next))
         return daily if daily is not None else {}
 
-    async def fake_promote(engine_self, latch_id):
-        log["promote"].append(latch_id)
+    async def fake_read_e2e_context(conn, org_obj):
+        log["e2e"].append(("context", org_obj.intent_id))
+        return e2e_context
+
+    async def fake_count_proposals(conn, intent_id):
+        log["e2e"].append(("count", intent_id))
+        return origin_proposals
+
+    async def fake_promote(engine_self, latch_id, **kwargs):
+        log["promote"].append(latch_id)  # 既存試験のassertは不変
+        log["promote_ctx"].append(kwargs.get("e2e_ctx"))
 
     async def fake_drain(engine_self, now, threshold):
         log["drain"].append((now, threshold))
@@ -229,6 +242,8 @@ def _patch(
 
     monkeypatch.setattr(le.origin_mod, "load_origin", fake_load_origin)
     monkeypatch.setattr(le, "_select_target_rows", fake_select)
+    monkeypatch.setattr(le, "_read_e2e_context", fake_read_e2e_context)
+    monkeypatch.setattr(le, "_count_origin_proposals", fake_count_proposals)
     monkeypatch.setattr(le.layer4, "hard_constraint_holds", fake_h)
     monkeypatch.setattr(le, "_close_h_broken", fake_close)
     monkeypatch.setattr(le, "_record_score", fake_record)
@@ -1358,3 +1373,122 @@ async def test_nearby_push_sent_to_nearby_also_only(monkeypatch):
         (_inputs(1).user_id, NOTIFICATION_NEARBY, NEW_LATCH_ID)
     ]
     assert push.calls == log["notifications"]
+
+
+# =====================================================================
+# 負荷試験の観測(M4 ws-6・design §2.3・§2.1読み替え1/2)
+# =====================================================================
+
+from prometheus_client import REGISTRY  # noqa: E402
+
+
+def _e2e_observed_total() -> float:
+    """E2Eヒストグラム_countの全route合計(ラベル和・REGISTRY累積差分用)。"""
+    total = 0.0
+    for family in REGISTRY.collect():
+        if family.name != "latch_initial_e2e_seconds":  # family名はnamespace込み
+            continue
+        for sample in family.samples:
+            if sample.name == "latch_initial_e2e_seconds_count":
+                total += sample.value
+    return total
+
+
+def _notify_observed_total() -> float:
+    total = 0.0
+    for family in REGISTRY.collect():
+        if family.name != "latch_notification_latency_seconds":
+            continue
+        for sample in family.samples:
+            if sample.name == "latch_notification_latency_seconds_count":
+                total += sample.value
+    return total
+
+
+async def test_handle_passes_e2e_ctx_on_first_injection(monkeypatch):
+    """created種Event(version一致)+初回提案 → try_promoteへE2Eコンテキスト。"""
+    row = _row(1, wa=0.9, wb=0.85)
+    ctx = le.E2eObsContext(origin_ts=NOW, route="create")
+    log = _patch(
+        monkeypatch,
+        org=_origin(1),
+        rows=[row],
+        e2e_context=ctx,
+        origin_proposals=1,
+    )
+    await _engine().handle(_uid(1))
+    assert log["promote_ctx"] == [ctx]
+
+
+async def test_handle_drops_ctx_when_not_first_proposal(monkeypatch):
+    """初回でない提案(起点を含むlatches行が2件目以降) → 観測対象外。"""
+    row = _row(1, wa=0.9, wb=0.85)
+    ctx = le.E2eObsContext(origin_ts=NOW, route="activate")
+    log = _patch(
+        monkeypatch,
+        org=_origin(1),
+        rows=[row],
+        e2e_context=ctx,
+        origin_proposals=2,
+    )
+    await _engine().handle(_uid(1))
+    assert log["promote_ctx"] == [None]
+
+
+async def test_handle_passes_none_ctx_without_created_event(monkeypatch):
+    """created種Eventなし(更新Event・再評価由来の起点) → 観測しない。
+
+    DB照合方式(読み替え2・提案確定時に照合する確定設計)では起点読取自体は
+    常に走り・照合結果None(created種Eventなし)でctxが外れる。初回判定の
+    latches行数カウントはctx有効時のみ走る(Noneでは呼ばれない)。
+    """
+    row = _row(1, wa=0.9, wb=0.85)
+    log = _patch(monkeypatch, org=_origin(1), rows=[row])  # e2e_context既定None
+    await _engine().handle(_uid(1))
+    assert log["promote_ctx"] == [None]
+    assert ("context", _uid(1)) in log["e2e"]  # 照合は走る(DB照合方式)
+    assert ("count", _uid(1)) not in log["e2e"]  # 初回判定カウントは走らない
+
+
+async def test_promote_observes_e2e_with_route(monkeypatch):
+    """e2e_ctx付きproposed遷移+通知 → E2E(route付き)と通知区間を観測。"""
+    _patch_promote(monkeypatch, row=_latch_row())
+    before_e2e = _e2e_observed_total()
+    before_notify = _notify_observed_total()
+    ctx = le.E2eObsContext(origin_ts=NOW - timedelta(seconds=3), route="create")
+    await _engine().try_promote(LID, e2e_ctx=ctx)
+    assert _e2e_observed_total() == before_e2e + 1
+    assert _notify_observed_total() == before_notify + 1
+
+
+async def test_promote_without_ctx_observes_notify_only(monkeypatch):
+    """e2e_ctx=None(既存呼び出し形) → 通知区間のみ・E2Eは観測しない。"""
+    _patch_promote(monkeypatch, row=_latch_row())
+    before_e2e = _e2e_observed_total()
+    before_notify = _notify_observed_total()
+    await _engine().try_promote(LID)
+    assert _e2e_observed_total() == before_e2e
+    assert _notify_observed_total() == before_notify + 1
+
+
+async def test_promote_expired_writes_no_load_observation(monkeypatch):
+    """75分切れ(candidate→expired・通知ゼロ) → 両観測とも0増。"""
+    parts = [
+        _participant(1, time_start=NOW + timedelta(minutes=70)),
+        _participant(101, time_start=NOW + timedelta(minutes=70)),
+    ]
+    _patch_promote(monkeypatch, row=_latch_row(), parts=parts)
+    before_e2e = _e2e_observed_total()
+    before_notify = _notify_observed_total()
+    ctx = le.E2eObsContext(origin_ts=NOW, route="create")
+    await _engine().try_promote(LID, e2e_ctx=ctx)
+    assert _e2e_observed_total() == before_e2e
+    assert _notify_observed_total() == before_notify
+
+
+def test_e2e_origin_sql_pins_unique_index_columns():
+    """起点読取SQL: created種・source_intent・payload version(UNIQUE索引)。"""
+    sql = str(le._SELECT_INJECTION_ORIGIN)
+    assert "event_type = 'created'" in sql
+    assert "me.source_intent_id = CAST(:intent_id AS uuid)" in sql
+    assert "me.payload->>'version' = :version" in sql

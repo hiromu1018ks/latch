@@ -345,6 +345,10 @@ def build_llm_gateway(
         delay_parser_ms=settings.llm_stub_delay_parser_ms,
         delay_embedding_ms=settings.llm_stub_delay_embedding_ms,
         delay_jev_ms=settings.llm_stub_delay_jev_ms,
+        latency_parser_p50_ms=settings.llm_stub_latency_parser_p50_ms,
+        latency_parser_p95_ms=settings.llm_stub_latency_parser_p95_ms,
+        latency_jev_p50_ms=settings.llm_stub_latency_jev_p50_ms,
+        latency_jev_p95_ms=settings.llm_stub_latency_jev_p95_ms,
         jev_response=_stub_jev_response(settings),
     )
     if settings.llm_mode == "stub":
@@ -381,6 +385,10 @@ def build_worker_gateway(clock: Clock, settings: Settings) -> LLMGateway:
         delay_parser_ms=settings.llm_stub_delay_parser_ms,
         delay_embedding_ms=settings.llm_stub_delay_embedding_ms,
         delay_jev_ms=settings.llm_stub_delay_jev_ms,
+        latency_parser_p50_ms=settings.llm_stub_latency_parser_p50_ms,
+        latency_parser_p95_ms=settings.llm_stub_latency_parser_p95_ms,
+        latency_jev_p50_ms=settings.llm_stub_latency_jev_p50_ms,
+        latency_jev_p95_ms=settings.llm_stub_latency_jev_p95_ms,
         jev_response=_stub_jev_response(settings),
     )
     if settings.llm_mode == "stub":

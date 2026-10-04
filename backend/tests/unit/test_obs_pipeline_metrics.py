@@ -38,6 +38,12 @@ def test_observe_retrieval_is_called_from_run_matching(monkeypatch, fake_clock):
 
     monkeypatch.setattr(worker_main, "run_candidate_retrieval", fake_retrieval)
     worker = Worker(clock=fake_clock, engine=object())
+    before_layer = (
+        REGISTRY.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "retrieval"}
+        )
+        or 0
+    )
     before_input = REGISTRY.get_sample_value("latch_hardfilter_input_total") or 0
     before_pass = REGISTRY.get_sample_value("latch_hardfilter_pass_total") or 0
     import asyncio
@@ -49,6 +55,13 @@ def test_observe_retrieval_is_called_from_run_matching(monkeypatch, fake_clock):
     assert after_input == before_input + 1
     assert after_pass == before_pass + 13
     assert REGISTRY.get_sample_value("latch_retrieval_vector_items_count") is not None
+    after_layer = (
+        REGISTRY.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "retrieval"}
+        )
+        or 0
+    )
+    assert after_layer == before_layer + 1
 
 
 def test_observe_retrieval_from_direct_pipeline(monkeypatch, fake_clock):
@@ -60,6 +73,12 @@ def test_observe_retrieval_from_direct_pipeline(monkeypatch, fake_clock):
 
     monkeypatch.setattr(worker_main, "run_candidate_retrieval", fake_retrieval)
     worker = Worker(clock=fake_clock, engine=object())
+    before_layer = (
+        REGISTRY.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "retrieval"}
+        )
+        or 0
+    )
     before_input = REGISTRY.get_sample_value("latch_hardfilter_input_total") or 0
     import asyncio
 
@@ -79,6 +98,13 @@ def test_observe_retrieval_from_direct_pipeline(monkeypatch, fake_clock):
     asyncio.run(worker._run_direct_pipeline(engine=_Engine(), intent_id=uuid.uuid4()))
     after_input = REGISTRY.get_sample_value("latch_hardfilter_input_total") or 0
     assert after_input == before_input + 1
+    after_layer = (
+        REGISTRY.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "retrieval"}
+        )
+        or 0
+    )
+    assert after_layer == before_layer + 1
 
 
 def test_jev_observe_helper_is_used_for_execution_accounting():
@@ -93,6 +119,57 @@ def test_jev_observe_helper_is_used_for_execution_accounting():
     after = (
         REGISTRY.get_sample_value(
             "latch_jev_executions_total", {"provider": "fallback_llm"}
+        )
+        or 0
+    )
+    assert after == before + 1
+
+
+# -- 層別観測(M4 ws-6・Task 4)--
+
+from latch.worker.embedding import EmbeddingWorker  # noqa: E402
+
+
+def test_embedding_handle_observes_pipeline_layer(fake_clock):
+    """EmbeddingWorker.handleの全経路(早期return含む)が層別観測を1回通る。"""
+
+    class _Res:
+        def first(self):
+            return None  # 起点なし=早期return経路
+
+    class _Conn:
+        async def execute(self, stmt, params=None):
+            return _Res()
+
+    class _Tx:
+        async def __aenter__(self):
+            return _Conn()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _Engine:
+        def begin(self):
+            return _Tx()
+
+    worker = EmbeddingWorker(
+        engine=_Engine(),
+        clock=fake_clock,
+        gateway=object(),
+        bus=object(),
+    )
+    before = (
+        REGISTRY.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "embedding"}
+        )
+        or 0
+    )
+    import asyncio
+
+    asyncio.run(worker.handle(uuid.uuid4(), 1))
+    after = (
+        REGISTRY.get_sample_value(
+            "latch_pipeline_layer_seconds_count", {"layer": "embedding"}
         )
         or 0
     )
