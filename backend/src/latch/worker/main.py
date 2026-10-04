@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 
 import redis.asyncio as redis_async
+from prometheus_client import start_http_server
 
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
@@ -22,6 +23,7 @@ from latch.geo.service import GeoService
 from latch.intents.events import EVENT_CREATED, EVENT_EMBEDDING_COMPLETED, EVENT_UPDATED
 from latch.llm.gateway import build_worker_gateway
 from latch.notifications.sender import build_push_sender
+from latch.obs.kpi import KpiJob
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
 from latch.worker.cost import JevCostGuard, JevCostStore, ReevalGuard
@@ -62,6 +64,7 @@ class Worker:
         latch: LatchEngine | None = None,
         reeval_runner: ReevalRunner | None = None,
         group: GroupEngine | None = None,
+        kpi=None,
     ) -> None:
         self.clock: Clock = clock if clock is not None else SystemClock()
         self.settings: Settings = settings if settings is not None else Settings()
@@ -77,6 +80,9 @@ class Worker:
         self._latch = latch
         self._reeval_runner = reeval_runner
         self._group = group
+        self._kpi = kpi
+        self._collector = None
+        self._metrics_server = None
         self._stop = asyncio.Event()
         self._subscription = None
 
@@ -231,8 +237,25 @@ class Worker:
             # RetentionJob DI(M3 ws-6・design §2.5案A): 30日定期削除。
             # engineのみで動く(redis不要)のためResetJobと違い無条件構築
             retention_job = RetentionJob(engine=engine, clock=self.clock)
+            # KpiJob DI(M4 ws-4・design §2.3): engineのみで動く(redis不要・
+            # RetentionJob同型の無条件構築)。注入済み資産の試験は再構築しない
+            if self._kpi is None:
+                self._kpi = KpiJob(
+                    engine=engine,
+                    clock=self.clock,
+                    backfill_days=self.settings.kpi_backfill_days,
+                    interval_sec=self.settings.obs_collect_interval_sec,
+                )
+            kpi_job = self._kpi
             await bus.ensure()
             self._subscription = await bus.subscribe(self._dispatch)
+            # workerメトリクス公開(M4 ws-4・design §2.5)。既定0=無効
+            # (ci無効維持・承認事項4)。staging/loadのcomposeでのみ9100
+            self._metrics_server = None
+            if self.settings.obs_worker_metrics_port > 0:
+                self._metrics_server, _ = start_http_server(
+                    self.settings.obs_worker_metrics_port
+                )
             debouncer_task = asyncio.create_task(debouncer.run(stop=self._stop))
             backfill_task = asyncio.create_task(backfill.run(stop=self._stop))
             reeval_task = None
@@ -242,6 +265,7 @@ class Worker:
             if reset_job is not None:
                 reset_task = asyncio.create_task(reset_job.run(stop=self._stop))
             retention_task = asyncio.create_task(retention_job.run(stop=self._stop))
+            kpi_task = asyncio.create_task(kpi_job.run(stop=self._stop))
             logger.info("worker started (app_env=%s)", self.settings.app_env)
             await self._stop.wait()
             # graceful shutdown: 窓内entryは解放せず未ack再配信へ(design §2.3)
@@ -254,8 +278,11 @@ class Worker:
             if reset_job is not None:
                 await reset_task
             await retention_task
+            await kpi_task
             logger.info("worker stopped")
         finally:
+            if self._metrics_server is not None:
+                self._metrics_server.shutdown()
             if owns_engine and engine is not None:
                 await engine.dispose()
             if owns_redis and redis_client is not None:

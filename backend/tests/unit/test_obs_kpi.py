@@ -129,3 +129,187 @@ def test_yes_rate_from_responses_counts_only_today():
 def test_jst_constant_matches_clock_module():
     """JST定数はcore/clock.pyの単一真実を参照(C2・二重定義しない)。"""
     assert JST.utcoffset(None).total_seconds() == 9 * 3600
+
+
+# -- KpiJob(Task 7)--
+
+
+from latch.core.clock import FakeClock  # noqa: E402
+from latch.obs.kpi import KpiJob  # noqa: E402
+
+
+class FakeConn:
+    """executeを記録する偽接続(SQL実行層の呼び出し形状を検査する)。"""
+
+    def __init__(self, rows=None):
+        self.rows = rows or []
+        self.queries: list[tuple[str, dict]] = []
+
+    async def execute(self, stmt, params=None):
+        self.queries.append((str(stmt), dict(params or {})))
+        return FakeResult(self.rows)
+
+
+class FakeResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+    def first(self):
+        return self._rows[0] if self._rows else None
+
+
+class FakeEngine:
+    def __init__(self, rows=None):
+        self.rows = rows or []
+        self.conns: list[FakeConn] = []
+
+    def _new_conn(self):
+        conn = FakeConn(self.rows)
+        self.conns.append(conn)
+        return conn
+
+    def connect(self):
+        """KpiJob._pending_daysが使う読取経路(_pending_daysのSELECT応答)。"""
+        conn = self._new_conn()
+
+        class _Ctx:
+            async def __aenter__(self_inner):
+                return conn
+
+            async def __aexit__(self_inner, *exc):
+                return False
+
+        return _Ctx()
+
+    def begin(self):
+        conn = self._new_conn()
+
+        class _Ctx:
+            async def __aenter__(self_inner):
+                return conn
+
+            async def __aexit__(self_inner, *exc):
+                return False
+
+        return _Ctx()
+
+
+# _pending_daysが返す「遡及窓4日分の未集計日」応答(行持ち・昇順)
+_BACKFILL_ROWS = [
+    (date(2026, 9, 30),),
+    (date(2026, 10, 1),),
+    (date(2026, 10, 2),),
+    (date(2026, 10, 3),),
+]
+
+
+def _backfill_engine():
+    return FakeEngine([tuple(r) for r in _BACKFILL_ROWS])
+
+
+class _FakeClock:
+    """jst_date()/now()を持つ最小Clock(FakeClockを内包)。"""
+
+    def __init__(self):
+        self._inner = FakeClock(datetime(2026, 10, 4, 15, 0, tzinfo=UTC))
+
+    def now(self):
+        return self._inner.now()
+
+    def jst_date(self):
+        return self._inner.jst_date()
+
+
+def test_kpi_job_pending_days_are_backfill_window_days():
+    """遡及対象=当日を含まない直近4日(KpiJobの呼び出し形状)。"""
+    job = KpiJob(engine=FakeEngine(), clock=_FakeClock(), backfill_days=4)
+    days = job._pending_day_list(jst_day(job._clock.now()))
+    assert len(days) == 4
+    assert days[0] < days[-1]
+    # 当日を含まない
+    assert days[-1] < jst_day(job._clock.now())
+
+
+async def test_kpi_job_run_once_writes_upserts_with_day_params():
+    """run_onceが「UPSERT SQLに日付を渡す」形状で呼ばれる(SQL実行層のピン)。
+
+    実DB検証はintegration(test_obs_kpi_job_ci)とstaging(Task 13)が所有。
+    """
+    engine = _backfill_engine()
+    clock = _FakeClock()
+    job = KpiJob(engine=engine, clock=clock, backfill_days=4)
+    await job.run_once()
+    # 全てのengine.begin()実行でUPSERTが発行されている
+    assert len(engine.conns) >= 4  # 4日分の遡及
+    joined = "\n".join(q for c in engine.conns for q, _ in c.queries)
+    assert "INSERT INTO kpi_daily" in joined
+    assert "ON CONFLICT (metric_key, day)" in joined
+    # 日次8指標のUPSERTパラメータに日付が渡っている
+    daily_upserts = [
+        (q, p)
+        for c in engine.conns
+        for q, p in c.queries
+        if "INSERT INTO kpi_daily" in q
+    ]
+    assert daily_upserts, "日次UPSERTが0件"
+    some_params = daily_upserts[0][1]
+    assert "day" in some_params
+
+
+async def test_kpi_job_run_once_is_idempotent_when_already_done():
+    """kpi_dailyにmlr行が既に揃っている遡及窓ではUPSERTを発行しない(60秒tick
+    の毎回書込みを防ぐ・pending_daysが空=何もしない)。"""
+    engine = FakeEngine()
+    job = KpiJob(engine=engine, clock=_FakeClock(), backfill_days=4)
+
+    async def _no_pending():
+        return []
+
+    job._pending_days = _no_pending  # type: ignore[method-assign]
+    await job.run_once()
+    upserts = [
+        (q, p)
+        for c in engine.conns
+        for q, p in c.queries
+        if "INSERT INTO kpi_daily" in q
+    ]
+    assert upserts == []
+
+
+async def test_kpi_job_empty_db_writes_all_daily_rows():
+    """空の集計源でも例外を上げず8指標の行を書く(Review Focus 1)。"""
+    engine = _backfill_engine()
+    job = KpiJob(engine=engine, clock=_FakeClock(), backfill_days=4)
+    await job.run_once()  # 例外を上げないこと
+    assert len(engine.conns) >= 4
+
+
+async def test_kpi_job_run_stops_immediately_after_run_once():
+    """stop即応: run_once完走後にinterval待ちへ入り・stopで即抜ける。
+
+    待機はRetentionJob._waitと同一契約(注入sleepのrace待ち・既存test_worker
+    の1秒タイムアウトと両立)。起動時即tick(run_onceを最初に実行)は§2.1
+    読み替え2の要件(自己修復)。
+    """
+    import asyncio
+
+    engine = FakeEngine()
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float):
+        sleeps.append(seconds)
+
+    job = KpiJob(engine=engine, clock=_FakeClock(), backfill_days=4, sleep=fake_sleep)
+    stop = asyncio.Event()
+    task = asyncio.create_task(job.run(stop=stop))
+    # 起動時即tick(run_once)の完了とinterval待ちへの到達を待つ
+    for _ in range(100):
+        if sleeps:
+            break
+        await asyncio.sleep(0)
+    assert sleeps  # interval待ちが呼ばれた
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)  # stopで即返る
