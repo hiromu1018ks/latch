@@ -158,7 +158,9 @@ Excelのシートに似ていますが、「この列は必須」「この列の
 **制約** を入れられる点が本質的に強力です。間違ったデータを入れようとすると、プログラムではなく
 データベース自身が拒否してくれます。
 
-LATCHのデータベースには13のテーブルがあります(`users`、`intents`、`latches`、`geofeatures` など)。
+LATCHのデータベースには16のテーブルがあります(`users`、`intents`、`latches`、
+`geofeatures` など。M4の計測の単位で `sessions`・`kpi_daily`・
+`kpi_muted_user_snapshot` の3つが増えました・第29章)。
 どんなテーブルがあるかは `docs/05-data-model-api.md` の第2節が定めの元になっています。
 
 LATCHのPostgreSQLには2つの拡張が入っています。
@@ -197,10 +199,10 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **1335件を約8〜10秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **1386件を約8〜10秒**(`make test`)。フロントエンドも
   **233件を約1秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
-- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 269件を含め計
-  **1604件**(2026-10-03のM4 ws-3マージ検証で全件グリーンを確認。ci環境の起動を
+- integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 278件を含め計
+  **1664件**(2026-10-04のM4 ws-4マージ検証で全件グリーンを確認。ci環境の起動を
   待つ分、実行には数分かかります)
 
 この2つに加えて、M4から3つ目の層があります。**staging環境**(本番と同じ構成を小さくした
@@ -208,6 +210,8 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 (`backend/staging_tests/`・34試験・約10分)です。unit・integrationが「部品と組み合わせは
 正しい」を積み上げるのに対し、こちらは「約束全体が守られている」を、本物に近い世界で
 動かして証明します(第24章・第28章)。`make staging-test` で実行します。
+M4の計測の単位からは、同じstagingの上で計測(Observability)の受け入れを証明する
+もう1本のハーネス(`backend/staging_tests_obs/`・10件)も増えています(第29章・Lab 15)。
 
 数秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
 「壊して試す」学習法(Lab 2)が気軽にできます。この速さ自体が、このプロジェクトの
@@ -261,11 +265,16 @@ latch/
 │   │   ├── llm/           AI(LLM)呼び出しの単一経路
 │   │   ├── geo/           地名⇔座標の変換(ジオコーディング)
 │   │   ├── events/        知らせの運搬(EventBusポート・Pub/Sub実装・回収リレー)(第9章)
-│   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチングとコスト保護・提案・グループ・期限切れバッチとリセットジョブ・30日定期削除・プッシュ送信)(第9章〜第15章・第18章〜第19章・第22章)
+│   │   ├── obs/           計測(メトリクスの単一真実・HTTP計測middleware・/v1/sessions・60秒のcollector・日次集計KpiJob)(第29章)
+│   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチングとコスト保護・提案・グループ・期限切れバッチとリセットジョブ・30日定期削除・プッシュ送信・計測のcollectorとKpiJobの配線)(第9章〜第15章・第18章〜第19章・第22章・第29章)
 │   └── tests/             テスト(unit/=部品単体, integration/=組み合わせ)
 ├── compose.yaml           5サービス(db/redis/pubsub/api/worker)の定義
+├── compose.staging.yaml   staging環境の定義(第25章・第28章)
+├── compose.dashboard.yaml ダッシュボード環境(prometheus+grafana)の定義(第29章)
 ├── Makefile               よく使うコマンドのショートカット集
-└── docker/postgres/       DBイメージの定義(PostGIS+pgvector同梱)
+├── docker/postgres/       DBイメージの定義(PostGIS+pgvector同梱)
+├── docker/prometheus/     Prometheusの収集設定(どの窓口から数を取りに行くか)(第29章)
+└── docker/grafana/        Grafanaの自動設営設定とダッシュボード4枚の定義(第29章)
 ```
 
 ## 1.11 コマンド集(参照部)
@@ -293,6 +302,9 @@ latch/
 | `make staging-keys` → `make staging-up` | staging環境(本番と同じ構成を小さくした、ciとは別プロジェクトの常設環境)の鍵生成と起動。コンテナ名・データ置き場・ポートがci環境と分かれているため、ci環境には干渉しない(第25章・Lab 11) |
 | `make staging-reset` | staging環境を**データごと**作り直す(コンテナとデータ置き場の削除→起動→DB定義の最新化→地物データの取込。約6〜7分)。機能試験ハーネスは「きれいな世界からのフル実行」が前提のため、`make staging-test` の前に必ずこれを通す(第28章・Lab 14) |
 | `make staging-test` | staging環境の機能試験ハーネス34試験を一気通貫で実行(約10分)。仕様書の機能試験27項目の証拠(02#対応表つきYAML)を `docs/testassets/results/` へ出力する。実行にはstaging-reset直後のきれいな状態が必要(第28章・Lab 14) |
+| `make staging-obs-test` | staging環境の計測(Observability)受け入れハーネス10件を実行(約1分)。staging-reset直後からの一連実施を前提とし、証拠YAMLを `docs/testassets/results/` へ出力する(第29章・Lab 15) |
+| `make dashboard-up` / `make dashboard-down` | ダッシュボード環境(prometheus・grafana。`127.0.0.1:19090` と `127.0.0.1:13000`)の起動と停止。stagingの数を取りに来る別プロジェクトで、ci環境には干渉しない(第29章・Lab 15) |
+| `make dashboard-ps` / `make dashboard-logs` | ダッシュボード環境の状態一覧 / ログの流し見(直近30行) |
 | `make staging-clock ARGS="show"` | staging環境の共有時計を操作する(ほかに `set <ISO>`・`advance <秒>`)。動いている環境の時計の針を、プロセスの再起動なしに動かす道具(第25章・Lab 11) |
 | `make staging-down` / `make load-up` / `make load-down` | staging環境の停止 / load環境(負荷試験用・stagingと同構成を完全分離)の起動と停止 |
 | `cd frontend && npm install` | フロントエンドの依存を導入。初回と、`package.json` が変わった後に実行 |
