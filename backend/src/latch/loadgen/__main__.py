@@ -39,7 +39,9 @@ from latch.loadgen.schedule import (
 )
 from latch.testassets.generator import build_seed, write_yaml
 
-SEED_DIR = Path("backend/data/loadgen")
+# seed YAML出力先(ファイル位置から固定・cwd相対だとMakefileのcd backend起点で
+# backend/backend/へ迷い込むため・supervisor検証 2026-10-04)
+SEED_DIR = Path(__file__).resolve().parents[4] / "backend" / "data" / "loadgen"
 SETTLE_STABLE_SEC = 30.0
 # 収束待ち上限: 3000件規模のperf投入はD-16日次上限(30000)到達による評価繰越
 # を起こし・繰越分の再評価は30分バケットで消化されるため600秒では不足する
