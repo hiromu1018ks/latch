@@ -41,7 +41,11 @@ from latch.testassets.generator import build_seed, write_yaml
 
 SEED_DIR = Path("backend/data/loadgen")
 SETTLE_STABLE_SEC = 30.0
-SETTLE_TIMEOUT_SEC = 600.0
+# 収束待ち上限: 3000件規模のperf投入はD-16日次上限(30000)到達による評価繰越
+# を起こし・繰越分の再評価は30分バケットで消化されるため600秒では不足する
+# (supervisor検証 2026-10-04・run3: 注入6090件ok=6017のちpending=18が
+# 約30分で自然に0化した実測に基づく)
+SETTLE_TIMEOUT_SEC = 2400.0
 
 
 async def wait_settled(

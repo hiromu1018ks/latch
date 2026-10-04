@@ -21,6 +21,11 @@ x-backend-env: &backend-env
   LATCH_LLM_STUB_LATENCY_PARSER_P95_MS: ${LATCH_LLM_STUB_LATENCY_PARSER_P95_MS:-2500}
   LATCH_LLM_STUB_LATENCY_JEV_P50_MS: ${LATCH_LLM_STUB_LATENCY_JEV_P50_MS:-2000}
   LATCH_LLM_STUB_LATENCY_JEV_P95_MS: ${LATCH_LLM_STUB_LATENCY_JEV_P95_MS:-5000}
+  # stub Jev判定値の固定経路(stagingと同一・ws-3 design §5)。設定なしの既定
+  # noul=0.5では全ペアlatch_score=0.5で閾値0.60を下回り提案が1件も生じず
+  # 目標④⑤(E2E・通知)が測定不能になる(supervisor検証 2026-10-04)
+  LATCH_LLM_STUB_JEV_NOUL: "0.90"
+  LATCH_LLM_STUB_JEV_SCORE: "3.6"
 
 x-api-common: &api-common
   build:
