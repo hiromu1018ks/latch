@@ -70,6 +70,32 @@ def _stub_vector(text: str) -> list[float]:
     return values[:EMBEDDING_DIMENSIONS]
 
 
+# 決定的ハッシュ割付のレンジ境界(256スロット・ws-6 design §2.2案A)。
+# 0〜127→p50値(50.0%)・128〜239→中間値(43.75%)・240〜255→p95値(6.25%)。
+# 下位2グループの累積93.75%<95%のため・nearest-rank定義の95%ランク
+# (ceil(0.95N)番目の標本)は常にp95値グループに含まれる
+_DELAY_SPLIT_P50 = 128
+_DELAY_SPLIT_MID = 240
+
+
+def distributed_delay_ms(p50_ms: int, p95_ms: int, key: str) -> int:
+    """決定的ハッシュ割付の遅延ms(10 §4.1のp50/p95分布再現・M4 ws-6)。
+
+    sha256(key)の先頭バイトのレンジで50%/43.75%/6.25%へ振る。中間値は
+    線形補間。同一key→同一遅延(10 §1「スタブで決定的にする」)。
+    理論分布としてnearest-rankの50分位点=p50値・95分位点=p95値。
+    機械検証はtests/unit/llm/test_llm_stub_latency.py(固定key集合で計画時
+    実計算済み: keys=[str(i) for i in range(10000)]・p50=1000/p95=2500で
+    counts={1000: 5058, 1750: 4329, 2500: 613}・p50ランク=1000・p95ランク=2500)。
+    """
+    slot = hashlib.sha256(key.encode()).digest()[0]
+    if slot < _DELAY_SPLIT_P50:
+        return p50_ms
+    if slot < _DELAY_SPLIT_MID:
+        return p50_ms + (p95_ms - p50_ms) // 2
+    return p95_ms
+
+
 class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
     """テストモード(10 第1節)。name="stub"。"""
 
@@ -82,6 +108,10 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
         delay_parser_ms: int = 0,
         delay_embedding_ms: int = 0,
         delay_jev_ms: int = 0,
+        latency_parser_p50_ms: int = 0,
+        latency_parser_p95_ms: int = 0,
+        latency_jev_p50_ms: int = 0,
+        latency_jev_p95_ms: int = 0,
         fail_parser: bool = False,
         fail_embedding: bool = False,
         fail_jev: bool = False,
@@ -104,6 +134,11 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
         self._delay_parser_ms = delay_parser_ms
         self._delay_embedding_ms = delay_embedding_ms
         self._delay_jev_ms = delay_jev_ms
+        # 分布遅延のp50/p95(M4 ws-6)。p50_ms>0で有効・既存固定msより優先
+        self._latency_parser_p50_ms = latency_parser_p50_ms
+        self._latency_parser_p95_ms = latency_parser_p95_ms
+        self._latency_jev_p50_ms = latency_jev_p50_ms
+        self._latency_jev_p95_ms = latency_jev_p95_ms
         self._fail_parser = fail_parser
         self._fail_embedding = fail_embedding
         self._fail_jev = fail_jev
@@ -111,22 +146,36 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
         # None | "ratelimit" | "overloaded" | "timeout" | "connection"
         self._fail_jev_exc = fail_jev_exc
 
-    def _delay_ms(self, system: str) -> int:
-        """系統→遅延ms。p50/p95分布版(M4)への差し替えはこの1関数で完結する。"""
+    def _delay_ms(self, system: str, key: str | None = None) -> int:
+        """系統→遅延ms。分布設定非0(p50_ms>0)のとき決定的ハッシュ割付へ
+        切替する(優先順位: 分布 > 固定ms・M4 ws-6 design §2.2案A)。keyは
+        呼び出し入力由来の決定的文字列(parser=テキスト・jev=ペアテキスト)。
+        embeddingは分布を作らない(10 §4.1に注入規定なし・YAGNI)。
+        """
+        if key is not None:
+            cfg = {
+                "intent_parser": (
+                    self._latency_parser_p50_ms,
+                    self._latency_parser_p95_ms,
+                ),
+                "jev": (self._latency_jev_p50_ms, self._latency_jev_p95_ms),
+            }.get(system)
+            if cfg is not None and cfg[0] > 0:
+                return distributed_delay_ms(cfg[0], cfg[1], key)
         return {
             "intent_parser": self._delay_parser_ms,
             "embedding": self._delay_embedding_ms,
             "jev": self._delay_jev_ms,
         }[system]
 
-    async def _apply_delay(self, system: str) -> None:
-        delay_ms = self._delay_ms(system)
+    async def _apply_delay(self, system: str, key: str | None = None) -> None:
+        delay_ms = self._delay_ms(system, key)
         if delay_ms > 0:
-            # 待機であり時刻参照ではない(arch testの禁止対象外。design §2.6)
+            # 待機であり時刻参照ではない(arch testの禁止対象外。既存規律)
             await asyncio.sleep(delay_ms / 1000)
 
     async def complete_structured(self, text: str, current_date: date) -> dict:
-        await self._apply_delay("intent_parser")
+        await self._apply_delay("intent_parser", text)
         if self._fail_parser:
             raise LLMProviderError("stub: fail_parser=True")
         # 呼び出し毎に新しいコピーを返す(消費者の書き換えが内部状態を汚染しない)
@@ -141,7 +190,7 @@ class StubLLM(ParserProvider, EmbeddingProvider, JevProvider):
         return _stub_vector(text)
 
     async def judge(self, intent_a: str, intent_b: str) -> dict:
-        await self._apply_delay("jev")
+        await self._apply_delay("jev", f"{intent_a}|{intent_b}")
         if self._fail_jev_exc is not None:
             # fail_jev_excがfail_jevより優先(種別指定時はそちらを使う)
             if self._fail_jev_exc == "ratelimit":
