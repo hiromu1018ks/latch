@@ -1,0 +1,37 @@
+# ダッシュボード環境(M4 ws-4)。別プロジェクトlatch-dashboard。
+# Prometheusがstagingのホスト公開ポート(127.0.0.1バインド・api=18001/18002
+# worker=18101/18102)をscrapeし、Grafanaへdatasourceをprovisioningする。
+# load環境(28000系)のtargetはws-6(性能測定)が追加する(design §3.1どおり
+# staging系のみの初期構成)。両ポートとも127.0.0.1明示バインド(承認事項4)。
+name: latch-dashboard
+
+services:
+  prometheus:
+    # prom/prometheusの実在安定タグ。pull失敗時は安定版に読み替えて
+    # 報告書に記録する(§0固定値の遵守)
+    image: prom/prometheus:v3.0.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # コンテナ内からホストの127.0.0.1バインドポートへ到達する経路
+    # (§2.1読み替え9)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:19090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    environment:
+      # ローカル確認用の初期ログイン(127.0.0.1のみ公開・stagingはローカル
+      # docker composeの別プロジェクト)
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:13000:3000"
+    restart: unless-stopped
