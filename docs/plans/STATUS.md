@@ -11,7 +11,7 @@
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **ws-6(load負荷試験+総当たり検出)の実装**(2026-10-04ユーザーGoサイン・設計7f8cc75・計画ebe2a8a承認済み。ws-4=2026-10-04完了: マージ89525ca・test-ci 1664・staging受け入れ10件全pass・**ws-6が依存する測定基盤が揃った**。wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・ws-5=マージ18a6d88+153ec50)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
+- 次の着手: **ws-7(非機能試験・障害系)の設計着手はユーザーGoサイン待ち**(ws-6=2026-10-04完了: マージ89525ca+報告書マージ・test-ci 1720・性能5目標と総当たり3段階の証拠7点採取・実施時の修正7件と運用発見を記録〔ws-6-report.md〕。**ws-7はws-6と環境共有のため直列**〔単位表依存どおり〕)。ws-4=2026-10-04完了: マージ89525ca・test-ci 1664・staging受け入れ10件全pass・**ws-6が依存する測定基盤が揃った**。wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・ws-5=マージ18a6d88+153ec50)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -36,7 +36,7 @@
 | ws-3 | 機能試験27項目のstagingフル実行: staging振り分け項目(#5スモーク・#6〜#13・#15〜#19・#26)の自動化ハーネス・配置ケース(自己ペア除外・自己重複集合・部分YES・通知順序)・**G3繰越の02#13〜#23 staging再実行を回収**・ci分はtest-ci常設で緑維持 | M4-3 / 10 §3・02 §4 | ws-1・ws-2 | 完了 |
 | ws-4 | Observability: 計測3群(パイプライン/Jev/提案と行動)のメトリクス実装+アクセス系基本計測(**POST /v1/sessions新設**)・ダッシュボード定義・MLR日次/週次集計(latch_status_eventsから)・09 §2.2のKPI導出 | M4-5 / 09 §2.1〜2.2・04 §7 | 実装は独立・稼働確認はws-1後 | 完了 |
 | ws-5 | 告知・同意フロー+ログ許可リスト: オンボーディング同意のUI+API(同意記録・マッチング利用条件化)・設定画面からの再確認・構造化ログの許可リストSerializer(列挙型固定・raw_text/geo/constraints不許可) | M4-6 / 08 D-14・§2.4・§3 | — | 完了 |
-| ws-6 | load負荷試験+総当たり検出: 負荷ツール(Intent保存50rps・Event 100evt/sバースト)・レイテンシ注入(Parser p50 1s/p95 2.5s・Jev p50 2s/p95 5s=スタブで実運用模擬)・性能5目標測定(層別予算トレース分離)・総当たり検出(Active 1万→5万→10万・Vector件数K_v=50以内安定) | M4-4 / 10 §4.1〜4.2 | ws-1〜ws-3・ws-4(測定基盤前提) | 未着手 |
+| ws-6 | load負荷試験+総当たり検出: 負荷ツール(Intent保存50rps・Event 100evt/sバースト)・レイテンシ注入(Parser p50 1s/p95 2.5s・Jev p50 2s/p95 5s=スタブで実運用模擬)・性能5目標測定(層別予算トレース分離)・総当たり検出(Active 1万→5万→10万・Vector件数K_v=50以内安定) | M4-4 / 10 §4.1〜4.2 | ws-1〜ws-3・ws-4(測定基盤前提) | 完了 |
 | ws-7 | 非機能試験(障害系): 可用性(99.5%・インスタンス強制停止・合成監視プローブ)・バックアップ復旧(embedding識別子から再エンベディング+cross-check)・縮退(D-16上限到達と80% alert・月次Clock操作・resume/Bucket遅延回収=**M2繰越**)・Queue障害(毒ペイロード・lag alert発報) | M4-4 / 10 §4.3〜4.5・§4.7 | ws-1・ws-3・ws-4(ws-6と環境共有のため直列) | 未着手 |
 | ws-8 | ロールバック手順+G4証拠整備: ロールバック手順書(11 §7の運用手順化・デプロイ単位・DB拡張のみ原則)・G4 7項目の証拠一覧とdocs/testassets/results/への整理・担当・連絡経路の確定欄(人間領域の入力用) | M4-7 / 11 §5・§7 | ws-3〜ws-7 | 未着手 |
 | ws-9 | FCM実機送信確認(ミニ単位・**資材待ち**): Firebaseサーバー認証情報・VAPID鍵の設定経路・スタブ→実送信切替・実機での送信確認とFR-21表示規制の実送信分証拠 | G3繰越 / 08 §2.6 | ws-1・FCM資材(人間領域) | 未着手 |
@@ -51,6 +51,13 @@
 
 1. ws-4: **HTTP基本メトリクスはdocs 3群への明示的拡張**(04 §7の3群へ全APIのリクエスト数・レイテンシhistogramを追加。ws-6の性能5目標=絶対値合格の測定基盤として必然。labelはmethod・pathテンプレート・statusのみ=08 §2.4と同規律。design §6-1承認)
 2. ws-4: **04 §3本番確定値(Cloud Monitoring+OTLP)に対するローカルOSS代替差分**(prometheus-client直+pull型・Prometheus v3.0+Grafana OSS 11.4・Queue lag=match_events pending計測〔エミュレータがsubscription統計を返さない制約〕。メトリクス生成はobs/metrics.py 1モジュールへ局所化=本番移行時の差し替え面。04 §3自体はPhase 0費用判断まで不変・design §6-2承認)
+3. ws-6: **収束成立を待たない証拠採取**(perf4回目はD-16日次上限到達後の30分バケット再評価循環でpending=0が確定せず・pending=1476残存時点で窓60mの手動採取。採取分布に繰越し分を含む。report §8-3)
+4. ws-6: **目標②はparse独立相(負荷なし)で採取**した負荷構成の読み替え(負荷条件=保存相+バースト相で字義どおり・report §8-2)
+5. ws-6: **stub Jev判定値0.90/3.6のcompose.load.yaml追加**(計画時にload側へ設定が漏れていた既存envの是正・追加前の既定0.5では提案0件で目標④⑤が測定不能だった。report §8-4)
+6. ws-6: **認証トークン交換のスループット約27req/s(2インスタンス)**=RSA署名のAPIイベントループ直列化による実特性(G4での容量解釈候補・測定はトークン事前取得で回避。report §8-5)
+7. ws-6: **E2E・Embedding・L5区間のp95がbucket上限10秒に張り付き=解像度上限**(D-16縮退込み値でもあり・縮退時分布の観察を要件化するならbucket拡張が候補。report §8-6)
+8. ws-6: **D-16縮退時の30分バケット再評価循環でqueue pendingが残存し続ける**(仕様動作の縮退と収束判定の相互作用・ws-7縮退試験と関連。report §8-7)
+9. ws-6: **load環境運用の3点**(dashboardのstaging外部ネットワークはstaging停止時に手动作成・staging停止中はstagingジョブがloadを二重採取するがjob labelで分離済み・load-stub-flat後のnginx再起動が必須。report §8-8)と**base-datetime変更**(2026-10-05T00:00+09:00=注入窓との重なり確保・report §8-9)
 
 - [ ] 27項目グリーン(02 §4マッピング・10 §3実行計画どおり)
 - [ ] 追加試験グリーン(D-10・D-23・プッシュ表示規制FR-21)
@@ -471,6 +478,15 @@
 - 学習資産追従: ws-4分 c9a82eb(第29章『システムが自分を数える: 計測の設計と毎日の値の残し方』+Lab 15〔ダッシュボードを立てる・staging-reset→dashboard-up→/metrics→sessions投与→時計前進でKpiJob発火→kpi_daily→Grafana4枚→片付けの一巡・全手順当日実測〕新設・既存2ファイル更新〔README順路43/44番・00-environment〔テーブル16・1386/1664・staging-obs-test・dashboard系〕〕。agent4がlint判断台帳収束・make test 1386 passed・環境返却を確認)
 - ws-6 / 設計 7f8cc75(supervisor承認: design §5の8件=①負荷注入器=自作asyncio注入器〔k6/locustはcontext7一次確認のうえ不採用・依存追加はhttpx既存でゼロ〕②stub遅延の決定的ハッシュ分布〔割付50/44/6・新env4本(parser/jev×p50/p95)・既存固定ms env無変更・優先「分布env非0>固定ms」・embeddingは分布なし〕③メトリクス3本追加+http bucket追加〔トレース分離のローカル代替差分はG4時確認事項への追記をsupervisorが実施〕④総当たり母集合=DB直接投入〔Event発行なし・embedding直書き〕⑤loadのPrometheus接続=staging同型ネットワーク参加⑥総当たりはレイテンシ注入なし〔10 §4.2に注入規定なしの読み〕⑦E2E観測絞り込み=初回投入Event(created種)チェーン+初回提案のみ・起点は経路別〔active作成=created_at・draft→active=active化コミット時刻〕+route label(create/activate)⑧ci停止/復帰はMakefileターゲットにせず明示手順。**レビューで内部矛盾2件=遅延割付45/5とnearest-rank p95機械検証の不整合・draft→activeのE2E起点へ起草時間混入を指摘→訂正反映**。引用確定値(docs/10 §4.1〜4.2)と既存コード主張(stub docstring・generator拡張・metrics実在・dashboard予約コメント)は実突合済み)/ 2026-10-04
 - ws-6 / 計画 ebe2a8a(3,605行・Task 1〜10・実コード全文記載。機械チェックSelf-Review合格+supervisor独立再実行一致: basename一意〔新規6ファイル〕・§2.4割付実計算値{1000:5058,1750:4329,2500:613}=完全一致・ux_match_events_idempotency(0001:295)実在・読み替え1/2/4/9のコード主張も実突合どおり。**読み替え9件**=E2E起点=match_events.created_at(created種・version一致のUNIQUE索引照合・active作成ではintents.created_atと同一now値をservice.py実突合で確認)・designの「version==1」はdraft→activeのversion+1で漏れが生じるため「created種・起点version一致」へ訂正・perf3相(parse相追加=目標②の独立採取・G4時確認事項候補)・注入ユーザー=loadusers1000人〔generator users100固定で母集合ユーザーはActive残枠ゼロ〕・load compose既定=10 §4.1値(${VAR:-}形式)+load-stub-flat切替・load-別名aliases(Docker DNS同名衝突対策)・load-migrate/load-geo-import/load-stub-flat追加・massloadはunit純関数+integration 2層・issue_idp_token直接呼出。**supervisor修正3件**=§6-7/§7-1のmake test基準1664→1386・Task 7 Step 6へ「4試験本体を書き切ってコミット・プレースホルダー除外・collect-only 4件」を明示・§2.2(c)へ「test-ciのmassload試験はload DB起動が前提・test-ciのpytestはホスト実行」を追記)/ 2026-10-04実装着手
+- ws-6 / マージ 89525ca+実施・報告書マージ(設計 7f8cc75・計画 ebe2a8a・実装はc0e47ceまで10コミット+supervisor検証fix 0861263+実施時main修正7件+報告書981feb1)/ docs/plans/M4/ws-6-report.md(+証拠 docs/testassets/results/ws6-*.yaml×7)/ 2026-10-04
+  - agent3実装(54分・Task 1〜9・申告どおり: lint緑・unit 1438〔=1386+52〕・basename一意・integration collect 4件・危険操作なし)。差分27ファイル=計画§4どおり・コードレビュー(stub分布・gateway両構築点・worker観測挿入・E2eObsContext・ピン追随11→15・bucket定数・aliases・Makefile)すべて計画どおり
+  - supervisor検証: test-ci初回1720中1失敗=**massloadべき等試験のヘルパー自浄による自己矛盾**(実装コード無欠陥)→直接修正0861263で解消→**worktree test-ci 1720×2回・マージ後main 1720**(=1664+52+4・api/worker再ビルド後)
+  - **実施(手順§8・supervisor実施)**: perf4回=①httpxプール既定100でPoolTimeout(ok=470)→プール500へ ②トークン交換のRSA署名直列化で約27req/s律速(ok=595)→測定前トークン事前取得を追加 ③load composeへstub Jev判定値の設定漏れ(既定noul=0.5→全ペアscore=0.5で提案0件)→0.90/3.6追加(staging同一) ④本命=**投入6090件全成功・error=0**。**総当たり3段階**(1万→5万→10万累積・べき等投入・各段階注入100件ok=100×3・収束35秒×3)
+  - **測定値(run4・5目標)**: ①保存p95=0.0589秒 ②parse p95=2.738秒/p99=2.948秒 ③Retrieval p95=0.625秒 ④E2E create p95=10.0秒(bucket上限張り付き=縮退込み・activateは観測null) ⑤通知p95=4.923秒。**総当たり**: Vector件数≤50機械判定=3段階すべてtrue(上限超え観測ゼロ)・検索p95=0.88/0.93/0.51秒・イベントあたり処理は収束35秒不変。正式合否判定はG4の人間側
+  - **D-16日次上限到達の縮退を観測**(perf投入3000件が約4.8万Jev必要→3万上限で評価繰越し=仕様動作・30分バケットで消化。ws-7の縮退試験と関連)・**生成器の万件欠陥を解消**(残余割付のValueError+全ペア集計O(n²)〔10万で約8時間〕→均等化+集計省略で1万0.2秒/10万2.0秒)
+  - **運用事故の正直な記録**: 総当たり初回は作業ディレクトリbackend/起因で全ステップ失敗を| tailが隠し汚染環境で実行→全down -v再リセット後にやり直し(件数実査で検証)。**以後の検証チェーンからパイプを排除**
+  - 運用メモ(以後のload/staging利用): 新規チェックアウトで初回起動前に必ずmake staging-keysを先行(dockerのバインドマウント自動作成がroot所有ディレクトリを作り鍵生成不能になるため・root所有化後はコンテナ経由で削除が必要)・load-stub-flat後はnginx再起動(ws-3知見)・dashboard-upはstaging停止時にlatch-staging_defaultを手动作成
+  - G4時確認事項へ3〜9を追記(report §8)
 
 ## G2判定資料(2026-09-30・承認済み)
 
