@@ -39,6 +39,7 @@ from latch.notifications import (
     notifications_router,
 )
 from latch.obs.middleware import HTTPMetricsMiddleware
+from latch.obs.sessions import obs_sessions_router
 from latch.ratelimit import make_rate_limiter
 from latch.ratelimit.errors import RateLimitError
 from latch.safety import (
@@ -261,6 +262,7 @@ def create_app(
     app.include_router(latches_router)
     app.include_router(notifications_router)
     app.include_router(safety_router)
+    app.include_router(obs_sessions_router)
 
     # HTTP基本メトリクス(M4 ws-4・design §2.9)。/metricsの自己アクセス
     # はmiddleware内で除外される
