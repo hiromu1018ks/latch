@@ -135,9 +135,7 @@ class LoadClient:
     ) -> tuple[int, str]:
         """POST /v1/intents。201時は(201, intent_id)を返す。"""
         await self._ensure_token(http, subject)
-        r = await http.post(
-            "/v1/intents", headers=self._headers(subject), json=payload
-        )
+        r = await http.post("/v1/intents", headers=self._headers(subject), json=payload)
         if r.status_code != 201:
             raise RuntimeError(
                 f"intent create {subject}: {r.status_code} {r.text[:200]}"

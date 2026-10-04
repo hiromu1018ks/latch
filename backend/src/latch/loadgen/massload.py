@@ -99,9 +99,7 @@ def to_intent_rows(
         flat = FLAT_STRUCTURED(i)
         time_start = datetime.fromisoformat(str(s["time"]["start"]))
         time_end_raw = s["time"].get("end")
-        time_end = (
-            datetime.fromisoformat(str(time_end_raw)) if time_end_raw else None
-        )
+        time_end = datetime.fromisoformat(str(time_end_raw)) if time_end_raw else None
         text = build_embedding_text(
             EmbeddingTextInput(
                 category_primary=s["category"]["primary"],

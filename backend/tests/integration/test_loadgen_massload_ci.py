@@ -171,10 +171,7 @@ async def test_massload_cleanup_after_run(load_db_engine):
         )
         base_users = (
             await conn.execute(
-                text(
-                    "SELECT count(*) FROM users"
-                    " WHERE auth_subject LIKE 'masstest-%'"
-                )
+                text("SELECT count(*) FROM users WHERE auth_subject LIKE 'masstest-%'")
             )
         ).scalar()
         base_intents = (
