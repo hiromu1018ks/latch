@@ -71,7 +71,9 @@ class MetricsCollector:
             metrics.kpi_daily_numerator.labels(metric=metric_key).set(float(num))
             metrics.kpi_daily_denominator.labels(metric=metric_key).set(float(den))
         if self._breaker is not None:
-            metrics.breaker_state.set(BREAKER_STATE_VALUE.get(self._breaker.state(), 0))
+            # stateは@property(属性アクセス・llm/breaker.py)。メソッド呼び出しは
+            # 実行時TypeErrorになる(supervisor検証で発見・スタブ乖離の系統)
+            metrics.breaker_state.set(BREAKER_STATE_VALUE.get(self._breaker.state, 0))
 
     async def run(self, stop: asyncio.Event | None = None) -> None:
         """起動時即collect→interval待ち→collect→…。例外は握ってwarning+

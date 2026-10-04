@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from prometheus_client import REGISTRY
 
 from latch.core.clock import FakeClock
+from latch.llm.breaker import CircuitBreaker
 from latch.obs.collector import MetricsCollector
 
 NOW = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
@@ -57,12 +58,18 @@ class _FakeEngine:
         return _Ctx()
 
 
-class _FakeBreaker:
-    def __init__(self, state: str):
-        self._state = state
+class _FakeBreaker(CircuitBreaker):
+    """実物の@property API(stateは属性・メソッド呼び出し不可)を継承で踏襲。
 
-    def state(self) -> str:
-        return self._state
+    素のスタブがstate()メソッド形状だったため、実物のCircuitBreakerでは
+    collectorが毎tickTypeErrorになる欠陥をunitが検出できなかった
+    (supervisor検証で発見・M2 ws-1のPubsubEventBus系統と同じスタブ乖離)。
+    実物を継承することでAPI形状の乖離を構造的に防ぐ。
+    """
+
+    def __init__(self, state: str):
+        super().__init__(clock=FakeClock(NOW))
+        self._state = state
 
 
 RESULTS = [
