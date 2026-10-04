@@ -21,6 +21,32 @@ from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histo
 SCORE_BUCKETS = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
 # Vector Retrieval件数(K_v=50上限の分布 — 02#5の検証素材)
 VECTOR_BUCKETS = (1, 5, 10, 20, 30, 40, 50)
+# HTTPのbucket(M4 ws-6・§2.3の表)。prometheus-client既定DEFAULT_BUCKETSに
+# 3.0(目標②のp95 3秒)と8.0(目標②のp99 8秒)を追加した列 — 既存値は1つも
+# 変えず・明示列へ切り替える(bucket追加は既存クエリに破壊なし)
+HTTP_BUCKETS = (
+    0.01,
+    0.025,
+    0.05,
+    0.075,
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    2.5,
+    3.0,
+    5.0,
+    7.5,
+    8.0,
+    10.0,
+)
+# 層別・E2Eの共通bucket(M4 ws-6)。10 §4.1注入値(p50 1秒/2秒・p95 2.5秒/5秒)と
+# 予算境界(Embedding 2秒・Retrieval 1秒・L5+通知 2秒)とE2E目標10秒を含む
+LATENCY_BUCKETS = (0.1, 0.25, 0.5, 1.0, 2.0, 2.5, 5.0, 10.0)
+# 通知区間(提案確定→push記録)のbucket。StubPushSender構成ではごく小さい。
+# 構造上の大きさを観察し実FCM時の上限を推定できる解像度・目標⑤の5秒境界込み
+NOTIFY_BUCKETS = (0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0)
 
 
 @dataclass
@@ -42,6 +68,9 @@ class Metrics:
     score: Histogram
     kpi_daily_numerator: Gauge
     kpi_daily_denominator: Gauge
+    pipeline_layer_seconds: Histogram
+    latch_initial_e2e_seconds: Histogram
+    notification_latency_seconds: Histogram
 
 
 def build_metrics(registry: CollectorRegistry | None = None) -> Metrics:
@@ -67,6 +96,7 @@ def build_metrics(registry: CollectorRegistry | None = None) -> Metrics:
             "HTTP request latency by method and path template",
             labelnames=("method", "path"),
             namespace="latch",
+            buckets=HTTP_BUCKETS,
             registry=registry,
         ),
         event_queue_pending=Gauge(
@@ -155,6 +185,31 @@ def build_metrics(registry: CollectorRegistry | None = None) -> Metrics:
             namespace="latch",
             registry=registry,
         ),
+        pipeline_layer_seconds=Histogram(
+            "pipeline_layer_seconds",
+            "Layer latency (layer=embedding/retrieval/proposal; jev is separate)",
+            labelnames=("layer",),
+            namespace="latch",
+            buckets=LATENCY_BUCKETS,
+            registry=registry,
+        ),
+        # 定義名はinitial_e2e_seconds・露出名はlatch_initial_e2e_seconds_*
+        # (design §2.3の「latch_initial_e2e_seconds」は露出名の表記)
+        latch_initial_e2e_seconds=Histogram(
+            "initial_e2e_seconds",
+            "Initial LATCH decision e2e by injection route (create/activate)",
+            labelnames=("route",),
+            namespace="latch",
+            buckets=LATENCY_BUCKETS,
+            registry=registry,
+        ),
+        notification_latency_seconds=Histogram(
+            "notification_latency_seconds",
+            "Proposal decision to push send record",
+            namespace="latch",
+            buckets=NOTIFY_BUCKETS,
+            registry=registry,
+        ),
     )
 
 
@@ -192,3 +247,26 @@ def observe_jev_execution(
 def observe_latch_score(*, shape: str, score: float) -> None:
     """提案確定時のscore観測(latch_engine=pair・group_engine=group)。"""
     metrics.score.labels(shape=shape).observe(float(score))
+
+
+def observe_pipeline_layer(*, layer: str, elapsed_s: float) -> None:
+    """層別区間1回分の観測(M4 ws-6・layer=embedding/retrieval/proposal)。
+
+    層別予算(Embedding ≤2秒/Layer 1〜3 ≤1秒/L5+通知 ≤2秒・12 §7)の
+    どの区間が超えたか特定する器。Jevは既存jev_latency_secondsが観測済み。
+    """
+    metrics.pipeline_layer_seconds.labels(layer=layer).observe(float(elapsed_s))
+
+
+def observe_initial_e2e(*, route: str, elapsed_s: float) -> None:
+    """初期判定E2Eの観測(M4 ws-6・route=create/activate)。
+
+    初回投入Event(created種)チェーンかつ初回提案のみを観測する
+    (呼び出し側=latch_engineの絞り込み条件・design §2.3)。
+    """
+    metrics.latch_initial_e2e_seconds.labels(route=route).observe(float(elapsed_s))
+
+
+def observe_notification_latency(*, elapsed_s: float) -> None:
+    """通知区間(提案確定→push送信記録)の観測(M4 ws-6)。"""
+    metrics.notification_latency_seconds.observe(float(elapsed_s))
