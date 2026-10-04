@@ -153,3 +153,14 @@ class Settings(BaseSettings):
     # idp_test_jwks.json)。空=同梱ディレクトリ(ci既定・無影響)。発行側
     # (issue-idp-token)と検証側(JWKS)が同一値を見る(auth/testkeys/_keys_dir)
     auth_testkeys_dir: str = ""
+
+    # --- Observability(M4 ws-4・design §3.1)---
+    # workerのメトリクス公開ポート(start_http_server)。0=無効(既定)。
+    # ciは無効のまま維持(自回帰の機能試験が目的・承認事項4)。staging/load
+    # のcomposeでのみ設定する
+    obs_worker_metrics_port: int = 0
+    # collectorの周期秒(pending件数・最古pending年齢・Candidate数・
+    # kpi_daily最新行のgauge化・KpiJobも同一周期でJST日付境界を検査)
+    obs_collect_interval_sec: int = 60
+    # KPI日次集計の遡及幅(D-09の自己申告期限3日+マージン=4)
+    kpi_backfill_days: int = 4
