@@ -38,6 +38,7 @@ from latch.notifications import (
     make_notifications_service,
     notifications_router,
 )
+from latch.obs.middleware import HTTPMetricsMiddleware
 from latch.ratelimit import make_rate_limiter
 from latch.ratelimit.errors import RateLimitError
 from latch.safety import (
@@ -260,6 +261,10 @@ def create_app(
     app.include_router(latches_router)
     app.include_router(notifications_router)
     app.include_router(safety_router)
+
+    # HTTP基本メトリクス(M4 ws-4・design §2.9)。/metricsの自己アクセス
+    # はmiddleware内で除外される
+    app.add_middleware(HTTPMetricsMiddleware)
 
     @app.exception_handler(AuthError)
     async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:

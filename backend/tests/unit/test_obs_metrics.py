@@ -6,8 +6,12 @@
 で行う(design §2.1・prometheus-client公式のテスト作法)。
 """
 
+from datetime import UTC, datetime, timedelta
+
 from prometheus_client import REGISTRY, CollectorRegistry
 
+from latch.auth.deps import require_authenticated
+from latch.auth.tokens import AccessTokenClaims
 from latch.obs.metrics import build_metrics
 
 # Counterは露出時に _total が付く・Histogramは _bucket/_count/_sum・
@@ -150,3 +154,101 @@ def test_observe_helpers_increment_the_right_series():
         provider="fallback_llm", latency_s=0.1, usage=None
     )
     obs_metrics_module.observe_latch_score(shape="group", score=0.7)
+
+
+# -- middleware(Task 4)--
+
+_NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
+_CLAIMS = AccessTokenClaims(
+    auth_provider="google",
+    auth_subject="obs-mw-1",
+    jti="jti",
+    sid="sid",
+    iat=_NOW,
+    exp=_NOW + timedelta(seconds=3600),
+)
+
+
+async def test_http_metrics_increments_on_health(app, client, fake_clock):
+    """/health 1回でcounter+1・histogramに観測が積まれる。"""
+    before = (
+        REGISTRY.get_sample_value(
+            "latch_http_requests_total",
+            {"method": "GET", "path": "/health", "status": "200"},
+        )
+        or 0
+    )
+    before_count = (
+        REGISTRY.get_sample_value(
+            "latch_http_request_duration_seconds_count",
+            {"method": "GET", "path": "/health"},
+        )
+        or 0
+    )
+    resp = await client.get("/health")
+    assert resp.status_code == 200
+    after = (
+        REGISTRY.get_sample_value(
+            "latch_http_requests_total",
+            {"method": "GET", "path": "/health", "status": "200"},
+        )
+        or 0
+    )
+    after_count = (
+        REGISTRY.get_sample_value(
+            "latch_http_request_duration_seconds_count",
+            {"method": "GET", "path": "/health"},
+        )
+        or 0
+    )
+    assert after == before + 1
+    assert after_count == before_count + 1
+
+
+async def test_http_metrics_unknown_path_is_unmatched(client):
+    """route未マッチ(404)はpathテンプレートがunmatchedになる(クエリ・生pathを
+    labelに含まない — 08 §2.4規律)。"""
+    resp = await client.get("/no-such-path")
+    assert resp.status_code == 404
+    samples = []
+    for family in REGISTRY.collect():
+        for sample in family.samples:
+            if (
+                sample.name == "latch_http_requests_total"
+                and sample.labels.get("path") == "/no-such-path"
+            ):
+                samples.append(sample)
+    assert samples == []  # 生pathはlabelに現れない
+    assert (
+        REGISTRY.get_sample_value(
+            "latch_http_requests_total",
+            {"method": "GET", "path": "unmatched", "status": "404"},
+        )
+        is not None
+    )
+
+
+async def test_http_metrics_labels_are_system_only(app, client):
+    """HTTPメトリクスのlabelはmethod・path・statusのみ(user_id不使用)。"""
+    for family in REGISTRY.collect():
+        if family.name != "latch_http_requests_total":
+            continue
+        for sample in family.samples:
+            if sample.name == "latch_http_requests_total":
+                assert set(sample.labels.keys()) <= {"method", "path", "status"}
+
+
+async def test_http_metrics_protected_route_records_204(app, client):
+    """認証保護経路(POST /v1/sessions・Task 5のルーターがまだ無い場合404)でも
+    middlewareは経路テンプレートで計上する(Task 10以降は /v1/sessions が
+    templateになる)。ここでは存在しない保護的メソッドでunmatched経路のみ確認。"""
+    app.dependency_overrides[require_authenticated] = lambda: _CLAIMS
+    await client.post("/no-such-protected-path")
+    assert (
+        REGISTRY.get_sample_value(
+            "latch_http_requests_total",
+            {"method": "POST", "path": "unmatched", "status": "404"},
+        )
+        is not None
+    )
+    app.dependency_overrides.pop(require_authenticated, None)
