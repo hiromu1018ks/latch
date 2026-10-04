@@ -11,8 +11,35 @@ from fastapi.routing import APIRoute
 from latch.main import create_app
 from latch.ratelimit.deps import api_rate_limited
 
-# C3(05 §5): 認証不要はtoken/refreshのみ。/health はv1契約の外(確定値13)
-UNPROTECTED = {"/v1/auth/token", "/v1/auth/refresh", "/health"}
+# C3(05 §5): 認証不要はtoken/refreshのみ。/health と /metrics はv1契約の外
+# (確定値13・/metricsはM4 ws-4追加 — 認証外・無レート制限が承認済みdesign §2.5)
+UNPROTECTED = {"/v1/auth/token", "/v1/auth/refresh", "/health", "/metrics"}
+
+# method別にAPIRouteが分かれるためパス件数で数える(全契約の集合ピン)
+EXPECTED_PROTECTED_RATE_LIMITS = {
+    "/v1/auth/logout": 1,
+    "/v1/intents": 2,  # GET + POST
+    "/v1/intents/expiry-options": 1,  # M1 ws-5追加(スーパーバイザー許可 2026-09-28)
+    "/v1/intents/parse": 1,
+    "/v1/intents/{intent_id}": 3,  # GET + PATCH + DELETE
+    "/v1/intents/{intent_id}/pause": 1,
+    "/v1/intents/{intent_id}/resume": 1,
+    "/v1/latches": 1,  # M3 ws-1(一覧)
+    "/v1/latches/{latch_id}": 1,  # M3 ws-1(詳細)
+    "/v1/latches/{latch_id}/attendance": 1,  # M3 ws-4(実施自己申告)
+    "/v1/latches/{latch_id}/messages": 2,  # M3 ws-4(送信+取得)
+    "/v1/latches/{latch_id}/response": 1,  # M3 ws-1(回答)
+    "/v1/notifications": 1,  # M3 ws-3(お知らせ一覧)
+    "/v1/notifications/{notification_id}/read": 1,  # M3 ws-3(既読)
+    "/v1/reports": 1,  # M3 ws-5(通報)
+    # M4 ws-4(基本計測・api_rate_limited付与はスーパーバイザー裁定 2026-10-04)
+    "/v1/sessions": 1,
+    "/v1/users": 1,
+    "/v1/users/me": 2,  # GET + DELETE(M3 ws-6・退会)
+    "/v1/users/me/consent": 2,  # M4 ws-5(POST + GET)
+    "/v1/users/me/blocks": 1,  # M3 ws-5(ブロック一覧)
+    "/v1/users/{user_id}/block": 2,  # M3 ws-5(登録+解除)
+}
 
 
 def _iter_api_routes(app):
@@ -50,25 +77,4 @@ def test_all_v1_routes_are_rate_limited():
             assert _has_rate_limit(route), f"差し替え漏れ: {route.path}"
             protected.append(route.path)
     # method別にAPIRouteが分かれるためパス件数で数える(M1 ws-4時点の全契約)
-    assert Counter(protected) == {
-        "/v1/auth/logout": 1,
-        "/v1/intents": 2,  # GET + POST
-        "/v1/intents/expiry-options": 1,  # M1 ws-5追加(スーパーバイザー許可 2026-09-28)
-        "/v1/intents/parse": 1,
-        "/v1/intents/{intent_id}": 3,  # GET + PATCH + DELETE
-        "/v1/intents/{intent_id}/pause": 1,
-        "/v1/intents/{intent_id}/resume": 1,
-        "/v1/latches": 1,  # M3 ws-1(一覧)
-        "/v1/latches/{latch_id}": 1,  # M3 ws-1(詳細)
-        "/v1/latches/{latch_id}/attendance": 1,  # M3 ws-4(実施自己申告)
-        "/v1/latches/{latch_id}/messages": 2,  # M3 ws-4(送信+取得)
-        "/v1/latches/{latch_id}/response": 1,  # M3 ws-1(回答)
-        "/v1/notifications": 1,  # M3 ws-3(お知らせ一覧)
-        "/v1/notifications/{notification_id}/read": 1,  # M3 ws-3(既読)
-        "/v1/reports": 1,  # M3 ws-5(通報)
-        "/v1/users": 1,
-        "/v1/users/me": 2,  # GET + DELETE(M3 ws-6・退会)
-        "/v1/users/me/consent": 2,  # M4 ws-5(POST + GET)
-        "/v1/users/me/blocks": 1,  # M3 ws-5(ブロック一覧)
-        "/v1/users/{user_id}/block": 2,  # M3 ws-5(登録+解除)
-    }
+    assert Counter(protected) == EXPECTED_PROTECTED_RATE_LIMITS

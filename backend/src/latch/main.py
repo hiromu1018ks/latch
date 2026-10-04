@@ -18,7 +18,8 @@ from typing import Annotated
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from latch.auth.errors import AuthError
 from latch.auth.routes import logout_router, public_router
@@ -38,6 +39,8 @@ from latch.notifications import (
     make_notifications_service,
     notifications_router,
 )
+from latch.obs.middleware import HTTPMetricsMiddleware
+from latch.obs.sessions import obs_sessions_router
 from latch.ratelimit import make_rate_limiter
 from latch.ratelimit.errors import RateLimitError
 from latch.safety import (
@@ -260,6 +263,21 @@ def create_app(
     app.include_router(latches_router)
     app.include_router(notifications_router)
     app.include_router(safety_router)
+    app.include_router(obs_sessions_router)
+
+    # HTTP基本メトリクス(M4 ws-4・design §2.9)。/metricsの自己アクセス
+    # はmiddleware内で除外される
+    app.add_middleware(HTTPMetricsMiddleware)
+
+    # /metrics(認証外・無レート制限の生エンドポイント・design §2.5)。
+    # nginx経由でなくapi直のポートで公開(127.0.0.1バインド・承認事項4)。
+    # make_asgi_app()のMountではなく通常ルート: Mountは/metrics(スラッシュ
+    # 無し)を307で/metrics/へリダイレクトするため、Prometheusのscrape先
+    # (スラッシュ無し)が200を返すようヘルパールートで生やす(exposition
+    # 形式の生成はprometheus_clientに一任・gzip非対応のみ差)
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics_endpoint() -> Response:
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     @app.exception_handler(AuthError)
     async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:

@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test load-up load-down load-ps seed-generate seed-verify
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -59,6 +59,7 @@ g2-gate: ## G2日本語評価harness(実API・課金。.envにLATCH_LLM_MODE=rea
 
 STAGING_COMPOSE = docker compose -f compose.staging.yaml
 LOAD_COMPOSE = docker compose -f compose.load.yaml
+DASHBOARD_COMPOSE = docker compose -f compose.dashboard.yaml
 STAGING_DB_URL = postgresql+asyncpg://latch:latch@127.0.0.1:15432/latch
 
 SUBJECT ?= u1
@@ -118,3 +119,18 @@ staging-reset: ## staging環境をフルリセット(down -v→up→migrate→ge
 
 staging-test: ## staging機能試験ハーネス全実行(M4 ws-3・staging-reset直後のフル実行が前提・証拠YAMLをdocs/testassets/results/へ出力)
 	cd backend && uv run pytest staging_tests
+
+staging-obs-test: ## staging Observability受け入れハーネス(M4 ws-4・staging-reset直後からの一連実施を前提・証拠YAMLをdocs/testassets/results/へ出力)
+	cd backend && uv run pytest staging_tests_obs --import-mode=importlib
+
+dashboard-up: ## ダッシュボード環境を起動(prometheus 19090・grafana 13000・stagingとは別プロジェクト)
+	$(DASHBOARD_COMPOSE) up -d --wait
+
+dashboard-down: ## ダッシュボード環境を停止
+	$(DASHBOARD_COMPOSE) down
+
+dashboard-ps: ## ダッシュボード環境の状態
+	$(DASHBOARD_COMPOSE) ps
+
+dashboard-logs: ## ダッシュボード環境のログ(--tail 30)
+	$(DASHBOARD_COMPOSE) logs --tail 30

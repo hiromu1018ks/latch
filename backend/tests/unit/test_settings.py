@@ -56,3 +56,34 @@ def test_settings_database_url_env_override(monkeypatch):
     )
     s = Settings()
     assert s.database_url == "postgresql+asyncpg://u:p@db.example.com:5432/latchdb"
+
+
+def test_obs_settings_defaults(monkeypatch):
+    monkeypatch.delenv("LATCH_OBS_WORKER_METRICS_PORT", raising=False)
+    monkeypatch.delenv("LATCH_OBS_COLLECT_INTERVAL_SEC", raising=False)
+    monkeypatch.delenv("LATCH_KPI_BACKFILL_DAYS", raising=False)
+    s = Settings()
+    assert s.obs_worker_metrics_port == 0  # M4 ws-4(design §3.1・0=無効・ci無効維持)
+    assert s.obs_collect_interval_sec == 60  # M4 ws-4(collector tick)
+    assert s.kpi_backfill_days == 4  # M4 ws-4(D-09自己申告3日+マージン)
+
+
+def test_obs_settings_are_exactly_three_fields(monkeypatch):
+    # obs系設定の過剰供給を防ぐ機械検査(auth_8項目ピンと同一作法)
+    monkeypatch.delenv("LATCH_OBS_WORKER_METRICS_PORT", raising=False)
+    monkeypatch.delenv("LATCH_OBS_COLLECT_INTERVAL_SEC", raising=False)
+    monkeypatch.delenv("LATCH_KPI_BACKFILL_DAYS", raising=False)
+    obs_fields = {f for f in Settings.model_fields if f.startswith("obs_")}
+    kpi_fields = {f for f in Settings.model_fields if f.startswith("kpi_")}
+    assert obs_fields == {"obs_worker_metrics_port", "obs_collect_interval_sec"}
+    assert kpi_fields == {"kpi_backfill_days"}
+
+
+def test_obs_settings_env_override(monkeypatch):
+    monkeypatch.setenv("LATCH_OBS_WORKER_METRICS_PORT", "9100")
+    monkeypatch.setenv("LATCH_OBS_COLLECT_INTERVAL_SEC", "30")
+    monkeypatch.setenv("LATCH_KPI_BACKFILL_DAYS", "5")
+    s = Settings()
+    assert s.obs_worker_metrics_port == 9100
+    assert s.obs_collect_interval_sec == 30
+    assert s.kpi_backfill_days == 5

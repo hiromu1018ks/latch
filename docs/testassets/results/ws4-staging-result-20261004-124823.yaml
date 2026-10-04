@@ -1,0 +1,72 @@
+unit: M4-ws-4
+executed_at: '2026-10-04T12:48:23.185746+09:00'
+environment: latch-staging
+items:
+- id: ws4-a1
+  name: 環境前提(0008)とシード収束
+  test: test_w4_a1_env_and_seed
+  verdict: pass
+  observed:
+    alembic_head: 0008
+    health: ok
+- id: ws4-a2
+  name: 3群メトリクス到達(prometheus)
+  test: test_w4_a2_pipeline_metrics_visible
+  verdict: pass
+  observed:
+    pending: 4
+    hardfilter_pass: 2
+    vector_items: 2
+    candidates: 4
+    http_requests: 2
+    jev: 2
+    score: 2
+- id: ws4-b1
+  name: 専用ペアmatchedとsessions投与
+  test: test_w4_b1_scenario_matched_and_sessions
+  verdict: pass
+  observed:
+    latch: a66097d0-89fd-40be-9c40-44a36c1ba078
+    sessions_users: 3
+- id: ws4-b2
+  name: KpiJob発火(kpi_daily mlr行)
+  test: test_w4_b2_kpi_job_fires_on_clock_advance
+  verdict: pass
+  observed:
+    mlr_rows: 4
+- id: ws4-b3
+  name: MLR日次値とDB実測一致
+  test: test_w4_b3_mlr_matches_db_observation
+  verdict: pass
+  observed:
+    day: '2026-10-03'
+    kpi:
+    - 0
+    - 0
+    db_observed:
+    - 0
+    - 0
+- id: ws4-c3
+  name: grafanaダッシュボード4枚稼働
+  test: test_w4_c3_grafana_dashboards_provisioned
+  verdict: pass
+  observed:
+    titles:
+    - LATCH Behavior / KPI
+    - LATCH Jev
+    - LATCH Overview
+    - LATCH Pipeline
+- id: ws4-c4
+  name: prometheus 4 target up
+  test: test_w4_c4_prometheus_scrapes_all_targets
+  verdict: pass
+  observed:
+    prometheus: '1'
+    latch-staging-api: '1'
+    latch-staging-worker: '1'
+- id: ws4-c5
+  name: 非ループバックから/metricsへ届かない(承認条件d)
+  test: test_w4_c5_metrics_not_reachable_from_non_loopback
+  verdict: pass
+  observed:
+    host_ip: 192.168.10.111

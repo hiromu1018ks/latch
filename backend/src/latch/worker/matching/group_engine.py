@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from latch.core.clock import Clock
 from latch.intents.completion import DEFAULT_RADIUS_M, default_time_end
+from latch.obs.metrics import observe_latch_score
 from latch.users.service import age_years
 from latch.worker.matching import candidates, group_calc, latch_calc, layer3
 from latch.worker.matching import origin as origin_mod
@@ -895,6 +896,9 @@ class GroupEngine:
                 ordered = [m for m in r.inputs if m.intent_id == seed_uuid] + [
                     m for m in r.inputs if m.intent_id != seed_uuid
                 ]
+                # 提案確定(d07通過後・このtxで提案を構築する点)のscore観測
+                # (M4 ws-4・design §2.8。d07 denied・競合負けは分布に入れない)
+                observe_latch_score(shape="group", score=float(r.score))
                 proposal = proposal_mod.build_group_proposal(
                     members=ordered, score=r.score, area_name=r.area
                 )

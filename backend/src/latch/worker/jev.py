@@ -32,6 +32,7 @@ from latch.core.clock import Clock
 from latch.intents.completion import default_time_end
 from latch.llm.errors import JevOutputInvalidError, LLMError
 from latch.llm.jev import JevTextInput, build_jev_text
+from latch.obs.metrics import observe_jev_execution
 from latch.worker.cost import JevCostGuard, JevCostStore
 from latch.worker.matching import group_engine as group_engine_mod
 from latch.worker.matching import layer4
@@ -282,6 +283,7 @@ class JevWorker:
         inp_a, inp_b = (origin_inp, peer_inp) if origin_is_a else (peer_inp, origin_inp)
         intent_a = build_jev_text(inp_a, label="Intent A")
         intent_b = build_jev_text(inp_b, label="Intent B")
+        t0 = self._clock.now()
         try:
             judgment = await self._gateway.judge_pair(
                 intent_a=intent_a,
@@ -289,13 +291,29 @@ class JevWorker:
                 intent_ids=[str(row.intent_a_id), str(row.intent_b_id)],
             )
         except JevOutputInvalidError as exc:
-            # 検証失敗は例外にせずskipped記録へ(実装不整合)
+            # 検証失敗も実際のAPI呼び出し(1実行回数・D-16 v0.5読み替え)。
+            # usageはJevOutputInvalidErrorに属性が無いためNone固定(計測は
+            # 成功経路が主・M4 ws-4報告書に記録)
+            latency_s = (self._clock.now() - t0).total_seconds()
+            observe_jev_execution(
+                provider=exc.provider or "fallback_llm",
+                latency_s=latency_s,
+                usage=None,
+            )
             await self._record_and_skip(row, exc.provider, _SKIP_REASON_INVALID_OUTPUT)
             return
         except LLMError:
             # 双障害(第一候補の切替条件4種→フォールバック失敗)もskipped記録へ
+            latency_s = (self._clock.now() - t0).total_seconds()
+            observe_jev_execution(
+                provider="fallback_llm", latency_s=latency_s, usage=None
+            )
             await self._record_and_skip(row, "fallback_llm", _SKIP_REASON_LLM_FAILURE)
             return
+        latency_s = (self._clock.now() - t0).total_seconds()
+        observe_jev_execution(
+            provider=judgment.provider, latency_s=latency_s, usage=judgment.usage
+        )
         jev_result = {
             **judgment.result,
             "provider": judgment.provider,

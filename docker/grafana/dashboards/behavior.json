@@ -1,0 +1,536 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"intent_create_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"intent_create_rate\"}, 1)",
+          "legendFormat": "Intent作成率 (日次)",
+          "refId": "A"
+        }
+      ],
+      "title": "Intent作成率 (日次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"intent_recreation_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"intent_recreation_rate\"}, 1)",
+          "legendFormat": "Intent再作成率 (週次)",
+          "refId": "A"
+        }
+      ],
+      "title": "Intent再作成率 (週次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"active_intent_per_dau\"} / clamp_min(latch_kpi_daily_denominator{metric=\"active_intent_per_dau\"}, 1)",
+          "legendFormat": "1ユーザーあたりActive Intent数 (日次)",
+          "refId": "A"
+        }
+      ],
+      "title": "1ユーザーあたりActive Intent数 (日次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"retention_7d\"} / clamp_min(latch_kpi_daily_denominator{metric=\"retention_7d\"}, 1)",
+          "legendFormat": "7日継続率",
+          "refId": "A"
+        }
+      ],
+      "title": "7日継続率",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"retention_30d\"} / clamp_min(latch_kpi_daily_denominator{metric=\"retention_30d\"}, 1)",
+          "legendFormat": "30日継続率",
+          "refId": "A"
+        }
+      ],
+      "title": "30日継続率",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"candidate_generation_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"candidate_generation_rate\"}, 1)",
+          "legendFormat": "Candidate生成率 (日次)",
+          "refId": "A"
+        }
+      ],
+      "title": "Candidate生成率 (日次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"proposal_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"proposal_rate\"}, 1)",
+          "legendFormat": "LATCH候補提示率 (日次)",
+          "refId": "A"
+        }
+      ],
+      "title": "LATCH候補提示率 (日次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"hold_expired_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"hold_expired_rate\"}, 1)",
+          "legendFormat": "保留→expired率 (日次)",
+          "refId": "A"
+        }
+      ],
+      "title": "保留→expired率 (日次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"attendance_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"attendance_rate\"}, 1)",
+          "legendFormat": "実行率 (週次)",
+          "refId": "A"
+        }
+      ],
+      "title": "実行率 (週次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 24
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"cancel_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"cancel_rate\"}, 1)",
+          "legendFormat": "キャンセル率 (週次)",
+          "refId": "A"
+        }
+      ],
+      "title": "キャンセル率 (週次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"no_answer_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"no_answer_rate\"}, 1)",
+          "legendFormat": "無回答率 (週次)",
+          "refId": "A"
+        }
+      ],
+      "title": "無回答率 (週次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"jev_executions_per_intent\"} / clamp_min(latch_kpi_daily_denominator{metric=\"jev_executions_per_intent\"}, 1)",
+          "legendFormat": "1 IntentあたりJev実行数 (日次)",
+          "refId": "A"
+        }
+      ],
+      "title": "1 IntentあたりJev実行数 (日次)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "overrides": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "latch_kpi_daily_numerator{metric=\"mute_rate\"} / clamp_min(latch_kpi_daily_denominator{metric=\"mute_rate\"}, 1)",
+          "legendFormat": "通知オフ率 (週次)",
+          "refId": "A"
+        }
+      ],
+      "title": "通知オフ率 (週次)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "latch"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "LATCH Behavior / KPI",
+  "uid": "latch-behavior",
+  "version": 1
+}

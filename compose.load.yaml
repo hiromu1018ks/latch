@@ -44,6 +44,7 @@ x-worker-common: &worker-common
   command: python -m latch.worker
   environment:
     <<: *backend-env
+    LATCH_OBS_WORKER_METRICS_PORT: "9100"
   depends_on:
     db:
       condition: service_healthy
@@ -115,9 +116,13 @@ services:
 
   worker1:
     <<: *worker-common
+    ports:
+      - "127.0.0.1:28101:9100"
 
   worker2:
     <<: *worker-common
+    ports:
+      - "127.0.0.1:28102:9100"
 
 volumes:
   latch-load-db:

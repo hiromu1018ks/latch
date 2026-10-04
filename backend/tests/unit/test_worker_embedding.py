@@ -328,8 +328,13 @@ def _make_event(event_type: str, iid, version) -> IncomingEvent:
 
 
 async def _started_worker(fake_clock, stage1, embedding):
+    # engine=object(): run()内の実DB接続を防ぐ(test_worker.pyの注記参照)
     worker = Worker(
-        clock=fake_clock, bus=_FakeBus(), stage1=stage1, embedding=embedding
+        clock=fake_clock,
+        bus=_FakeBus(),
+        engine=object(),
+        stage1=stage1,
+        embedding=embedding,
     )
     task = asyncio.create_task(worker.run())
     await asyncio.sleep(0.01)
