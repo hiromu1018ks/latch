@@ -1,8 +1,11 @@
 # ダッシュボード環境(M4 ws-4)。別プロジェクトlatch-dashboard。
-# Prometheusがstagingのホスト公開ポート(127.0.0.1バインド・api=18001/18002
-# worker=18101/18102)をscrapeし、Grafanaへdatasourceをprovisioningする。
+# Prometheusがstagingのメトリクスをscrapeし、Grafanaへdatasourceを
+# provisioningする。scrape経路はstagingのcomposeネットワーク(latch-staging_default)
+# への参加によるコンテナ名直結(実施時にhost-gateway経由ではホストの
+# 127.0.0.1バインドポートへ届かないため変更・報告書に記録)。ホスト公開
+# ポートの127.0.0.1明示バインド(承認事項4)は本ファイルのportsで維持する。
 # load環境(28000系)のtargetはws-6(性能測定)が追加する(design §3.1どおり
-# staging系のみの初期構成)。両ポートとも127.0.0.1明示バインド(承認事項4)。
+# staging系のみの初期構成)。
 name: latch-dashboard
 
 services:
@@ -14,12 +17,11 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    # コンテナ内からホストの127.0.0.1バインドポートへ到達する経路
-    # (§2.1読み替え9)
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:19090:9090"
+    networks:
+      - default
+      - staging-obs
     restart: unless-stopped
 
   grafana:
@@ -35,3 +37,9 @@ services:
     ports:
       - "127.0.0.1:13000:3000"
     restart: unless-stopped
+
+networks:
+  # stagingのcomposeが作る既定ネットワーク(コンテナ名直結scrape用・external)
+  staging-obs:
+    external: true
+    name: latch-staging_default

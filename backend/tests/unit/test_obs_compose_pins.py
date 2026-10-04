@@ -48,10 +48,18 @@ def test_dashboard_compose_binds_loopback_only():
     assert "127.0.0.1:13000:3000" in graf_ports
 
 
-def test_dashboard_prometheus_has_host_gateway():
+def test_dashboard_prometheus_joins_staging_network():
+    """scrape経路はstagingネットワーク参加によるコンテナ名直結(実施時修正)。
+
+    host-gateway経由ではホストの127.0.0.1バインドポートへ届かないため、
+    prometheusをlatch-staging_default(external)へ参加させる。
+    """
     compose = _load_compose("compose.dashboard.yaml")
-    extra = compose["services"]["prometheus"]["extra_hosts"]
-    assert "host.docker.internal:host-gateway" in extra
+    prom = compose["services"]["prometheus"]
+    assert "staging-obs" in prom["networks"]
+    net = compose["networks"]["staging-obs"]
+    assert net["external"] is True or net.get("name") == "latch-staging_default"
+    assert net.get("name") == "latch-staging_default"
 
 
 def test_prometheus_scrapes_staging_targets():
@@ -62,13 +70,14 @@ def test_prometheus_scrapes_staging_targets():
         for group in job.get("static_configs", []):
             targets.extend(group["targets"])
     assert {
-        "host.docker.internal:18001",
-        "host.docker.internal:18002",
-        "host.docker.internal:18101",
-        "host.docker.internal:18102",
+        "api1:8000",
+        "api2:8000",
+        "worker1:9100",
+        "worker2:9100",
     } <= set(targets)
-    # 既存ポート番号との衝突がない(18000=nginx・5432/6379/8085等は未使用)
+    # 既存ポート番号との衝突がない(nginx=18000はscrapeしない)
     assert "host.docker.internal:18000" not in targets
+    assert "nginx:80" not in targets
 
 
 def test_makefile_has_dashboard_and_obs_test_targets():

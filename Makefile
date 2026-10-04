@@ -121,7 +121,7 @@ staging-test: ## staging機能試験ハーネス全実行(M4 ws-3・staging-rese
 	cd backend && uv run pytest staging_tests
 
 staging-obs-test: ## staging Observability受け入れハーネス(M4 ws-4・staging-reset直後からの一連実施を前提・証拠YAMLをdocs/testassets/results/へ出力)
-	cd backend && uv run pytest staging_tests_obs
+	cd backend && uv run pytest staging_tests_obs --import-mode=importlib
 
 dashboard-up: ## ダッシュボード環境を起動(prometheus 19090・grafana 13000・stagingとは別プロジェクト)
 	$(DASHBOARD_COMPOSE) up -d --wait
