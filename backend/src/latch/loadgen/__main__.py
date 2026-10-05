@@ -18,9 +18,10 @@ from datetime import datetime
 from pathlib import Path
 
 import httpx
+import yaml
 
 from latch.core.clock import Clock, SystemClock
-from latch.loadgen import collect, massload
+from latch.loadgen import collect, massload, probe
 from latch.loadgen.client import (
     DEFAULT_BASE_URL,
     DEFAULT_DSN,
@@ -294,6 +295,81 @@ async def cmd_bruteforce(args) -> int:
     return 0
 
 
+async def cmd_probe(args) -> int:
+    """合成監視プローブ(60分窓・main 1分+dense 10秒・証拠YAML出力)。"""
+    clock = SystemClock()
+    marker = Path(args.outage_marker) if args.outage_marker else probe.DEFAULT_MARKER
+    async with httpx.AsyncClient(
+        base_url=args.base_url, timeout=probe.REQUEST_TIMEOUT_S
+    ) as http:
+        token_cache = probe.TokenCache(
+            http=http, keys_dir=args.keys, subject=args.subject, clock=clock
+        )
+        await token_cache.bearer()  # 起動時に1回発行(失敗は即Abort)
+        samples = await probe.run_probe(
+            http=http,
+            base_url=args.base_url,
+            token_cache=token_cache,
+            duration_s=args.duration,
+            clock=clock,
+            marker=marker,
+        )
+    outages = probe.parse_outages(args.planned_outage or "")
+    summary = probe.summarize(samples)
+    report = {
+        "unit": "M4-ws-7",
+        "test_id": "availability-probe",
+        "executed_at": clock.now().isoformat(),
+        "environment": {
+            "entry": "nginx(127.0.0.1:18000)・api1+api2+restart unless-stopped"
+        },
+        "input_conditions": {
+            "duration_s": args.duration,
+            "main_interval_s": probe.MAIN_INTERVAL_S,
+            "dense_interval_s": probe.DENSE_INTERVAL_S,
+            "subject": args.subject,
+            "paths": list(probe.PROBE_PATHS),
+            "marker": str(marker),
+            "post_analysis_outages": [
+                f"{s.isoformat()}..{e.isoformat()}" for s, e in outages
+            ],
+            "note": (
+                "計画停止サンプルはマーカー存在でtagged・分母外(§2.1読み替え2)。"
+                "api1強制停止(docker kill・restart unless-stopped自動復旧)と"
+                "api2計画停止(stop→start)は§8手順どおり"
+            ),
+        },
+        "verdict": summary,
+        "samples": [
+            {
+                "kind": s.kind,
+                "at": s.at.isoformat(),
+                "path": s.path,
+                "ok": s.ok,
+                "error": s.error,
+                "tagged_planned_outage": s.tagged_planned_outage,
+            }
+            for s in samples
+        ],
+    }
+    print(
+        f"probe done: main={summary['main_total']} "
+        f"rate={summary['main_success_rate']} verdict={summary['verdict_995']}"
+    )
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            yaml.safe_dump(report, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        print(f"evidence: {out_path}")
+    else:
+        path = collect.write_evidence(report, prefix="ws7-probe", clock=clock)
+        print(f"evidence: {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="負荷注入器(M4 ws-6)")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
@@ -338,6 +414,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_bf.add_argument("--window", default="30m")
     p_bf.set_defaults(func=lambda a: asyncio.run(cmd_bruteforce(a)))
+
+    p_probe = sub.add_parser("probe", help="合成監視プローブ(1分+10秒・YAML出力)")
+    p_probe.add_argument("--duration", type=float, default=3600.0)
+    p_probe.add_argument("--subject", default="load-u0001")
+    p_probe.add_argument(
+        "--planned-outage",
+        default="",
+        help='事後集計用の窓記録("ISO:ISO,ISO:ISO"。tagged本体はマーカー方式)',
+    )
+    p_probe.add_argument(
+        "--outage-marker",
+        default=None,
+        help="実行中タグのマーカーファイル(既定=<repo>/.staging/probe-outage.marker)",
+    )
+    p_probe.add_argument("--out", default=None, help="証拠YAMLパス(既定はRESULTS_DIR)")
+    p_probe.set_defaults(func=lambda a: asyncio.run(cmd_probe(a)))
 
     args = parser.parse_args(argv)
     return args.func(args)

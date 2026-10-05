@@ -1,0 +1,12 @@
+# staging NFR試験用override(M4 ws-7)。compose.staging.yamlは触らず・起動時の
+# env上書きのみ(design §2.5案A・§3.2)。Queue lag alert発報器はAPI側新設タスク
+# で既定無効(settings.alert_queue_enabled=False・ci無効維持)のため・stagingのみ
+# 有効化する。n1〜n5の全試験は -f compose.staging.yaml -f compose.staging.nfr.yaml
+# で立ち上げた構成に対して実施する(Makefileのstaging-nfr-reset / NFR系ターゲット)。
+services:
+  api1:
+    environment:
+      LATCH_ALERT_QUEUE_ENABLED: "true"
+  api2:
+    environment:
+      LATCH_ALERT_QUEUE_ENABLED: "true"

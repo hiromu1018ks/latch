@@ -175,3 +175,18 @@ class Settings(BaseSettings):
     obs_collect_interval_sec: int = 60
     # KPI日次集計の遡及幅(D-09の自己申告期限3日+マージン=4)
     kpi_backfill_days: int = 4
+
+    # --- Queue lag alert発報器(M4 ws-7・design §2.5案A)---
+    # API側の周期タスク(worker内collectorと同じDB集計値を消費・worker停止中も
+    # 発報が続く)。既定無効(ci干渉ゼロ)・stagingのみcompose.staging.nfr.yamlで
+    # 有効化。発報は条件成立中1回だけ(プロセス内フラグ+Redisアームキー)
+    alert_queue_enabled: bool = False
+    # 発報器のtick秒(collectorと同一60秒)
+    alert_queue_interval_sec: int = 60
+    # 発報条件(OR): match_events pending件数>=1,000 または 最古pending年齢
+    # >=300秒(docs未規定の初期値・承認事項§5-5。計測を見て調整する)
+    alert_queue_pending: int = 1000
+    alert_queue_oldest_seconds: int = 300
+    # 発報の単発化アームキー(Redis SET NX)のTTL秒。条件成立中の1回発報を
+    # 2インスタンス間で担保し・プロセス死亡後の再武装はTTL失効で回復する
+    alert_queue_arm_ttl_sec: int = 180

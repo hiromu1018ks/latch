@@ -39,6 +39,7 @@ from latch.notifications import (
     make_notifications_service,
     notifications_router,
 )
+from latch.obs.lag_alert import QueueLagAlert
 from latch.obs.middleware import HTTPMetricsMiddleware
 from latch.obs.sessions import obs_sessions_router
 from latch.ratelimit import make_rate_limiter
@@ -142,6 +143,27 @@ async def _lifespan(app: FastAPI):
         )
     event_relay_task = None
     event_relay_stop = None
+    lag_alert_task = None
+    lag_alert_stop = None
+    lag_alert_redis = None
+    if settings.alert_queue_enabled:
+        # Queue lag alert発報器(M4 ws-7・design §2.5案A)。既定無効(ci無効
+        # 維持)・stagingのみcompose.staging.nfr.yamlで有効化。独立Redis接続
+        # (既存redis_clientのbuild条件には触らない)・engineはlifespan共有資産
+        lag_alert_redis = aioredis.Redis.from_url(
+            settings.redis_url, decode_responses=True
+        )
+        queue_alert = QueueLagAlert(
+            engine=engine,
+            clock=app.state.clock,
+            redis=lag_alert_redis,
+            pending_threshold=settings.alert_queue_pending,
+            oldest_threshold=settings.alert_queue_oldest_seconds,
+            arm_ttl_s=settings.alert_queue_arm_ttl_sec,
+            interval_sec=settings.alert_queue_interval_sec,
+        )
+        lag_alert_stop = asyncio.Event()
+        lag_alert_task = asyncio.create_task(queue_alert.run(stop=lag_alert_stop))
     if build_events:
         # ci=エミュレータ・本番=実GCP(settings切替のみ — design §2.1)。
         # ensure(topic作成)は呼ばない: unit試験のlifespan(app fixtureがbus未注入)
@@ -194,6 +216,16 @@ async def _lifespan(app: FastAPI):
     try:
         yield
     finally:
+        if lag_alert_stop is not None:
+            lag_alert_stop.set()
+        if lag_alert_task is not None:
+            lag_alert_task.cancel()
+            try:
+                await lag_alert_task
+            except asyncio.CancelledError:
+                pass
+        if lag_alert_redis is not None:
+            await lag_alert_redis.aclose()
         if event_relay_stop is not None:
             event_relay_stop.set()
         if event_relay_task is not None:

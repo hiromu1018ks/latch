@@ -1,0 +1,48 @@
+# staging復旧試験用override(M4 ws-7・design §2.2案A)。n2の期間のみ
+# -f compose.staging.yaml -f compose.staging.nfr.yaml -f compose.staging.recovery.yaml
+# で読む。db2=pg_dump復元先(新規ボリューム・別ポート16543)・api/workerのDB向き先を
+# db2へ差し替え・backfill周期を試験用に短縮(既存envの上書きのみ=design §2.2案A
+# 「compose.staging.yamlは触らず、起動時のenv上書きのみ」の範囲内)。
+# db2はprofile recovery指定時のみ起動(staging-db2-upターゲット・profiles指定で
+# 意図しない起動を構造的に防止)。
+services:
+  db2:
+    build:
+      context: docker/postgres
+    container_name: latch-staging-db2-1
+    profiles:
+      - "recovery"
+    environment:
+      POSTGRES_USER: latch
+      POSTGRES_PASSWORD: latch
+      POSTGRES_DB: latch
+    ports:
+      - "127.0.0.1:16543:5432"
+    volumes:
+      - latch-staging-db2:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U latch -d latch"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  api1:
+    environment:
+      LATCH_DATABASE_URL: postgresql+asyncpg://latch:latch@db2:5432/latch
+      LATCH_EMBEDDING_BACKFILL_INTERVAL_SEC: "5"
+  api2:
+    environment:
+      LATCH_DATABASE_URL: postgresql+asyncpg://latch:latch@db2:5432/latch
+      LATCH_EMBEDDING_BACKFILL_INTERVAL_SEC: "5"
+  worker1:
+    environment:
+      LATCH_DATABASE_URL: postgresql+asyncpg://latch:latch@db2:5432/latch
+      LATCH_EMBEDDING_BACKFILL_INTERVAL_SEC: "5"
+  worker2:
+    environment:
+      LATCH_DATABASE_URL: postgresql+asyncpg://latch:latch@db2:5432/latch
+      LATCH_EMBEDDING_BACKFILL_INTERVAL_SEC: "5"
+
+volumes:
+  latch-staging-db2:
