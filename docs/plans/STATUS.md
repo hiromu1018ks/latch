@@ -501,6 +501,7 @@
   - 実施で発見したハーネズ側欠陥8系統をsupervisorが直接修正(wait_until同期/非同期・CLI publish version+1直投げはstage1のversion検査でquarantined→API PATCH正規経路・409経路の応答形状・IdPトークン30→365日〔仮想Clockが月跨ぎで実時間+30日を追い越す〕・resolveログINFO→WARNING〔API側はlatch系INFO非出力〕・候補照会uuid正規化・件数の基準値差分化・n2_30のNULL化対象active限定)・**実装本体の変更はlag_alert 1件のみ**
   - 運用の失敗と発見の正直な記録: **docker killは手動停止扱いでrestartポリシー対象外**(15分非復帰を実測・窓1回破棄→SIGTERM手法を実験確立)・監視バックグラウンド30分上限killのプロセスグループ道連れ(nohupプローブ消滅・窓2回破棄→setsid分離で解消)・pgrepパターン自己マッチによる誤検知・**検証チェーンのパイプ再犯2回**(tailで失敗明細を喪失・個別再実行で回収)・実施マシンの96分スリープでn1窓は実効44分(ユーザー裁定で成立扱い)
   - G4時確認事項10〜12へ追記・staging環境はdown済み・load環境もdown済み
+- 学習資産追従: ws-7分 0e53d82(第31章『壊して確かめる: 障害試験の考え方』新設=約1.2万字・合成監視と除外タグ・docker kill手動扱いとrestartポリシーの仕様・復旧手順試験・仮想時計とトークン寿命・警報器の置き場所とアームキー・境界試験の直接セット+既存3ファイル更新〔README順路46・00-environment〔1472/1754・NFRハーネス19件・nfrtools/override 2本・コマンド9ターゲット〕・第30章〕。Labとhow-toはstaging再構築が必要なため理由つき見合わせ。agent4がmake test 1472・lint判断台帳収束・レビュー16件仕分けを確認)
 
 ## G2判定資料(2026-09-30・承認済み)
 
