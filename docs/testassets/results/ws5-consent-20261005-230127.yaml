@@ -1,0 +1,25 @@
+# G4証拠⑤-1: 同意フローのstaging実行記録(ws-8で採取・M4 ws-5の繰越し回収)
+# 対応: docs/testassets/results/README.md §3-1・G4 7項目対応表⑤
+test_id: ws5-consent
+executed_at: "2026-10-05T23:01:27+09:00"
+environment:
+  env: staging(latch-staging・docker compose・127.0.0.1:18000)
+  base: main 374ed33(staging-reset+明示build api1 api2 worker1 worker2後)
+  llm: stub・push: stub・clock: controlled
+input_conditions:
+  user: ws8-consent-u1(未同意で作成)
+  body: m4-seed SD-001同型(drinking/居酒屋・time.start=2026-10-06T21:00:00+09:00・
+    visibility=hidden_until_match)
+  procedure: README §3-1の手順1〜5(未同意Intent作成→同意→同一body再作成の順序観察)
+result: pass
+observations:
+  - {step: users_create, expect: "201", actual: "201", at: "2026-10-05T22:38:24+09:00"}
+  - {step: intent_before_consent, expect: "422 CONSENT_REQUIRED", actual: "422",
+     response_body: '{"error":{"code":"CONSENT_REQUIRED","message":"consent required","details":null}}',
+     at: "2026-10-05T23:01:12+09:00"}
+  - {step: consent_post, expect: "200", actual: "200", at: "2026-10-05T23:01:2x+09:00"}
+  - {step: intent_after_consent, expect: "201", actual: "201", at: "2026-10-05T23:01:27+09:00"}
+notes:
+  - 認証はIdP JWT(RS256)をPOST /v1/auth/tokenでアクセストークン(HS256)へ交換して使用
+    (staging_tests/conftest.pyと同一の実績経路。README §3-1には交換が明記されていないため
+    手順書類への注記候補として記録)

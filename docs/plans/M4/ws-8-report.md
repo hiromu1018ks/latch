@@ -68,11 +68,11 @@
 
 各コミット前(302c76f直前・4e97f03直前・本コミット直前)に同一の検査を実行し・毎回1472 passedを確認した。
 
-## 7. スーパーバイザー検証待ちの記録
+## 7. スーパーバイザー検証待ちの記録(2026-10-05 実施済みに更新)
 
-- **(a) test-ci: 実行不要(コード変更ゼロ)**。agent3は実行していない。基点mainのtest-ci実数1754の確認は・スーパーバイザーがマージ後mainで実施する(計画書§8手順0)。
-- **(b) staging実施(§8手順1〜5)の実施待ち**: walkthrough(1世代戻し+停止手順ドライラン)・ws-5証拠3点(同意フロー・許可リスト・ログサンプル)の採取は・すべてスーパーバイザー検証時の実施分として骨格を残している。成果物となる証拠YAML(ws8-rollback-walkthrough-*.yaml・ws5-consent・ws5-logallowlist・ws5-logsample)は本単位では生成していない(results/の既存YAML無変更の規律どおり)。
-- **(c) G4時確認事項13への追記依頼(§8手順5)**: 「11 §7『新規Intent受付と通知を停止』の現実的手段は・機能フラグではなく環境操作(worker停止+nginx受付遮断)で読み替えた。本番手段はPhase 0確定欄(手順書§8)で確定する」の追記を・スーパーバイザー側でSTATUS.mdへ実施願う。
+- **(a) test-ci**: スーパーバイザーがマージ後mainで実施。1回目はload DB停止中のためmassload 4件が接続失敗(1750 passed+4 failed・コード欠陥ではない)・load DB起動後の再実行で**1754 passed・exit 0**。massload試験がload DB(127.0.0.1:25432)起動前提である点是環境前提(計画書§8手順0の記載漏れ)。
+- **(b) staging実施(§8手順1〜5)**: **実施済み**(詳細は§9)。証拠YAML 4本をresults/へ作成。
+- **(c) G4時確認事項13への追記**: スーパーバイザーがSTATUS.mdへ実施済み。
 
 ## 8. 詰まった箇所と判断
 
@@ -82,3 +82,14 @@
 2. **マイグレーション照合パスの訂正**: 計画書§2.1の照合パス「backend/migrations/versions/」は実在せず・実パスは「backend/alembic/versions/」だった。8ファイル実在という照合結果自体は一致。成果物はこのパスを参照していないため修正不要(§3の#6)。
 3. **点数実査コマンドのパイプ回避**: 計画書Task 2 Step 2の `ls … | rg '…'` は・パイプ規律(計画書§0・Global Constraints「検証チェーンにパイプを書かない」)に触れるため・glob展開の単一lsコマンドで代替し・bruteforce 3点・nfr 5点を目視実査した。
 4. **natural-japanese lintの判断**: 手順書に対する機械検査(natural-japanese lint・genre=tech)で「文の長短のメリハリ(low_burstiness)」のwarnが1件出たが・手順書は走査性優先で説明文を伴う性格(計画書の執筆規律)に照らし「残す」と判断した。禁止語・翻訳調等の検出は0件。表記ゆれ(段/区の呼び名)・コマンドの形式一致(11本すべて `docker compose -f compose.staging.yaml` 形式)は点検済み。
+
+## 9. スーパーバイザー実施結果(2026-10-05 22:23〜23:04 JST)
+
+test-ci 1754 passed(§7-a)後・staging-reset→デプロイ記録(手順書§2規律の初適用)→walkthrough→ws-5証拠3点採取→環境downまで実施。**すべて合格**。
+
+- **1世代戻し(手順書§6.2)**: 現行版200(22:33:50)→cf9e612へcheckout・再ビルド(コード同一のため全layer CACHED)・再作成→**22:35:08にnginx経由502を観測**→nginx再起動で200(22:35:35=旧版が新スキーマ0008のDBで起動)→main復帰・再ビルド・再作成・nginx再起動で200(22:35:59)。
+- **停止ドライラン(手順書§3.2)**: 段1=worker停止中GET 200(22:36:45〜47)。段2=nginx -t warning付き成功→POST intents/parse 503・GET users/me・GET一覧 200・解除後POST 201(22:37:03〜29)。段3=api停止中**504**を観測(手順書の502と違いはあるがupstream不在の5xx)・復帰200(22:37:56)。
+- **ws-5証拠3点**: ①同意フロー(201→422 CONSENT_REQUIRED→同意200→201・23:01) ②許可リスト機械検査5 passed+登録表(23:01:35) ③実ログのraw_text非混入(latch.llm.sendサンプル・禁止語0件・23:02)。
+- **証拠YAML 4本**: ws8-rollback-walkthrough-20261005-223756・ws5-consent-20261005-230127・ws5-logallowlist-20261005-230135・ws5-logsample-20261005-230226。
+- **実施時発見4件(手順書・READMEへ修正反映済み)**: (1) §6.2のbuildサービス名(api worker→api1 api2 worker1 worker2) (2) api再作成後のnginx再起動が必須(upstream IPキャッシュで502・ws-3知見の再実証) (3) 段3の停止中応答は502でなく504を観測 (4) README §3-1の認証には/v1/auth/tokenでのアクセストークン交換が必須。
+- alembic downgradeは全工程で不実行(手順書§6.1規律どおり)。ci一時停止なし(walkthroughは性能測定を伴わない)。

@@ -6,12 +6,12 @@
 
 ## 現在
 
-- フェーズ: **M4実装中**(2026-10-03 M4単位表承認・ws-1〜ws-9)
+- フェーズ: **M4 ws-1〜ws-8実装完了・G4判定待ち**(2026-10-03 M4単位表承認・ws-1〜ws-9。ws-9はFCM資材待ち)
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
 - 学習資産: docs/learn/(Diátaxis・初心者向け)を運用開始。**各マージ後にagent4で同期**(規約は .claude/prompts/agent4-learn.md に一元化)。M1の6単位分+M2 ws-1〜ws-8分すべて同期済み
-- 次の着手: **ws-8(ロールバック手順+G4証拠整備)の着手はユーザーGoサイン待ち**(ws-7=2026-10-05完了: マージ3f9b16b+検証fix 5件+報告d8cfb3e・test-ci 1754・**staging4領域19試験すべて合格**〔可用性100%・復旧RTO実測・D-16境界・lag alert往復〕・ハーネズ側欠陥8系統を実施で発見修正・docker kill手動扱いのDocker仕様を発見。ws-6=2026-10-04完了: マージ89525ca+報告書マージ・test-ci 1720・性能5目標と総当たり3段階の証拠7点採取〔ws-6-report.md〕)。ws-4=2026-10-04完了: マージ89525ca・test-ci 1664・staging受け入れ10件全pass・**ws-6が依存する測定基盤が揃った**。wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・ws-5=マージ18a6d88+153ec50)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
+- 次の着手: **G4ゲート判定の承認依頼(ユーザー領域)**。ws-8=2026-10-05完了(マージ374ed33+supervisor検証fix・**staging実施のwalkthrough+ws-5証拠3点採取でG4 7項目の証拠が揃った**。証拠はdocs/testassets/results/README.mdの対応表に集約・担当・連絡経路の確定欄はG4判定時の人間入力待ち)。ws-9(FCM実機送信)は資材待ちのままG4判定とは独立(ws-7=2026-10-05完了: マージ3f9b16b+検証fix 5件+報告d8cfb3e・test-ci 1754・**staging4領域19試験すべて合格**〔可用性100%・復旧RTO実測・D-16境界・lag alert往復〕・ハーネズ側欠陥8系統を実施で発見修正・docker kill手動扱いのDocker仕様を発見。ws-6=2026-10-04完了: マージ89525ca+報告書マージ・test-ci 1720・性能5目標と総当たり3段階の証拠7点採取〔ws-6-report.md〕)。ws-4=2026-10-04完了: マージ89525ca・test-ci 1664・staging受け入れ10件全pass・**ws-6が依存する測定基盤が揃った**。wave2のws-3・ws-5は2026-10-03完了: ws-3=マージ0b1e3a6・ws-5=マージ18a6d88+153ec50)。G3繰越のFCM実機送信〔ws-9・資材待ち〕とM2繰越のD-16上限試験〔ws-7〕はM4内で回収。**外部SDK(FCM/Firebase Admin等)の設計・実装ではcontext7で一次確認**(2026-09-29ユーザー指示)。**LLM実行の高単価経路は原則なし**(2026-09-30ユーザー指示・フォールバックはHaiku 4.5。ただしherdr作業エージェントのSonnet起動は2026-10-03ユーザー指定)
 - M3実装への引き継ぎメモ(G2承認済みの解釈18件の要約・詳細は各design.md。ws-3/ws-7の通知・表示系には②の書式・区分が関連): ①07 §4のscore正規化は分母=4の解釈で実装(ws-5設計§5-5・/5が意図ならdocs修正が必要) ②Layer 5解釈5件(対象開始時刻=max(time_start)・area_name=geo中点の逆転ジオコーディング・nearby通知のno履歴検査とmatch_level='low'・time_summary書式=JST YYYY-MM-DD HH:MM・category_secondaryは種Intentの値 — ws-6設計§5-4〜8) ③ws-7解釈9件(Pool人数緩和=min<=4 AND max>=3の専用検索+Layer 3同一計算・種=起点で起点max>=3がトリガー・aggregateのHは集合単位再検証でペア行latch_scoreは不記入・D-06通知順序はメンバー重複の開いている集合の上位1近似・グループ候補へnearby適用なし・member_scores=seed_id+versionsのみ・Poolの同一Bucket=time_startの30分Bucket・Pool検索HNSW上限=50・area_name=全メンバーgeo_center平均点 — ws-7設計§5) ④ws-8解釈3件(p95条件はtimeout呼び出しをレイテンシ=6秒で母集団に入れp95位置≧timeoutで開放・エラー率判定の最小サンプル=2〔単発不発動の根拠節から〕・02#5〜#12はci環境で実施=staging再実行はM4-3 — ws-8設計§5-1/2/4・§6)
 - プロバイダ前提(2026-09-28解消): 3系統とも契約済み(ユーザー申告)。API鍵3本の実値をスーパーバイザーが確認済み(Anthropic・Gemini・TypeSafe)。マイグレーションは原則不要(idempotency UNIQUE索引・embedding vector(768)+HNSW・評価世代UNIQUEともM0で作成済み)
 
@@ -38,7 +38,7 @@
 | ws-5 | 告知・同意フロー+ログ許可リスト: オンボーディング同意のUI+API(同意記録・マッチング利用条件化)・設定画面からの再確認・構造化ログの許可リストSerializer(列挙型固定・raw_text/geo/constraints不許可) | M4-6 / 08 D-14・§2.4・§3 | — | 完了 |
 | ws-6 | load負荷試験+総当たり検出: 負荷ツール(Intent保存50rps・Event 100evt/sバースト)・レイテンシ注入(Parser p50 1s/p95 2.5s・Jev p50 2s/p95 5s=スタブで実運用模擬)・性能5目標測定(層別予算トレース分離)・総当たり検出(Active 1万→5万→10万・Vector件数K_v=50以内安定) | M4-4 / 10 §4.1〜4.2 | ws-1〜ws-3・ws-4(測定基盤前提) | 完了 |
 | ws-7 | 非機能試験(障害系): 可用性(99.5%・インスタンス強制停止・合成監視プローブ)・バックアップ復旧(embedding識別子から再エンベディング+cross-check)・縮退(D-16上限到達と80% alert・月次Clock操作・resume/Bucket遅延回収=**M2繰越**)・Queue障害(毒ペイロード・lag alert発報) | M4-4 / 10 §4.3〜4.5・§4.7 | ws-1・ws-3・ws-4(ws-6と環境共有のため直列) | 完了 |
-| ws-8 | ロールバック手順+G4証拠整備: ロールバック手順書(11 §7の運用手順化・デプロイ単位・DB拡張のみ原則)・G4 7項目の証拠一覧とdocs/testassets/results/への整理・担当・連絡経路の確定欄(人間領域の入力用) | M4-7 / 11 §5・§7 | ws-3〜ws-7 | 未着手 |
+| ws-8 | ロールバック手順+G4証拠整備: ロールバック手順書(11 §7の運用手順化・デプロイ単位・DB拡張のみ原則)・G4 7項目の証拠一覧とdocs/testassets/results/への整理・担当・連絡経路の確定欄(人間領域の入力用) | M4-7 / 11 §5・§7 | ws-3〜ws-7 | 完了 |
 | ws-9 | FCM実機送信確認(ミニ単位・**資材待ち**): Firebaseサーバー認証情報・VAPID鍵の設定経路・スタブ→実送信切替・実機での送信確認とFR-21表示規制の実送信分証拠 | G3繰越 / 08 §2.6 | ws-1・FCM資材(人間領域) | 未着手 |
 
 実行wave: (ws-1 ∥ ws-2) → (ws-3 ∥ ws-5) → ws-4 → ws-6 → ws-7 → ws-8(ws-9はFCM資材確定後に独立挿入)
@@ -61,6 +61,8 @@
 10. ws-7: **可用性試験のインスタンス強制停止はdocker kill(SIGKILL)でなくコンテナ内PID 1へのSIGTERM**(docker killはDocker仕様で手動停止扱い・restartポリシー対象外=15分非復帰を実測。SIGTERM死=自然死でポリシー自動再起動。report §7-4)
 11. ws-7: **可用性の試験窓は実効44分(main 44サンプル)で判定**(実施マシンの96分スリープによる短縮・安定→死亡→自動復帰→計画停止→事後安定の全観察点は網羅・2026-10-05ユーザー裁定で成立。report §7-5)
 12. ws-7: **n2のbackfill回収対象はactive Intentのみ**(期限切れ行は対象外・実装どおり。report §7-6)と**D-16上限時のpendingは本規模では非残存**(実測4→60秒で0・ws-6観察の残存は1万件級と再評価循環の重畳時。report §7-7)
+13. ws-8: **11 §7「新規Intent受付と通知を停止する」の現実的手段は機能フラグでなく環境操作で読み替えた**(settingsに停止系envなし。段1=worker停止〔通知・提案生成が止まりAPIは継続〕+段2=nginx受付遮断〔POST 503・GET 200を実測〕+段3=api全停止。walkthrough実測=ws8-rollback-walkthrough yaml。本番手段はPhase 0確定欄で確定)
+14. ws-8: **G4①のci分証拠は「test-ci常設緑(毎コミット再実行)+G1/G2時の証拠YAML+M2 ws-8報告書」の参照で充足と読む**(10 §3「ci(毎コミット)」の字義・staging再実行はしない。対応表results/README.md①)。付帯: test-ciにはload DB起動が前提(massload 4件・ws-6由来)
 
 - [ ] 27項目グリーン(02 §4マッピング・10 §3実行計画どおり)
 - [ ] 追加試験グリーン(D-10・D-23・プッシュ表示規制FR-21)
@@ -502,6 +504,15 @@
   - 運用の失敗と発見の正直な記録: **docker killは手動停止扱いでrestartポリシー対象外**(15分非復帰を実測・窓1回破棄→SIGTERM手法を実験確立)・監視バックグラウンド30分上限killのプロセスグループ道連れ(nohupプローブ消滅・窓2回破棄→setsid分離で解消)・pgrepパターン自己マッチによる誤検知・**検証チェーンのパイプ再犯2回**(tailで失敗明細を喪失・個別再実行で回収)・実施マシンの96分スリープでn1窓は実効44分(ユーザー裁定で成立扱い)
   - G4時確認事項10〜12へ追記・staging環境はdown済み・load環境もdown済み
 - 学習資産追従: ws-7分 0e53d82(第31章『壊して確かめる: 障害試験の考え方』新設=約1.2万字・合成監視と除外タグ・docker kill手動扱いとrestartポリシーの仕様・復旧手順試験・仮想時計とトークン寿命・警報器の置き場所とアームキー・境界試験の直接セット+既存3ファイル更新〔README順路46・00-environment〔1472/1754・NFRハーネス19件・nfrtools/override 2本・コマンド9ターゲット〕・第30章〕。Labとhow-toはstaging再構築が必要なため理由つき見合わせ。agent4がmake test 1472・lint判断台帳収束・レビュー16件仕分けを確認)
+
+- ws-8 / マージ374ed33+supervisor実施・検証fixコミット(設計 d231d60・計画 daafe6d・実装はagent3の3コミット〔302c76f・4e97f03・13f4c60〕)/ docs/plans/M4/ws-8-report.md(+証拠 docs/testassets/results/ws8-rollback-walkthrough-20261005-223756.yaml・ws5-consent-20261005-230127.yaml・ws5-logallowlist-20261005-230135.yaml・ws5-logsample-20261005-230226.yaml)/ 2026-10-05
+  - コード変更ゼロの文書整備単位。成果物=docs/plans/M4/ws-8-rollback.md(手順書・11 §7の4区分+データ事故の5章立て・3段階遮断表・遮断conf草案・デプロイ記録規律・確定欄(空欄)20個)+docs/testassets/results/README.md(G4 7項目×証拠対応表・ws-5分3点の採取手順)
+  - 設計段階の棚卸しで**G4⑤の証拠3点がws-5で未採取だったことを特定**し本単位スコープで回収(supervisor承認§5-3)
+  - supervisor独立検証: 完了条件7項目すべて合格(空欄20=--count-matches出現数・節別5/2/8/5・対応表7行・証拠パス実在・実在照合〔Makefile・compose・routes・logallow・nginx前提・alembic 8本〕・worktreeでlint緑+unit 1472再実行一致・差分=新規3ファイルのみ)。計画書の空欄照合コマンドrg -c(行数)と--count-matches(出現数)の違いをagent3が正しく補正記録
+  - マージ後main test-ci: 1回目=1750 passed+4 failed(massload・load DB停止中の接続失敗=環境前提でコード欠陥なし)→load DB起動後の再実行で**1754 passed・exit 0**(計画書§8手順0にload DB前提の記載漏れがあった点は報告書に記録)
+  - **staging実施(§8手順・supervisor)**: staging-reset+migrate 0008+geo復旧→明示build+force-recreate(デプロイ記録規律の初適用)→**1世代戻し**(cf9e612=直近コード変更コミット。旧版が新スキーマ0008のDBで起動し200・復帰200)→**停止3段階ドライラン**(段1=worker停止中GET 200・段2=nginx遮断でPOST 503/GET 200・解除後201・段3=api停止中504観測→復帰200)→**ws-5証拠3点**(同意フロー422 CONSENT_REQUIRED→201・許可リスト5 passed+登録表・実ログのraw_text非混入0件)→環境down
+  - 実施時発見4件を手順書・READMEへfix反映: (1)buildコマンドのサービス名(api worker→api1 api2 worker1 worker2) (2)**api再作成後はnginx再起動必須**(upstream IPキャッシュで502・ws-3知見の再実証) (3)段3の停止中応答は502でなく504 (4)README §3-1に/v1/auth/tokenでのアクセストークン交換が必須の注記
+  - G4時確認事項13・14を追記。**M4実装単位ws-1〜ws-8完了・G4判定待ち**(ws-9はFCM資材待ちで独立)
 
 ## G2判定資料(2026-09-30・承認済み)
 

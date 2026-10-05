@@ -79,7 +79,8 @@ docker compose -f compose.staging.yaml exec nginx nginx -s reload
 docker compose -f compose.staging.yaml stop api1 api2
 ```
 
-- 確認: nginx経由の全リクエストが502を返す。
+- 確認: nginx経由の全リクエストが502/504を返す(upstream不在。2026-10-05 walkthroughでは504を観測)。
+  復帰(start)はコンテナIPが不変のためnginx再起動なしで到達できる(再作成した場合は§6.2の再起動が必須)。
 
 ### 3.3 解除(逆順)
 
@@ -142,10 +143,15 @@ LLM API障害・D-16の回数上限(日次30,000回/月次600,000回)到達・Je
 4. 再ビルドと再作成:
 
 ```bash
-docker compose -f compose.staging.yaml build api worker
+docker compose -f compose.staging.yaml build api1 api2 worker1 worker2
 docker compose -f compose.staging.yaml up -d --force-recreate api1 api2 worker1 worker2
+docker compose -f compose.staging.yaml restart nginx
 ```
 
+- サービス名はapi1・api2・worker1・worker2(`api`・`worker`というサービスは存在しない)。
+- **apiを再作成(force-recreate)したらnginxの再起動が必須**である。nginxはupstream(api1・api2)の
+  IPを起動時に解決して持ち続けるため・再作成でIPが変わると旧IPへ流し続け502になる
+  (2026-10-05 walkthroughで再実証。stop/startはコンテナIPが不変のため再起動不要)。
 5. 確認: 全サービスhealthy・GET /v1/users/me 200。**旧版が新スキーマ(0008)のDBで起動し・動くこと**がこの手順の実証点である。
 6. 復帰: `git checkout main` して・手順4と同じ再ビルド・再作成を行い・手順5の確認を繰り返す。
 7. 記録: 戻し側・復帰側の両方で・healthyまでの時間と確認結果を§9の様式で残す。

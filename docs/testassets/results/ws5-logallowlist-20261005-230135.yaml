@@ -1,0 +1,26 @@
+# G4証拠⑤-2: 構造化ログ許可リスト登録表+機械検査結果(ws-8で採取・M4 ws-5の繰越し回収)
+# 対応: docs/testassets/results/README.md §3-2・G4 7項目対応表⑤・08 §2.4
+test_id: ws5-logallowlist
+executed_at: "2026-10-05T23:01:35+09:00"
+environment:
+  env: ci相当(main 374ed33のbackend/.venv・unit試験)
+input_conditions:
+  command: cd backend && uv run pytest tests/unit/test_log_allowlist.py -v
+result: pass
+observations:
+  machine_check: "5 passed in 0.01s"
+  tests:
+    - test_registered_log_types_have_no_forbidden_fields PASSED
+    - test_record_types_are_registered PASSED
+    - test_serialize_allowed_drops_forbidden_keys PASSED
+    - test_serialize_allowed_rejects_unregistered_logger PASSED
+    - test_push_title_body_are_template_constants_only PASSED
+registry:
+  source: backend/src/latch/core/logallow.py:21
+  allowed_structured_logs:
+    latch.llm.send: SendRecord
+    latch.push.send: PushSendRecord
+  forbidden_field_names: raw_text・geo等(08 §2.4の列挙型固定・FORBIDDEN_FIELD_NAMES)
+notes:
+  - 許可リスト一覧は問い合わせ開示資料の雛形(各レコードのフィールド一覧は
+    records.pyのPydanticモデル=モデルのフィールド固定が許可リストそのもの)

@@ -1,0 +1,19 @@
+# G4証拠⑤-3: ログサンプルのraw_text非混入照合(ws-8で採取・M4 ws-5の繰越し回収)
+# 対応: docs/testassets/results/README.md §3-3・G4 7項目対応表⑤・08 §2.4
+test_id: ws5-logsample
+executed_at: "2026-10-05T23:02:26+09:00"
+environment:
+  env: staging(latch-staging・worker1のdocker logs)
+input_conditions:
+  scope: "docker compose logs --no-color worker1 --tail 2000(実行中4行・22:36:51のworker起動以降)"
+  precondition: 23:01:27に同意済みユーザーがIntent作成(raw_textに「居酒屋」を含む)→workerが処理
+result: pass
+observations:
+  structured_log_count: "rg -c 'latch.llm.send|latch.push.send' → 1(1以上・期待どおり)"
+  forbidden_content_count: "rg -c '居酒屋|raw_text' → 0件(終了コード1=不一致・期待どおり)"
+  sample_line: '2026-10-05 14:01:27,548 INFO latch.llm.send {"occurred_at":"2026-10-05T14:01:27.548037Z","system":"embedding","destination":"stub","status":"ok","error_code":null,"intent_ids":["989e587f-50b7-4541-b08d-3088edc860fb"],"user_id":null}'
+  sample_fields: [occurred_at, system, destination, status, error_code, intent_ids, user_id]
+notes:
+  - サンプルは23:01:27作成Intentのembedding呼び出し分(14:01:27 UTC=23:01:27 JSTと一致)
+  - 機械突合(FORBIDDEN_FIELD_NAMES)はtest_log_allowlist.pyが担保(ws5-logallowlist)。
+    本採取は実運用ログでの観察補完

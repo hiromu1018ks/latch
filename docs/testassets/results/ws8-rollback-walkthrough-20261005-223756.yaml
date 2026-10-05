@@ -1,0 +1,45 @@
+# G4証拠⑦: ロールバック手順walkthrough(1世代戻し+停止手順ドライラン)
+# 対応: docs/testassets/results/README.md §4・docs/plans/M4/ws-8-rollback.md 付録B・G4 7項目対応表⑦
+test_id: ws8-rollback-walkthrough
+executed_at: "2026-10-05T22:37:56+09:00"
+environment:
+  env: staging(latch-staging・docker compose・ローカルビルド・127.0.0.1:18000)
+  base: main 374ed33(staging-reset→migrate 0008→geo 46+563行→明示build+force-recreate)
+  ci_pause: なし(walkthroughは性能測定を伴わないためSTATUS運用ルール6の対象外)
+input_conditions:
+  deploy_log: .staging/deploy-log.md(手順書§2規律の初適用・基点行2026-10-05T22:31:27+09:00 SHA=374ed33)
+  rollback_target: cf9e612(直近コード変更コミット。main 374ed33とbackend/コードは同一=ws-8が
+    docs単位のため。手順実証〔checkout→再ビルド→再作成→確認→復帰〕が本体)
+  alembic: downgrade不実行(全工程でupgradeのみ・手順書§6.1規律どおり)
+result: pass
+observations:
+  one_generation_rollback:
+    current_version_check: {at: "2026-10-05T22:33:50+09:00", users_me: "200"}
+    checkout_old: {at: "2026-10-05T22:34:03+09:00", sha: cf9e612, build: 全レイヤーCACHED(コード同一のため)}
+    recreate: {at: "2026-10-05T22:35:08+09:00", services: healthy, users_me_via_nginx: "502"}
+    nginx_ip_cache_finding: "api再作成後のnginx 502=upstream IPキャッシュ(ws-3報告書の既知事象の再実証)。
+      docker compose restart nginxで解決し200(22:35:35)。手順書§6.2へnginx再起動ステップの追記が必要"
+    old_version_check: {at: "2026-10-05T22:35:35+09:00", users_me: "200(旧版が新スキーマ0008のDBで起動・応答)"}
+    restore_main: {at: "2026-10-05T22:35:43+09:00", build_and_recreate: 実施, nginx_restart: 適用, users_me: "200"}
+    restore_check: {at: "2026-10-05T22:35:59+09:00", sha: 374ed33, users_me: "200"}
+  stop_dry_run:
+    stage1_worker_stop: {at: "2026-10-05T22:36:45+09:00", workers: exited, users_me: "200(API継続)",
+      workers_restarted: "2026-10-05T22:36:47+09:00"}
+    stage2_nginx_block:
+      at: "2026-10-05T22:37:03〜22:37:29+09:00"
+      nginx_t: "warning『conflicting server name "" on 0.0.0.0:80, ignored』付きでtest successful(exit 0)=手順書予測どおり"
+      POST_intents: "503(遮断)"
+      POST_intents_parse: "503(遮断)"
+      GET_users_me: "200(生存)"
+      GET_intents_list: "200(生存=Review Focus 2の実証点)"
+      release: "00-drop.conf削除+reload後 POST_intents=201(22:37:29・遮断解除)"
+    stage3_api_stop: {at: "2026-10-05T22:37:38+09:00", users_me: "504(手順書記載の502でなくgateway
+      timeout・upstream不在を示す5xxである点は同じ。文言修正候補)", recovery: "start後200(22:37:56・
+      stop/startはコンテナIP不変のためnginx再起動不要を実証)"}
+findings:
+  - "手順書§6.2のbuildコマンド『build api worker』はサービス名が実在せず『build api1 api2 worker1
+    worker2』が正(no such service: apiで失敗)"
+  - "api再作成(force-recreate)後はnginx再起動が必須(upstream IPキャッシュで502)。§6.2・§3.3へ追記候補"
+  - "段3の停止中応答は502でなく504を観測(upstream接続不能の表現違い)。§3.2の確認文言修正候補"
+  - "README §3-1の認証はIdP JWTをそのままBearerに使う記述だが・実経路はPOST /v1/auth/tokenでの
+    アクセストークン交換が必要(conftestと同一の実績経路)"

@@ -28,10 +28,12 @@ ws-5報告書「スーパーバイザー検証時の手順4」の3点を・そ�
 未同意ユーザーのIntent作成が422で拒まれ・同意POST後にactiveで受理される順序を観察する。前提: staging環境がup済み(`make staging-reset` 直後でよい)・.staging/keys/に鍵ペアがある。
 
 ```bash
-# 1) 未同意ユーザーのJWTを発行する(標準出力にJWTが出る・それをTOKENへ)
-cd backend && uv run python -m latch.auth issue-idp-token --provider google --subject ws8-consent-u1 --private-key ../.staging/keys/idp_test_private.pem
-cd ..
-#    ※表示されたJWT文字列をコピーして TOKEN='<JWT>' と設定する(単独実行してから使う)
+# 1) 未同意ユーザーのJWTを発行し・アクセストークンへ交換する(交換を経てTOKENへ)
+#    ※保護エンドポイントのBearerはアクセストークン(HS256)。IdP JWT(RS256)は直接使えないため
+#    POST /v1/auth/tokenでの交換が必須(staging_tests/conftest.pyのissue_tokenと同一経路)。
+#    交換例: idp JWT発行後 curl -s -X POST http://127.0.0.1:18000/v1/auth/token \
+#      -H 'Content-Type: application/json' \
+#      -d '{"provider":"google","idp_token":"<発行したJWT>"}' → access_tokenをTOKENへ
 
 # 2) usersの作成(未同意のまま。display_name+birth_date必須)
 curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"display_name":"ws8-c1","birth_date":"1990-06-15"}' http://127.0.0.1:18000/v1/users
