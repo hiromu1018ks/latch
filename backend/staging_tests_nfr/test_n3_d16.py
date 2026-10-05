@@ -2,8 +2,9 @@
 
 alert境界(INCR戻り値==しきい値で1回)・上限到達(INCR>上限でdeny・skip・
 提案ゼロ)・0時JSTリセット復帰・月次80%と日次の独立性・月初リセット。
-実EventはEmbedding済みペアの一方へのpublish updated(§2.1読み替え5)・
-各updatedの前にclock advance 1900秒(reevalガード30分窓の脱出)。
+実EventはEmbedding済みペアの一方へのAPI更新(PATCH全置換で真正なupdated
+version+1を発行・§2.1読み替え5の実施形・2026-10-05 supervisor修正)・
+各更新の前にclock advance 1900秒(reevalガード30分窓の脱出)。
 母体は試験ごとのfreshペア(§2.1読み替え11): 月跨ぎClockジャンプで既存
 Intentはsweeperにexpired化されるため・キャッシュペアではupdatedが候補を
 作らずJevが走らない。リセット後の試験(3_30/3_50)はfreshペア作成分の
@@ -26,9 +27,9 @@ from helpers_nfr import (
 
 from conftest import (
     WORKER_CONTAINERS,
+    auth_header,
     docker_logs,
     get_clock,
-    publish_event,
     record_item,
 )
 from latch.core.clock import JST
@@ -55,16 +56,35 @@ def _next_month_start_jst_0005():
 
 
 async def _publish_updated(api, db, pair) -> int:
-    """ペアの一方へ次のversionのupdatedを投下し・収束を待つ(戻り値=投下version)。
+    """ペアの一方をAPIで実際に更新し・真正なupdated Event(version+1)を起こす。
 
-    直近評価から30分以上経過させるため・投下前にclock advance 1900秒
-    (reevalガード SET NX EX 1800の脱出)。
+    実装突合(stage1._process_once): updated種はversion==intents.versionのみ
+    処理し・version>currentはRetryable→5回→quarantined。よってCLI publishで
+    version+1を直投げしても隔離されてJevが走らないため・正規経路(PATCH全置換
+    ・outbox発行)を使う(計画書テストコードの欠陥修正・2026-10-05 supervisor。
+    §2.1読み替え5の「updated投下」の実施形をPATCHへ変更)。budget.maxを+100
+    して評価世代を変える(意味変化は予算の余裕拡大のみ・Layer 1の予算判定に
+    影響しない)。直近評価から30分以上経過させるため・PATCH前にclock advance
+    1900秒(reevalガード SET NX EX 1800の脱出)。
     """
     get_clock().advance(timedelta(seconds=1900))
-    v = await current_version(db, pair["intent_a"]) + 1
-    publish_event("updated", pair["intent_a"], version=v)
+    headers = auth_header(pair["subject_a"])
+    payload = {
+        **pair["payload_a"],
+        "structured_intent": {
+            **pair["payload_a"]["structured_intent"],
+            "budget": {
+                **pair["payload_a"]["structured_intent"]["budget"],
+                "max": pair["payload_a"]["structured_intent"]["budget"]["max"] + 100,
+            },
+        },
+    }
+    r = await api.patch(
+        f"/v1/intents/{pair['intent_a']}", headers=headers, json=payload
+    )
+    assert r.status_code == 200, r.text
     await wait_pipeline_settled(db)
-    return v
+    return await current_version(db, pair["intent_a"])
 
 
 def _worker_log_matches(word: str) -> int:

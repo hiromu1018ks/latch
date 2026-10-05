@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -33,10 +34,18 @@ async def wait_until(
     interval_s: float = 5.0,
     what: str = "condition",
 ) -> None:
-    """async条件が成立するまでinterval_s間隔でポーリングする(上限で失敗)。"""
+    """条件が成立するまでinterval_s間隔でポーリングする(上限で失敗)。
+
+    condは「awaitableを返す呼び出し可能」と「boolを返す同期呼び出し」の
+    両方を受け付ける(計画書テストコードの欠陥修正・2026-10-05 supervisor。
+    旧実装はawait cond()専用で・同期ラムダを渡すとTypeErrorになっていた)。
+    """
     deadline = time.monotonic() + timeout_s
     while True:
-        if await cond():
+        result = cond()
+        if inspect.isawaitable(result):
+            result = await result
+        if result:
             return
         if time.monotonic() >= deadline:
             raise AssertionError(f"タイムアウト({timeout_s}s): {what}")
@@ -108,8 +117,11 @@ async def _evaluated_count(db) -> int:  # noqa: ANN001
 
 
 async def wait_events_done(db, *, timeout_s: float = 240) -> None:  # noqa: ANN001
+    async def _done() -> bool:
+        return await _pending_events(db) == 0
+
     await wait_until(
-        lambda: _pending_events(db) == 0,
+        _done,
         timeout_s=timeout_s,
         interval_s=5,
         what="Event処理完了(pending=0・debounce 10秒+worker処理込み)",
@@ -247,9 +259,8 @@ async def create_pair_nfr(
     subject_a, subject_b = f"ws7-{prefix}a", f"ws7-{prefix}b"
     await create_user_nfr(api, subject_a)
     await create_user_nfr(api, subject_b)
-    intent_a = await create_intent_nfr(
-        api, subject_a, intent_payload(seq=seq, now=now, start_hours=start_hours)
-    )
+    payload_a = intent_payload(seq=seq, now=now, start_hours=start_hours)
+    intent_a = await create_intent_nfr(api, subject_a, payload_a)
     intent_b = await create_intent_nfr(
         api, subject_b, intent_payload(seq=seq + 1, now=now, start_hours=start_hours)
     )
@@ -259,6 +270,7 @@ async def create_pair_nfr(
         "subject_b": subject_b,
         "intent_a": intent_a,
         "intent_b": intent_b,
+        "payload_a": payload_a,
         "version_a": 1,
         "version_b": 1,
     }
