@@ -61,19 +61,28 @@ async def test_n2_20_cross_check_active_count(db, db_recovery_rw):
 
 async def test_n2_30_reembedding_via_identifier_null_and_backfill(db_recovery_rw):
     """識別子記録(embedding_model)で再エンベディング対象を特定→NULL化→
-    backfill回収(01 §18・design §2.2案A)。"""
+    backfill回収(01 §18・design §2.2案A)。
+
+    NULL化・回収の対象はactive Intentに限定する(supervisor検証fix 2026-10-05):
+    BackfillRunnerの対象抽出はstatus='active'かつembedding IS NULLのため・
+    期限切れ(expired)行をNULL化しても回収されず「全件回収」の待ちが成立
+    しない(backfill.py _SELECT_BACKFILL_TARGETSの実装どおり・期限切れIntent
+    の再エンベディングは復旧要件の対象外)。"""
     model_before = await db_recovery_rw.fetchval(
         "SELECT DISTINCT embedding_model FROM intents "
-        "WHERE embedding IS NOT NULL AND embedding_model IS NOT NULL LIMIT 1"
+        "WHERE status='active' AND embedding IS NOT NULL "
+        "AND embedding_model IS NOT NULL LIMIT 1"
     )
     assert model_before, "embedding済み行がありません(staging-restoreを確認)"
     targets = await db_recovery_rw.fetchval(
         "SELECT count(*) FROM intents "
-        "WHERE embedding IS NOT NULL AND embedding_model IS NOT NULL"
+        "WHERE status='active' AND embedding IS NOT NULL "
+        "AND embedding_model IS NOT NULL"
     )
     result = await db_recovery_rw.execute(
         "UPDATE intents SET embedding=NULL, embedding_model=NULL "
-        "WHERE embedding IS NOT NULL AND embedding_model IS NOT NULL"
+        "WHERE status='active' AND embedding IS NOT NULL "
+        "AND embedding_model IS NOT NULL"
     )
     assert f"UPDATE {targets}" in result, (targets, result)
     assert targets > 0
@@ -81,7 +90,8 @@ async def test_n2_30_reembedding_via_identifier_null_and_backfill(db_recovery_rw
     async def recovered() -> bool:
         n = await db_recovery_rw.fetchval(
             "SELECT count(*) FROM intents "
-            "WHERE embedding IS NOT NULL AND embedding_model IS NOT NULL"
+            "WHERE status='active' AND embedding IS NOT NULL "
+            "AND embedding_model IS NOT NULL"
         )
         return int(n) == targets
 
@@ -90,7 +100,8 @@ async def test_n2_30_reembedding_via_identifier_null_and_backfill(db_recovery_rw
         timeout_s=600,
         interval_s=10,
         what=(
-            f"backfillによるembedding回収({targets}件・recovery overrideでinterval 5秒)"
+            f"backfillによるembedding回収(active {targets}件・"
+            "recovery overrideでinterval 5秒)"
         ),
     )
     record_item(
