@@ -33,7 +33,7 @@ staging環境での実施(§8の手順・n1の60分試験窓を含む)は本報�
 4. **resume再評価とcatch-up回収**: ハーネス `test_n4_reeval.py` 2件を作成・収集確認済み。staging実行は検証待ち。
 5. **バックアップ復旧**: Makefile手順5本(staging-dump・db2-up・restore・db2-switch・db2-down)+ハーネス `test_n2_prep.py`(1件)・`test_n2_backup.py`(4件)を作成・収集確認済み。実施は検証待ち。
 6. **Queue障害**: ハーネス `test_n5_queue.py` 6件を作成・収集確認済み。実施は検証待ち。
-7. **unitグリーン・ハーネスtestpaths外・証拠YAML**: `make test` 1472 passed(実数。基準との差分は「4. 逸脱の記録」)。`pytest -m "not integration" --co -q` で1472/1754 collected(1754=1472+deselected 282)・`make test`の収集にstaging_tests_nfrは含まれない。証拠YAML(`ws7-nfr-result-*.yaml`・`ws7-probe-*.yaml`)は§8実施時に生成される。
+7. **unitグリーン・ハーネスtestpaths外・証拠YAML**: `make test` 1472 passed(実数。基準との差分は「4. 逸脱の記録」)。`pytest -m "not integration" --co -q` で1472/1754 collected(1754=1472+deselected 282)・`make test`の収集にstaging_tests_nfrは含まれない。**test-ciは新規unit 34件の分だけ実数が動く(1720→1754の期待)** — 本報告書初稿の「test-ci 変更なし・実行不要」は誤り(supervisor検証時に訂正・unit追加はtest-ciの収集対象)。証拠YAML(`ws7-nfr-result-*.yaml`・`ws7-probe-*.yaml`)は§8実施時に生成される。
 
 ## 3. 4領域の実施結果
 
@@ -85,7 +85,7 @@ staging環境での実施(§8の手順・n1の60分試験窓を含む)は本報�
 
 ## 6. スーパーバイザー検証待ちの記録
 
-- **test-ci: 変更なし(実行不要)。** 本単位はintegration試験を追加していないため、test-ciの実数は既存1720件のまま動かない。ci-dbへの書込み経路も追加していない(ハーネスの接続先はstaging宛15432/16543/16379のみ・UPDATEはn4とn2のembedding NULL化の2箇所)。
+- **test-ci: supervisor検証時に実施(期待値1754=1720+新規unit 34)。** 本単位はintegration試験を追加していないが・test-ciはunit試験も収集するため新規unit 34件の分だけ実数が動く(本節の初稿記載「変更なし・実行不要」はsupervisor検証時に誤りと判定して訂正)。ci-dbへの書込み経路は追加していない(ハーネスの接続先はstaging宛15432/16543/16379のみ・UPDATEはn4とn2のembedding NULL化の2箇所)。
 - staging環境の実施(起動・ci一時停止・試験実行・ci復帰)は§8の手順でスーパーバイザーが行う。
 
 ## 7. G4時確認事項の付記依頼(supervisor側で記録)
