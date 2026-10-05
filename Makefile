@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs loadusers loadperf loadbf loadmass load-stub-flat load-migrate load-geo-import
+.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs loadusers loadperf loadbf loadmass load-stub-flat load-migrate load-geo-import staging-nfr-reset staging-nfr-test staging-probe staging-d16 staging-dump staging-db2-up staging-restore staging-db2-switch staging-db2-down
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -63,6 +63,10 @@ LOAD_DB_URL = postgresql+asyncpg://latch:latch@127.0.0.1:25432/latch
 LOADGEN_DSN = postgresql://latch:latch@127.0.0.1:25432/latch
 DASHBOARD_COMPOSE = docker compose -f compose.dashboard.yaml
 STAGING_DB_URL = postgresql+asyncpg://latch:latch@127.0.0.1:15432/latch
+STAGING_NFR_COMPOSE = docker compose -f compose.staging.yaml -f compose.staging.nfr.yaml
+RECOVERY_COMPOSE = docker compose -f compose.staging.yaml -f compose.staging.nfr.yaml -f compose.staging.recovery.yaml
+STAGING_BACKUP_DIR = .staging/backup
+NFR_FILES = staging_tests_nfr/test_n5_queue.py staging_tests_nfr/test_n4_reeval.py staging_tests_nfr/test_n3_d16.py staging_tests_nfr/test_n2_prep.py staging_tests_nfr/test_n2_backup.py staging_tests_nfr/test_n1_availability.py
 
 SUBJECT ?= u1
 
@@ -140,6 +144,36 @@ staging-reset: ## staging環境をフルリセット(down -v→up→migrate→ge
 	$(STAGING_COMPOSE) up -d --wait
 	$(MAKE) staging-migrate
 	$(MAKE) staging-geo-import
+
+staging-nfr-reset: ## NFR試験用フルリセット(staging-reset+nfr overrideでapiを再作成=lag alert有効。ws-7手順の前提)
+	$(MAKE) staging-reset
+	$(STAGING_NFR_COMPOSE) up -d --force-recreate --wait api1 api2
+
+staging-nfr-test: ## ws-7 NFRハーネス(順序固定 n5→n4→n3→n2→n1。部分実行は make staging-nfr-test NFR_FILES="staging_tests_nfr/test_n1_availability.py")
+	cd backend && uv run pytest $(NFR_FILES) --import-mode=importlib
+
+staging-probe: ## 合成監視プローブ(60分・main1分+dense10秒。バックグラウンドは手順§8のnohup)
+	cd backend && uv run python -m latch.loadgen --base-url http://127.0.0.1:18000 --keys ../.staging/keys probe $(ARGS)
+
+staging-d16: ## staging RedisのD-16カウンタ操作(make staging-d16 ARGS="d16 set daily 23999")
+	cd backend && LATCH_REDIS_URL=redis://127.0.0.1:16379/0 uv run latch-nfrtools $(ARGS)
+
+staging-dump: ## staging DBのpg_dumpを.staging/backup/へ(定期バックアップ1サイクルの読み替え・10 §4.4)
+	mkdir -p $(STAGING_BACKUP_DIR)
+	docker exec latch-staging-db-1 pg_dump -U latch -Fc latch > $(STAGING_BACKUP_DIR)/latch-staging.dump
+
+staging-db2-up: ## 復旧試験用db2を起動(16543・新規ボリュームlatch-staging-db2)
+	$(RECOVERY_COMPOSE) --profile recovery up -d --wait db2
+
+staging-restore: ## db2へpg_restore(dumpファイルをdocker cpして復元)
+	docker cp $(STAGING_BACKUP_DIR)/latch-staging.dump latch-staging-db2-1:/tmp/restore.dump
+	docker exec latch-staging-db2-1 pg_restore -U latch -d latch --no-owner /tmp/restore.dump
+
+staging-db2-switch: ## api/workerをdb2向きへ再作成(切替。nginx/db/redis/pubsubは触らない)
+	$(RECOVERY_COMPOSE) up -d --force-recreate --wait api1 api2 worker1 worker2
+
+staging-db2-down: ## db2を停止・削除(ボリュームlatch-staging-db2は残す=証拠確保)
+	$(RECOVERY_COMPOSE) --profile recovery rm -sf db2
 
 staging-test: ## staging機能試験ハーネス全実行(M4 ws-3・staging-reset直後のフル実行が前提・証拠YAMLをdocs/testassets/results/へ出力)
 	cd backend && uv run pytest staging_tests
