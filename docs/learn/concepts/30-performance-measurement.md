@@ -22,8 +22,8 @@
   `docker/prometheus/prometheus.yml`
 - 設計の根拠: `docs/plans/M4/ws-6-design.md`(選択肢と承認記録)・
   `ws-6-report.md`(実行結果と読み替え・運用の記録)。仕様の元は
-  `docs/10-nonfunctional-requirements.md`第4節(性能5目標・総当たり検出)と
-  `docs/12-milestones.md`第7節(層別予算)です。実測値は
+  `docs/10-test-env-nfr.md`第4節(性能5目標・総当たり検出)と
+  `docs/12-development-roadmap.md`第7節(層別予算)です。実測値は
   `docs/testassets/results/ws6-*.yaml`(証拠YAML 7件)です
 - 次に読むもの: この章に対応するLabはありません。負荷試験の環境(load環境)
   は起動に専有時間がかかり・試験中はci環境を止める運用を伴うため、「手順を
@@ -59,7 +59,7 @@
 
 ## 30.2 性能の約束は絶対値で書かれている
 
-docs 10-nonfunctional-requirements.mdの第4.1節は、このシステムの速さについて
+docs 10(test-env-nfr)の第4.1節は、このシステムの速さについて
 5つの約束を定めています。読み上げますと:
 
 | 約束 | 目標 |
@@ -631,9 +631,11 @@ Jev回数の日次上限30000の番人)が**実際に発動**し、上限に達�
 6. perf試験が4回かかったことについて、「各回の失敗が暴いた歪み要因」を
    それぞれ1行で並べ、その記録が測定の信頼性にどう効いているか、
    自分のノート(`my-notes.md`)に書いてみてください
-7. `python -m latch.loadgen --help` を一度実行してみてください。4つの
-   サブコマンド(users・perf・massload・bruteforce)がこの章のどの節に
-   対応するか、対応表を自分で作ってみてください
+7. `python -m latch.loadgen --help` を一度実行してみてください。5つの
+   サブコマンド(users・perf・massload・bruteforce・probe)のうち前の4つが
+   この章のどの節に対応するか、対応表を自分で作ってみてください
+   (probeは障害系の試験で使うため、対応する節はこの章にありません。
+   第31章で読みます)
 
 (解答例は用意していません。自分の言葉で答えられたら合格です。
 詰まった節が、読み返すべき節です)

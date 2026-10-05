@@ -199,19 +199,24 @@ Pythonの世界で最も使われているテスト実行ツールが **pytest(�
 テストは「入力を与えて、結果がこうなるはず」という Pythonの関数として書かれます。
 期待どおりなら **緑(合格)**、違えば **赤(不合格)** です。LATCHのテストの規模と速度はこれです。
 
-- unit テスト(部品単体の試験): backend **1438件を約8〜10秒**(`make test`)。フロントエンドも
+- unit テスト(部品単体の試験): backend **1472件を約8〜10秒**(`make test`)。フロントエンドも
   **233件を約1秒**(`frontend/` で `npm test`)。どちらも外部環境を一切使いません
 - integration テスト(実DB・実Redis・実Pub/Sub・実サーバーでの組み合わせ試験): 282件を含め計
-  **1720件**(2026-10-04のM4 ws-6マージ検証で全件グリーンを確認。ci環境の起動を
+  **1754件**(2026-10-05のM4 ws-7マージ検証で全件グリーンを確認。ci環境の起動を
   待つ分、実行には数分かかります)
 
-この2つに加えて、M4から3つ目の層があります。**staging環境**(本番と同じ構成を小さくした
-常設環境・第25章)の上で、仕様書の機能試験27項目を一気通貫に回す**機能試験ハーネス**
-(`backend/staging_tests/`・34試験・約10分)です。unit・integrationが「部品と組み合わせは
-正しい」を積み上げるのに対し、こちらは「約束全体が守られている」を、本物に近い世界で
-動かして証明します(第24章・第28章)。`make staging-test` で実行します。
-M4の計測の単位からは、同じstagingの上で計測(Observability)の受け入れを証明する
-もう1本のハーネス(`backend/staging_tests_obs/`・10件)も増えています(第29章・Lab 15)。
+この2つに加えて、M4からstaging環境(本番と同じ構成を小さくした常設環境・第25章)の
+上で動く試験ハーネスが3本あります。unit・integrationが「部品と組み合わせは正しい」を
+積み上げるのに対し、こちらは「約束全体が守られている」を、本物に近い世界で動かして
+証明します。
+
+- **機能試験ハーネス**(`backend/staging_tests/`・34試験・約10分): 仕様書の機能試験
+  27項目を一気通貫に回します(第24章・第28章)。`make staging-test` で実行します
+- **計測ハーネス**(`backend/staging_tests_obs/`・10件・約1分): 計測(Observability)の
+  受け入れを証明します(第29章・Lab 15)。`make staging-obs-test` で実行します
+- **障害系非機能試験ハーネス**(`backend/staging_tests_nfr/`・19件): 速さのあとの
+  壊れたときの約束——可用性・バックアップ復旧・縮退・Queue障害の4領域——を
+  壊して観察する試験です(第31章)。`make staging-nfr-test` で実行します
 
 数秒で全部回せる意味は小さくありません。コードを1行変えるたびに確かめられるので、
 「壊して試す」学習法(Lab 2)が気軽にできます。この速さ自体が、このプロジェクトの
@@ -266,11 +271,14 @@ latch/
 │   │   ├── geo/           地名⇔座標の変換(ジオコーディング)
 │   │   ├── events/        知らせの運搬(EventBusポート・Pub/Sub実装・回収リレー)(第9章)
 │   │   ├── obs/           計測(メトリクスの単一真実・HTTP計測middleware・/v1/sessions・60秒のcollector・日次集計KpiJob)(第29章)
-│   │   ├── loadgen/       負荷注入器(時刻駆動スケジューラ・母集合投入・証拠採取)(第30章)
+│   │   ├── loadgen/       負荷注入器(時刻駆動スケジューラ・母集合投入・証拠採取)と合成監視プローブ(第30章・第31章)
+│   │   ├── nfrtools/      staging非機能試験の運用CLI(D-16カウンタの直接操作)(第31章)
 │   │   └── worker/        裏方プロセス(debounce・第1段処理・Embedding・マッチングとコスト保護・提案・グループ・期限切れバッチとリセットジョブ・30日定期削除・プッシュ送信・計測のcollectorとKpiJobの配線)(第9章〜第15章・第18章〜第19章・第22章・第29章)
 │   └── tests/             テスト(unit/=部品単体, integration/=組み合わせ)
 ├── compose.yaml           5サービス(db/redis/pubsub/api/worker)の定義
 ├── compose.staging.yaml   staging環境の定義(第25章・第28章)
+├── compose.staging.nfr.yaml      staging障害試験用のoverride(滞留警報を有効化)(第31章)
+├── compose.staging.recovery.yaml 復旧試験用のoverride(復元先DBとapi/workerの向き先)(第31章)
 ├── compose.load.yaml      load環境(負荷試験用・stagingと同構成を完全分離)の定義(第30章)
 ├── compose.dashboard.yaml ダッシュボード環境(prometheus+grafana)の定義(第29章)
 ├── Makefile               よく使うコマンドのショートカット集
@@ -308,6 +316,11 @@ latch/
 | `make dashboard-up` / `make dashboard-down` | ダッシュボード環境(prometheus・grafana。`127.0.0.1:19090` と `127.0.0.1:13000`)の起動と停止。stagingの数を取りに来る別プロジェクトで、ci環境には干渉しない(第29章・Lab 15) |
 | `make dashboard-ps` / `make dashboard-logs` | ダッシュボード環境の状態一覧 / ログの流し見(直近30行) |
 | `make staging-clock ARGS="show"` | staging環境の共有時計を操作する(ほかに `set <ISO>`・`advance <秒>`)。動いている環境の時計の針を、プロセスの再起動なしに動かす道具(第25章・Lab 11) |
+| `make staging-nfr-reset` | 障害系非機能試験用のフルリセット(staging-resetのあと、滞留警報を有効にするoverrideでapiを2台とも作り直す)。NFRハーネス実行の前提(第31章) |
+| `make staging-nfr-test` | staging環境の障害系非機能試験ハーネス19件を固定順(n5→n4→n3→n2→n1)で一気通貫実行(n5〜n3は約16分・n2は約10分・n1はプローブ窓込みで60分超の時間試験)。証拠YAMLを `docs/testassets/results/` へ出力する(第31章) |
+| `make staging-probe` | 合成監視プローブ(合否判定の1分間隔+観察用の10秒間隔)を60分間実行して成功率を測る。計画停止の除外は `.staging/probe-outage.marker` ファイルの作成・削除でタグ付けする(第31章) |
+| `make staging-d16 ARGS="d16 set daily 23999"` | staging RedisのD-16カウンタ(Jevの費用上限)を直接操作する(set・get・delete/日次・月次)。境界試験で「上限まで」を実際に打たずに置く道具(第31章) |
+| `make staging-dump` / `staging-db2-up` / `staging-restore` / `staging-db2-switch` / `staging-db2-down` | バックアップ復旧試験の手順5本(staging DBのpg_dump取得→復元先の第2DB起動→復元→api/workerの向き先切替→第2DBの停止)。通常のstaging定義は触らず、overrideで差し替える(第31章) |
 | `make staging-down` / `make load-up` / `make load-down` | staging環境の停止 / load環境(負荷試験用・stagingと同構成を完全分離)の起動と停止 |
 | `make loadusers ARGS="--count 1000"` | load環境へ負荷用ユーザー(users+consent)をAPI経由で作成(第30章) |
 | `make loadperf` | 性能試験区間(parse 50rps→保存50rps→バースト100件→収束待ち→証拠YAML)をload環境へ注入。実行はci一時停止(`make down`→試験→`make up`で復帰)の手順を伴う(第30章) |
