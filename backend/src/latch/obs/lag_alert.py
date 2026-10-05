@@ -41,7 +41,10 @@ def structured_log_alert(event: dict) -> None:
 
 
 def structured_log_resolve(event: dict) -> None:
-    logger.info("queue lag resolve %s", json.dumps(event, ensure_ascii=False))
+    # warningレベル: API側の既定ログ構成ではlatch系INFOは出力されないため・
+    # alert/resolveの往復をdockerログで観測できるように同じ警告レベルへ
+    # (supervisor検証fix 2026-10-05)
+    logger.warning("queue lag resolve %s", json.dumps(event, ensure_ascii=False))
 
 
 class QueueLagAlert:

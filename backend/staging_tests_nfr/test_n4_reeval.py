@@ -100,10 +100,13 @@ async def test_n4_10_resume_reeval_without_embedding(api, db):
     assert row_after["updated_at"] == row_after_resume["updated_at"]
     # 再評価(embedding_completedの再発行=resume由来の正規経路)
     assert completed_after > completed_before, "embedding_completedが再発行されていない"
-    # 提案が発生し得る状態への復帰(候補の再評価完遂)
+    # 提案が発生し得る状態への復帰(候補の再評価完遂)。match_candidatesは
+    # intent_a_id<intent_b_idへ正規化されるため両向きで照会する
+    # (supervisor検証fix 2026-10-05・M2 ws-5と同系統)
     cand = await db.fetchrow(
         "SELECT status, jev_result FROM match_candidates "
-        "WHERE intent_a_id=$1 AND intent_b_id=$2 "
+        "WHERE ((intent_a_id=$1 AND intent_b_id=$2) "
+        "    OR (intent_a_id=$2 AND intent_b_id=$1)) "
         "AND cheap_judge_score IS NOT NULL",
         uuid.UUID(intent_a),
         uuid.UUID(pair["intent_b"]),

@@ -195,6 +195,10 @@ async def test_n5_50_lag_alert_and_resolve(api, db):
     """
     await ensure_env_prerequisites(db)
     clock = get_clock()
+    # dockerログは累積するため・本試験の発報分は基準値との差分で数える
+    # (supervisor検証fix 2026-10-05・部分再実行でも成立する)
+    base_alert = _api_log_matches("queue lag alert")
+    base_resolve = _api_log_matches("queue lag resolve")
     await create_user_nfr(api, "ws7-n5lag")  # users作成はworker停止前に
     workers_stop()
     try:
@@ -209,7 +213,7 @@ async def test_n5_50_lag_alert_and_resolve(api, db):
         # 年齢条件(>=300秒)を仮想Clockで成立させる(tickは実時間・発報を待つ)
         clock.advance(timedelta(seconds=310))
         await wait_until(
-            lambda: _api_log_matches("queue lag alert") == 1,
+            lambda: _api_log_matches("queue lag alert") - base_alert == 1,
             timeout_s=120,
             interval_s=10,
             what="queue lag alertの発報(api両コンテナ合算で1回)",
@@ -218,13 +222,13 @@ async def test_n5_50_lag_alert_and_resolve(api, db):
         workers_start()
     await wait_events_done(db, timeout_s=300)  # 消化(年齢条件の解除)
     await wait_until(
-        lambda: _api_log_matches("queue lag resolve") >= 1,
+        lambda: _api_log_matches("queue lag resolve") - base_resolve >= 1,
         timeout_s=120,
         interval_s=10,
         what="queue lag resolveの記録",
     )
-    n_alert = _api_log_matches("queue lag alert")
-    n_resolve = _api_log_matches("queue lag resolve")
+    n_alert = _api_log_matches("queue lag alert") - base_alert
+    n_resolve = _api_log_matches("queue lag resolve") - base_resolve
     assert n_alert == 1, f"lag alertの発報は1回: {n_alert}"
     record_item(
         item_id="ws7-n5-50",
