@@ -133,6 +133,16 @@ async def db_recovery_rw():
         await conn.close()
 
 
+@pytest.fixture
+async def redis_nfr():
+    """n3用: staging Redis(async・D-16カウンタ操作とguardキー観察)。"""
+    import redis.asyncio as aioredis
+
+    r = aioredis.Redis.from_url(REDIS_URL, decode_responses=True)
+    yield r
+    await r.aclose()
+
+
 # --- 共通ヘルパ ---
 
 _clock = None
