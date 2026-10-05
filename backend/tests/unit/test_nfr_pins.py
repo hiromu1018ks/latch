@@ -18,3 +18,9 @@ def test_main_lifespan_registers_lag_alert_when_enabled():
     assert "lag_alert_stop.set()" in text
     assert "lag_alert_task.cancel()" in text
     assert "lag_alert_redis.aclose()" in text
+
+
+def test_pyproject_has_nfrtools_entry():
+    text = (ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
+    assert "[project.scripts]" in text
+    assert 'latch-nfrtools = "latch.nfrtools.__main__:main"' in text
