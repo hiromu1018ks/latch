@@ -163,14 +163,15 @@ def get_clock() -> ControlledClock:
 def issue_token(subject: str) -> str:
     """staging鍵でIdP JWTを発行し/v1/auth/tokenでaccess_tokenへ交換する。
 
-    ws-3ハーネスと同一経路。仮想Clock前進対策の30日IdPトークンも同一。
+    ws-3ハーネスと同一経路。IdPトークンは365日(n3の月跨ぎClock操作で仮想
+    時計が実時間+30日を追い越すため・supervisor検証fix 2026-10-05)。
     """
     pem = (KEYS_DIR / "idp_test_private.pem").read_bytes()
     idp_token = issue_idp_token(
         provider="google",
         subject=subject,
         private_key_pem=pem,
-        expires_in=30 * 24 * 3600,
+        expires_in=365 * 24 * 3600,
     )
     r = httpx.post(
         f"{API_BASE}/v1/auth/token",

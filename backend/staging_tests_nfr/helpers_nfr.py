@@ -233,7 +233,9 @@ async def create_user_nfr(api, subject: str) -> str:  # noqa: ANN001
     else:
         r = await api.get("/v1/users/me", headers=auth_header(subject))
         assert r.status_code == 200
-        user_id = r.json()["user"]["id"]
+        # GET /v1/users/meは平オブジェクト応答({"user": ...}でない・users routes
+        # のUserMeOut実装どおり。POST /v1/usersのみ envelope。supervisor検証fix)
+        user_id = r.json()["id"]
     rc = await api.post("/v1/users/me/consent", headers=auth_header(subject))
     assert rc.status_code == 200, f"consent {subject}: {rc.status_code}"
     return user_id

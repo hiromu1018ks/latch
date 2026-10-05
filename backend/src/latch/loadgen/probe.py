@@ -131,6 +131,10 @@ class TokenCache:
             provider="google",
             subject=self._subject,
             private_key_pem=private_key,
+            # 365日: サーバはexpを仮想Clock(ControlledClock)で検証するため・
+            # 仮想時計が実時間より大きく先行した状態(月跨ぎClock操作後)での
+            # プローブ実行でもIdPトークンが切れないようにする(supervisor検証fix)
+            expires_in=365 * 24 * 3600,
         )
         r = await self._http.post(
             "/v1/auth/token", json={"provider": "google", "idp_token": idp_token}
