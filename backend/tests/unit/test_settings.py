@@ -87,3 +87,51 @@ def test_obs_settings_env_override(monkeypatch):
     assert s.obs_worker_metrics_port == 9100
     assert s.obs_collect_interval_sec == 30
     assert s.kpi_backfill_days == 5
+
+
+def test_alert_settings_defaults(monkeypatch):
+    monkeypatch.delenv("LATCH_ALERT_QUEUE_ENABLED", raising=False)
+    monkeypatch.delenv("LATCH_ALERT_QUEUE_INTERVAL_SEC", raising=False)
+    monkeypatch.delenv("LATCH_ALERT_QUEUE_PENDING", raising=False)
+    monkeypatch.delenv("LATCH_ALERT_QUEUE_OLDEST_SECONDS", raising=False)
+    monkeypatch.delenv("LATCH_ALERT_QUEUE_ARM_TTL_SEC", raising=False)
+    s = Settings()
+    assert s.alert_queue_enabled is False  # M4 ws-7(design §2.5案A・ciは無効のまま)
+    assert s.alert_queue_interval_sec == 60  # 発報器のtick(collectorと同一周期)
+    assert s.alert_queue_pending == 1000  # design §5-5(docs未規定の初期値)
+    assert s.alert_queue_oldest_seconds == 300  # design §5-5
+    assert s.alert_queue_arm_ttl_sec == 180  # アームキーTTL(§2.3)
+
+
+def test_alert_settings_are_exactly_five_fields(monkeypatch):
+    # alert系設定の過剰供給を防ぐ機械検査(obs系集合ピンと同一作法)
+    for key in (
+        "LATCH_ALERT_QUEUE_ENABLED",
+        "LATCH_ALERT_QUEUE_INTERVAL_SEC",
+        "LATCH_ALERT_QUEUE_PENDING",
+        "LATCH_ALERT_QUEUE_OLDEST_SECONDS",
+        "LATCH_ALERT_QUEUE_ARM_TTL_SEC",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    alert_fields = {f for f in Settings.model_fields if f.startswith("alert_")}
+    assert alert_fields == {
+        "alert_queue_enabled",
+        "alert_queue_interval_sec",
+        "alert_queue_pending",
+        "alert_queue_oldest_seconds",
+        "alert_queue_arm_ttl_sec",
+    }
+
+
+def test_alert_settings_env_override(monkeypatch):
+    monkeypatch.setenv("LATCH_ALERT_QUEUE_ENABLED", "true")
+    monkeypatch.setenv("LATCH_ALERT_QUEUE_INTERVAL_SEC", "30")
+    monkeypatch.setenv("LATCH_ALERT_QUEUE_PENDING", "5")
+    monkeypatch.setenv("LATCH_ALERT_QUEUE_OLDEST_SECONDS", "10")
+    monkeypatch.setenv("LATCH_ALERT_QUEUE_ARM_TTL_SEC", "60")
+    s = Settings()
+    assert s.alert_queue_enabled is True
+    assert s.alert_queue_interval_sec == 30
+    assert s.alert_queue_pending == 5
+    assert s.alert_queue_oldest_seconds == 10
+    assert s.alert_queue_arm_ttl_sec == 60
