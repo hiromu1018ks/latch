@@ -1,0 +1,18 @@
+unit: M4-ws-7
+executed_at: '2026-10-05T19:46:35.625807+09:00'
+environment: latch-staging(nfr override)
+items:
+- id: ws7-n1-10
+  name: 可用性プローブ検証(成功率99.5%・タグ除外・dense記録)
+  test: test_n1_10_probe_evidence
+  verdict: pass
+  observed:
+    evidence: /home/misty/Projects/latch/docs/testassets/results/ws7-probe-20261005-104449.yaml
+    main_success_rate: 1.0
+    main_counted: 38
+    excluded_planned_outage: 6
+    dense_total: 260
+    max_consecutive_failures:
+      count: 0
+      started_at: null
+      ended_at: null

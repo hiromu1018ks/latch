@@ -1,0 +1,10 @@
+unit: M4-ws-7
+executed_at: '2026-10-05T15:52:16.769484+09:00'
+environment: latch-staging(nfr override)
+items:
+- id: ws7-n2-00
+  name: dump直前のactive母体確保(freshペア2組)
+  test: test_n2_00_prep_active_population
+  verdict: pass
+  observed:
+    active_intents: 6

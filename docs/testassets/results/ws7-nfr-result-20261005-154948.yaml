@@ -1,0 +1,121 @@
+unit: M4-ws-7
+executed_at: '2026-10-05T15:49:48.162899+09:00'
+environment: latch-staging(nfr override)
+items:
+- id: ws7-n5-00
+  name: 環境前提とシード投入(べき等)
+  test: test_n5_00_seed_and_env
+  verdict: pass
+  observed:
+    skipped: false
+    users: 100
+    active_intents: 300
+- id: ws7-n5-10
+  name: 毒ペイロード→5回再試行→quarantined隔離+理由保持
+  test: test_n5_10_poison_payload_quarantined
+  verdict: pass
+  observed:
+    failure_reason: unextractable triple (missing or invalid event_type/source_intent_id/version)
+    quarantined_before: 0
+    quarantined_after: 1
+- id: ws7-n5-20
+  name: 削除済み参照Event→processed破棄(理由=intent_not_found)
+  test: test_n5_20_deleted_reference_processed_discard
+  verdict: pass
+  observed:
+    status: processed
+    discard_reason: intent_not_found
+- id: ws7-n5-30
+  name: UNIQUE重複排除(同一Event再投下で行・候補とも不変)
+  test: test_n5_30_unique_duplicate_no_double_candidates
+  verdict: pass
+  observed:
+    match_events: 1
+    match_candidates: 700→700
+- id: ws7-n5-40
+  name: 毒後の非波及(正常ペアが提案まで到達)
+  test: test_n5_40_no_propagation_after_poison
+  verdict: pass
+  observed:
+    proposed_before: 228
+    proposed_after: 230
+- id: ws7-n5-50
+  name: Queue滞留→lag alert 1回発報→解除resolve(worker停止含む)
+  test: test_n5_50_lag_alert_and_resolve
+  verdict: pass
+  observed:
+    alert_count: 1
+    resolve_count: 1
+    pending_rows_at_stop: 1
+- id: ws7-n4-10
+  name: resume→version+1→Embedding再実行なしで再評価・復帰
+  test: test_n4_10_resume_reeval_without_embedding
+  verdict: pass
+  observed:
+    version_after_resume: 2
+    embedding_unchanged: true
+    embedding_model: gemini-embedding-001
+    completed_before: 1
+    completed_after: 2
+    candidate_status: evaluated
+- id: ws7-n4-20
+  name: catch-up回収(embedding済み対象は処理・NULLは除外→backfill回収)
+  test: test_n4_20_catchup_recovers_and_excludes_null_embedding
+  verdict: pass
+  observed:
+    advance_s: 253184.836312
+    reeval_key_c: '1'
+    reeval_key_d_before_backfill: null
+    backfill_recovered: true
+- id: ws7-n3-10
+  name: D-16日次80%(24,000)でalert 1回発報+源流レポート添付
+  test: test_n3_10_daily_alert_at_24000
+  verdict: pass
+  observed:
+    daily_before: 2
+    set_value: 23999
+    daily_after: 24000
+    alert_count: 1
+    updated_version: 2
+- id: ws7-n3-20
+  name: D-16日次上限到達→Jevスキップ・『Jev未判定』保留・提案ゼロ
+  test: test_n3_20_daily_limit_deny_skip
+  verdict: pass
+  observed:
+    set_value: 30000
+    daily_after: 30001
+    skip_reason: global_daily
+    proposed_unchanged: 244
+    updated_version: 2
+- id: ws7-n3-30
+  name: D-16日次リセット(0時JST)で新日キー切替・実行復帰
+  test: test_n3_30_daily_reset_recovers_at_jst_midnight
+  verdict: pass
+  observed:
+    old_key: jev:daily:20261007
+    old_value: '30001'
+    new_key: jev:daily:20261008
+    new_value: 1
+    updated_version: 2
+- id: ws7-n3-40
+  name: D-16月次80%(480,000)alert発報・日次との独立性
+  test: test_n3_40_monthly_alert_independence
+  verdict: pass
+  observed:
+    monthly_set: 479999
+    monthly_after: 480000
+    monthly_alerts: 1
+    daily_alerts_delta: 0
+    daily_before: 7
+    updated_version: 2
+- id: ws7-n3-50
+  name: D-16月次リセット(暦月初JST)・旧キー残留と実行復帰の独立性
+  test: test_n3_50_monthly_reset_independence
+  verdict: pass
+  observed:
+    old_month_key: jev:monthly:202610
+    old_month_value: '480000'
+    new_month_key: jev:monthly:202611
+    old_day_key_value_kept: true
+    new_month_value: 1
+    updated_version: 2

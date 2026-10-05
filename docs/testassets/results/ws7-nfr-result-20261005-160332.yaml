@@ -1,0 +1,22 @@
+unit: M4-ws-7
+executed_at: '2026-10-05T16:03:32.950522+09:00'
+environment: latch-staging(nfr override)
+items:
+- id: ws7-n2-20
+  name: 'cross-check: 復旧前後のactive Intent数一致'
+  test: test_n2_20_cross_check_active_count
+  verdict: pass
+  observed:
+    before(15432): 6
+    after(16543): 6
+- id: ws7-n2-40
+  name: 復旧後スモーク(検索・マッチング・通知が正常)
+  test: test_n2_40_smoke_proposal_after_recovery
+  verdict: pass
+  observed:
+    latches_http: 200
+    proposed: 257
+    notifications: 384→386
+    intents:
+    - a4a1747b-abff-40c3-b024-dec67db40026
+    - b9f508bc-38fc-40e6-854b-e513fd7c0ec1

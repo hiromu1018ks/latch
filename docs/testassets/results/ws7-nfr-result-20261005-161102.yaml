@@ -1,0 +1,12 @@
+unit: M4-ws-7
+executed_at: '2026-10-05T16:11:02.212879+09:00'
+environment: latch-staging(nfr override)
+items:
+- id: ws7-n2-30
+  name: 識別子特定→embedding NULL化→backfillで再エンベディング
+  test: test_n2_30_reembedding_via_identifier_null_and_backfill
+  verdict: pass
+  observed:
+    embedding_model: gemini-embedding-001
+    nulled_rows: 8
+    recovered_rows: 8
