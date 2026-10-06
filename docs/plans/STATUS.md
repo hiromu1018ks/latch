@@ -513,6 +513,7 @@
   - **staging実施(§8手順・supervisor)**: staging-reset+migrate 0008+geo復旧→明示build+force-recreate(デプロイ記録規律の初適用)→**1世代戻し**(cf9e612=直近コード変更コミット。旧版が新スキーマ0008のDBで起動し200・復帰200)→**停止3段階ドライラン**(段1=worker停止中GET 200・段2=nginx遮断でPOST 503/GET 200・解除後201・段3=api停止中504観測→復帰200)→**ws-5証拠3点**(同意フロー422 CONSENT_REQUIRED→201・許可リスト5 passed+登録表・実ログのraw_text非混入0件)→環境down
   - 実施時発見4件を手順書・READMEへfix反映: (1)buildコマンドのサービス名(api worker→api1 api2 worker1 worker2) (2)**api再作成後はnginx再起動必須**(upstream IPキャッシュで502・ws-3知見の再実証) (3)段3の停止中応答は502でなく504 (4)README §3-1に/v1/auth/tokenでのアクセストークン交換が必須の注記
   - G4時確認事項13・14を追記。**M4実装単位ws-1〜ws-8完了・G4判定待ち**(ws-9はFCM資材待ちで独立)
+- 学習資産追従: ws-8分(第31章「次に読むもの」へws-8-rollback.md手順書とwalkthrough証拠YAMLへの参照を追記+README最終更新2026-10-06。コード変更ゼロのため新章なし=design §3.2予想どおり。Lab 14のnginx 502記述・第27章downgrade引用は正確なまま触らず。agent4がmake test 1472再実行・lint判断台帳収束〔第31章5件は情報レベルで残す判断〕を確認)
 
 ## G2判定資料(2026-09-30・承認済み)
 
