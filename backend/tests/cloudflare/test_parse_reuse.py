@@ -17,11 +17,11 @@ from datetime import date
 import pytest
 
 from latch.domain.parse_key import (
+    PROVENANCE_MANUAL,
+    PROVENANCE_PARSER,
     FieldProvenance,
     ParseRequestAggregator,
     ParseVersions,
-    PROVENANCE_MANUAL,
-    PROVENANCE_PARSER,
     build_parse_key,
     merge_reparse,
 )
