@@ -28,14 +28,14 @@ def geodesic_distance_m(lon1: float, lat1: float, lon2: float, lat2: float) -> f
     a, b, f = WGS84_A, WGS84_B, WGS84_F
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     lam1, lam2 = math.radians(lon1), math.radians(lon2)
-    l = lam2 - lam1
+    delta_lam = lam2 - lam1
 
     u1 = math.atan((1.0 - f) * math.tan(phi1))
     u2 = math.atan((1.0 - f) * math.tan(phi2))
     sin_u1, cos_u1 = math.sin(u1), math.cos(u1)
     sin_u2, cos_u2 = math.sin(u2), math.cos(u2)
 
-    lam = l
+    lam = delta_lam
     for _ in range(200):
         sin_lam, cos_lam = math.sin(lam), math.cos(lam)
         sin_sigma = math.sqrt(
