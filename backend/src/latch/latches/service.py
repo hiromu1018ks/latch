@@ -16,6 +16,9 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from latch.core.clock import JST, Clock
+from latch.domain.latch_status import (  # noqa: F401 — 再export(T2分離)
+    compute_new_status,
+)
 from latch.latches import calibration, store
 from latch.latches.errors import (
     AlreadyAnsweredError,
@@ -51,10 +54,6 @@ def _wrap_unexpected(exc: Exception) -> DependencyUnavailableError:
     logger.warning("latches.unexpected class=%s", type(exc).__name__)
     return DependencyUnavailableError("latches dependency unavailable")
 
-
-from latch.domain.latch_status import (  # noqa: F401 — 再export(T2分離)
-    compute_new_status,
-)
 
 
 class LatchesService:
