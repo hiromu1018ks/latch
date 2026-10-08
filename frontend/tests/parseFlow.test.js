@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createParseFlow } from "../src/intent/parseFlow.js";
+import { createParseFlow, jstDateString } from "../src/intent/parseFlow.js";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -127,5 +127,60 @@ describe("createParseFlow(design §2.4)", () => {
     flow.dispose();
     await vi.advanceTimersByTimeAsync(2000);
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("解析基準日(JST日跨ぎ — 移行計画§5.5)", () => {
+  it("jstDateString: UTC日付とJST日付の境界", () => {
+    // UTC 2026-10-08T16:00 = JST 2026-10-09T01:00
+    expect(jstDateString(new Date("2026-10-08T16:00:00Z"))).toBe("2026-10-09");
+    // UTC 2026-10-08T14:59 = JST 2026-10-08T23:59
+    expect(jstDateString(new Date("2026-10-08T14:59:00Z"))).toBe("2026-10-08");
+  });
+
+  it("同文でもJST日を跨いだら再送する(23:59→00:00)", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn(async () => ({ structured_intent: {}, warnings: [] }));
+      const flow = createParseFlow({
+        send,
+        onResult: vi.fn(),
+        onError: vi.fn(),
+      });
+      // JST 2026-10-08 23:59
+      vi.setSystemTime(new Date("2026-10-08T14:59:00Z"));
+      flow.input("明日の夜、天文館でごはん。");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(send).toHaveBeenCalledTimes(1);
+      // 2分後 = JST 2026-10-09 00:01(同文のまま入力)
+      vi.setSystemTime(new Date("2026-10-08T15:01:00Z"));
+      flow.input("明日の夜、天文館でごはん。");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(send).toHaveBeenCalledTimes(2); // 同文でも基準日が変われば再送
+      flow.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("同じ基準日内の同文は再送しない(従来挙動の維持)", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn(async () => ({ structured_intent: {}, warnings: [] }));
+      const flow = createParseFlow({
+        send,
+        onResult: vi.fn(),
+        onError: vi.fn(),
+      });
+      vi.setSystemTime(new Date("2026-10-08T10:00:00Z"));
+      flow.input("今夜、天文館でごはん。");
+      await vi.advanceTimersByTimeAsync(1000);
+      flow.input("今夜、天文館でごはん。");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(send).toHaveBeenCalledTimes(1);
+      flow.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
