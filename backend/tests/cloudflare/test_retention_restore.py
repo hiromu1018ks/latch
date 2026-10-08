@@ -336,7 +336,7 @@ async def test_export_restore_roundtrip_with_safety_reapplication(db):
 
 async def test_restore_rebuilds_cache_tables_empty(db):
     """evaluation_cache・snapshotは復元しない(旧内容を使わない)。"""
-    world = await _seed_world(db)
+    await _seed_world(db)
     dump = export_core(db)
     safety = capture_safety_journal(db, since_us=0)
     fresh = LocalD1Database()

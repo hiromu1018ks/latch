@@ -1,0 +1,39 @@
+assumptions:
+  active_intents_per_month: 3000
+  llm_calls_per_month: 3000
+  llm_unit: estimated_per_call(Jev概算) — 実測cost_confirmedで置換
+baseline: B0(改善なし移植版)
+condition_deltas:
+  I1_external_calls_avoided: 19
+  I2_additional_calls_avoided_vs_I1: 1
+  note: I2は同fingerprint再評価時の追加削減(別々に数える)
+cost_estimate_usd:
+  d1: 0.0
+  details:
+    basis: Workers Paid + 従量(D1/Queues/R2/LLM)
+    included_assumption: 無料枠・付属枠が他用途と共有されない前提
+    llm_basis: estimated_per_call
+  llm: 4.5
+  queues: 0.0
+  r2: 0.0075
+  total: 9.5075
+  workers: 5.0
+fixture: same-key-20parallel
+measurements:
+  B0:
+    external_calls: 20
+    wall_ms: 0.16
+  I1:
+    external_calls: 1
+    wall_ms: 0.37
+  I1+I2:
+    external_calls: 0
+    wall_ms: 0.26
+notes:
+- 測定はローカル決定的試験(fake Clock・stub LLM結果・外部呼出し数厳密)
+- 実環境(実Workers・日本からの実測・実LLM)は実配備の別承認後
+- '費用積算は costs.py が測定単位から行う(§5.1: SQL回数≠料金)'
+unresolved:
+- 実Workersでのcold/warm・burst・障害後回収の実測(承認待ち)
+- 実LLMでの品質比較(承認待ち・G1/G2資産を再利用)
+- I6(Jev枠・閾値)は別実験(本比較に含めない — 計画§5.7)
