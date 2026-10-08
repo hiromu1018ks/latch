@@ -207,11 +207,10 @@ class D1UsageGuard:
         self, *, key: str, limit: int, window_start, window_expires, now
     ) -> bool:
         """上限内で1つ予約。True=予約成功・False=上限到達。"""
-        now_us = micros(now)
         start_us = micros(window_start)
         expires_us = micros(window_expires)
-        ins = (
-            await self.db.prepare(
+        await (
+            self.db.prepare(
                 "INSERT OR IGNORE INTO usage_counters"
                 " (key, value, window_start, expires_at)"
                 " VALUES (?, 0, ?, ?)"

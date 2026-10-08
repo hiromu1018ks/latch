@@ -320,7 +320,7 @@ async def test_job_claim_complete_and_fencing(db, coordinator):
 async def test_job_lease_recovery(db, coordinator):
     """lease切れのrunningを回収し再実行・上限超過はfailed。"""
     await coordinator.enqueue(kind="retention", ref_id="r1", now=NOW)
-    claim = (await coordinator.claim_due(NOW, owner="w1", limit=5))[0]
+    (await coordinator.claim_due(NOW, owner="w1", limit=5))[0]
     # lease(90s)切れ
     later = NOW + timedelta(seconds=100)
     recovered = await coordinator.recover_expired_leases(later)

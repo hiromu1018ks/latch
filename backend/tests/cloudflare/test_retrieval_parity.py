@@ -207,7 +207,6 @@ async def test_time_overlap_edges(db, retrieval):
     peer_b_start = peer_a_start + 1
     await seed_intent(db, u2, embedding=_vec(0.8, 0.2), start_us=peer_b_start)
     result = await _run_d1(retrieval, origin)
-    ids = {c.intent_id for c in result.candidates}
     assert len(result.candidates) == 1
 
 
