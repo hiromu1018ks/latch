@@ -55,7 +55,6 @@ def _wrap_unexpected(exc: Exception) -> DependencyUnavailableError:
     return DependencyUnavailableError("latches dependency unavailable")
 
 
-
 class LatchesService:
     """回答・一覧・詳細のユースケース(design §2.2・§2.8)。"""
 

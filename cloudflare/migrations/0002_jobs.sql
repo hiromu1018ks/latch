@@ -52,3 +52,11 @@ CREATE TABLE IF NOT EXISTS llm_attempts (
 CREATE INDEX IF NOT EXISTS idx_llm_attempts_job ON llm_attempts (job_id);
 CREATE INDEX IF NOT EXISTS idx_llm_attempts_status_time
     ON llm_attempts (status, prepared_at);
+
+-- 通知配送記録(T10): 安定通知IDへの配送印(ack失敗の再配送冪等化)。
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+    notification_id TEXT PRIMARY KEY,
+    delivered_at INTEGER NOT NULL,
+    channel TEXT,
+    error TEXT
+);

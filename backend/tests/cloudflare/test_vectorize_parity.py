@@ -48,33 +48,39 @@ def _vec(*c: float) -> str:
 async def _seed_pair(db):
     uid_a, uid_b = str(uuid_mod.uuid4()), str(uuid_mod.uuid4())
     for uid in (uid_a, uid_b):
-        await db.batch([
-            db.prepare(
-                "INSERT INTO users (id, display_name, profile, birth_date,"
-                " auth_provider, auth_subject, consent_at, created_at,"
-                " updated_at) VALUES (?, 'u', '{}', '1995-06-15', 'google',"
-                " ?, ?, ?, ?)"
-            ).bind(
-                uid, f"s-{uid[:8]}", micros(NOW), micros(NOW), micros(NOW)
-            ),
-        ])
+        await db.batch(
+            [
+                db.prepare(
+                    "INSERT INTO users (id, display_name, profile, birth_date,"
+                    " auth_provider, auth_subject, consent_at, created_at,"
+                    " updated_at) VALUES (?, 'u', '{}', '1995-06-15', 'google',"
+                    " ?, ?, ?, ?)"
+                ).bind(uid, f"s-{uid[:8]}", micros(NOW), micros(NOW), micros(NOW)),
+            ]
+        )
     ids = []
     for uid, emb in ((uid_a, _vec(1.0, 0.0)), (uid_b, _vec(0.7, 0.3))):
         iid = str(uuid_mod.uuid4())
-        await db.batch([
-            db.prepare(
-                "INSERT INTO intents (id, user_id, category_primary,"
-                " alcohol_involved, raw_text, structured_data, geo_lon,"
-                " geo_lat, status, version, time_start, expires_at,"
-                " embedding, created_at, updated_at)"
-                " VALUES (?, ?, 'meal', 0, 'x', '{}', 130.5581, 31.5965,"
-                " 'active', 1, ?, ?, ?, ?, ?)"
-            ).bind(
-                iid, uid, micros(NOW + timedelta(hours=6)),
-                micros(NOW + timedelta(days=3)), emb,
-                micros(NOW), micros(NOW),
-            ),
-        ])
+        await db.batch(
+            [
+                db.prepare(
+                    "INSERT INTO intents (id, user_id, category_primary,"
+                    " alcohol_involved, raw_text, structured_data, geo_lon,"
+                    " geo_lat, status, version, time_start, expires_at,"
+                    " embedding, created_at, updated_at)"
+                    " VALUES (?, ?, 'meal', 0, 'x', '{}', 130.5581, 31.5965,"
+                    " 'active', 1, ?, ?, ?, ?, ?)"
+                ).bind(
+                    iid,
+                    uid,
+                    micros(NOW + timedelta(hours=6)),
+                    micros(NOW + timedelta(days=3)),
+                    emb,
+                    micros(NOW),
+                    micros(NOW),
+                ),
+            ]
+        )
         ids.append(iid)
     return ids[0], ids[1]
 

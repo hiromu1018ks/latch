@@ -1178,7 +1178,17 @@ class D1AtomicRepository:
                 now_us,
             ),
         ]
-        seq = 2
+        # 提示と通知jobの同時保存(T10: deliver_notificationが拾う)
+        stmts.append(
+            self.db.prepare(
+                "INSERT INTO jobs (id, kind, ref_id, status, next_due_at,"
+                " created_at, updated_at)"
+                " SELECT ?, 'notify', ?, 'pending', ?, ?, ?"
+                " WHERE EXISTS (SELECT 1 FROM latches WHERE id = ?"
+                " AND status = 'proposed')"
+            ).bind(_new_id(), latch_id, now_us, now_us, now_us, latch_id)
+        )
+        seq = 3
         for uid in await self._intent_owners(intent_ids):
             stmts.append(
                 self.db.prepare(
