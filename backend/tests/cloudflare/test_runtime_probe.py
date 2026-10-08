@@ -93,14 +93,10 @@ def test_schema_probe_copy_matches_backend_source():
 def test_rsa_fixture_pure_python_verify():
     """RSA資産がCPythonの純Python検証も通ること(worker側と同一ロジック)。"""
     fx = json.loads((FIXTURES_DIR / "rsa_probe.json").read_text())
-    claims = probes.verify_rs256(
-        fx["token"], n=int(fx["n_hex"], 16), e=fx["e"]
-    )
+    claims = probes.verify_rs256(fx["token"], n=int(fx["n_hex"], 16), e=fx["e"])
     assert claims is not None and claims["sub"] == "probe-rs-user"
     tampered = fx["token"][:-3] + "AAA"
-    assert (
-        probes.verify_rs256(tampered, n=int(fx["n_hex"], 16), e=fx["e"]) is None
-    )
+    assert probes.verify_rs256(tampered, n=int(fx["n_hex"], 16), e=fx["e"]) is None
 
 
 def test_hs256_roundtrip_on_cpython():
@@ -130,8 +126,6 @@ def test_datetime_expectations():
 # =============================================================================
 # 2. 実測probe(cloudflare_local): pywrangler dev が起動中のみ
 # =============================================================================
-
-pytest.importorskip  # (not used; marker based)
 
 
 async def _get(client: httpx.AsyncClient, path: str) -> dict:
@@ -246,9 +240,7 @@ async def test_runtime_probe_and_report(cf_worker_url, tmp_path):
         assert drained, "queue consumerがlocalで1通も受信していない"
 
         # -- scheduled(cron) handler --
-        sched = await client.get(
-            "/cdn-cgi/local/scheduled?format=json", timeout=30.0
-        )
+        sched = await client.get("/cdn-cgi/local/scheduled?format=json", timeout=30.0)
         assert sched.status_code == 200
         rpt2 = await _get(client, "/probe/report")
         report["probes"]["scheduled"] = {
@@ -265,10 +257,7 @@ async def test_runtime_probe_and_report(cf_worker_url, tmp_path):
         got_marks = [r.json()["mark"] for r in results]
         assert got_marks == marks
         rs20 = await asyncio.gather(
-            *(
-                client.get("/probe/state", params={"mark": f"m{i}"})
-                for i in range(20)
-            )
+            *(client.get("/probe/state", params={"mark": f"m{i}"}) for i in range(20))
         )
         assert all(r.json()["mark"] == f"m{i}" for i, r in enumerate(rs20))
         report["probes"]["concurrent_state_isolation"] = {

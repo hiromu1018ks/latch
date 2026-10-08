@@ -1,7 +1,7 @@
 """Layer 5の純関数群・定数(06 §6・§10・03 D-05/D-07/D-08・design §2.4〜2.6)。
 
 DB・async・SQLを持たない純計算のみ(unit試験は決定的)。jst_day_start は
-layer4からimportして再利用(再実装しない — C2のJST導出を一元化)。
+domain/timeからimportして再利用(再実装しない — C2のJST導出を一元化)。
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from latch.core.clock import JST
-from latch.worker.matching.layer4 import (  # noqa: F401 — 再export・試験が同一規律を検証
+from latch.domain.time import (  # noqa: F401 — 再export(T2: SQLAlchemy到達を断った)
     jst_day_start,
 )
 

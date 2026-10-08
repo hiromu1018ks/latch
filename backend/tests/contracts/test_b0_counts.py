@@ -22,7 +22,6 @@ import uuid as uuid_mod
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -90,8 +89,10 @@ async def test_b0_parse_no_server_dedup():
     parser2 = CountingParser()
     svc2 = _service(parser2)
     await asyncio.gather(
-        *(svc2.parse(text=text, auth_provider="google", auth_subject="s")
-          for _ in range(20))
+        *(
+            svc2.parse(text=text, auth_provider="google", auth_subject="s")
+            for _ in range(20)
+        )
     )
     assert parser2.calls == 20, "B0は並行同文を集約しない(I4の改善対象)"
 
@@ -102,11 +103,15 @@ def test_b0_counts_recorded():
     recorded = {
         "measured": {
             "parse_sequential_identical_3": {
-                "requests": 3, "llm_calls": 3, "dedup": "none",
+                "requests": 3,
+                "llm_calls": 3,
+                "dedup": "none",
                 "note": "IntentParseService直列3要求(上のtestで固定)",
             },
             "parse_parallel_identical_20": {
-                "requests": 20, "llm_calls": 20, "dedup": "none",
+                "requests": 20,
+                "llm_calls": 20,
+                "dedup": "none",
                 "note": "asyncio.gather 20並行(I4改善の対照)",
             },
         },
@@ -114,7 +119,7 @@ def test_b0_counts_recorded():
             "jev_same_version_second_event": {
                 "llm_calls": 0,
                 "evidence": "tests/integration/test_matching_jev.py"
-                            "(jev_result IS NULLの成功済み再利用・layer4)",
+                "(jev_result IS NULLの成功済み再利用・layer4)",
                 "note": "並行API呼出しの防止ではない(計画§5.2確認済み)",
             },
             "reeval_suppression": {

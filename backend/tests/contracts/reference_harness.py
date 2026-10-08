@@ -78,9 +78,7 @@ class ReferenceHarness:
         if spec is None:
             raise KeyError(f"未知のactor: {actor!r}")
         if actor not in self._subjects:
-            self._subjects[actor] = (
-                f"{self._prefix}{actor}-{uuid_mod.uuid4().hex[:8]}"
-            )
+            self._subjects[actor] = f"{self._prefix}{actor}-{uuid_mod.uuid4().hex[:8]}"
         subject = self._subjects[actor]
         idp = issue_idp_token(provider="google", subject=subject)
         resp = await self._api.post(
@@ -157,9 +155,9 @@ class ReferenceHarness:
             "future_2h": (now + timedelta(hours=2)).isoformat(),
             "future_8d": (now + timedelta(days=8)).isoformat(),
             "past_1h": (now - timedelta(hours=1)).isoformat(),
-            "minor_birth_date": (
-                now - timedelta(days=17 * 365 + 190)
-            ).date().isoformat(),
+            "minor_birth_date": (now - timedelta(days=17 * 365 + 190))
+            .date()
+            .isoformat(),
             "text_300": "あ" * 300,
             "text_301": "あ" * 301,
             "stub_time_start": "2026-09-27T19:00:00+09:00",
@@ -430,6 +428,4 @@ class ReferenceHarness:
                 ),
                 p,
             )
-            await conn.execute(
-                text("DELETE FROM users WHERE auth_subject LIKE :p"), p
-            )
+            await conn.execute(text("DELETE FROM users WHERE auth_subject LIKE :p"), p)

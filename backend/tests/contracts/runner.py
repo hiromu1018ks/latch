@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from contracts.contract import ContractCase, ContractRequest, Expect  # noqa: E402
+from contracts.contract import ContractCase  # noqa: E402
 
 pytestmark = pytest.mark.integration
 
@@ -87,8 +87,9 @@ def _match_expect(
     problems: list[str] = []
     expect = case.expect
     if resp.status_code != expect.status:
+        snippet = resp.text[:300]
         problems.append(
-            f"status: 期待 {expect.status} / 実際 {resp.status_code} body={resp.text[:300]}"
+            f"status: 期待 {expect.status} / 実際 {resp.status_code} body={snippet}"
         )
         return problems
     if expect.error_code is not None:
@@ -113,7 +114,9 @@ def _match_expect(
             actual = body
             try:
                 for part in parts:
-                    actual = actual[int(part)] if isinstance(actual, list) else actual[part]
+                    actual = (
+                        actual[int(part)] if isinstance(actual, list) else actual[part]
+                    )
             except (KeyError, IndexError, TypeError, ValueError):
                 problems.append(f"json_equals: {key} が応答に無い")
                 continue
@@ -142,7 +145,9 @@ def _match_expect(
             actual = body
             try:
                 for part in parts:
-                    actual = actual[int(part)] if isinstance(actual, list) else actual[part]
+                    actual = (
+                        actual[int(part)] if isinstance(actual, list) else actual[part]
+                    )
             except (KeyError, IndexError, TypeError, ValueError):
                 problems.append(f"capture: {path} が応答に無い")
                 continue

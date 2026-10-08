@@ -16,12 +16,16 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from latch.core.clock import JST
+from latch.domain.time import (  # noqa: F401 — 再export(旧import経路存続)
+    JST,
+    jst_day_start,
+    jst_month_start,
+)
 from latch.worker.matching.layer1 import LAYER1_WHERE, LAYER1_WHERE_BASE
 from latch.worker.matching.origin import Origin, bind_params
 
@@ -140,16 +144,6 @@ def _coerce_uuid(value: object) -> uuid.UUID:
     if isinstance(value, uuid.UUID):
         return value
     return uuid.UUID(str(value))
-
-
-def jst_day_start(d: date) -> datetime:
-    """JST暦日の0時(再選択境界。C2: Clock.jst_date()から導出)。"""
-    return datetime.combine(d, time(0, 0), tzinfo=JST)
-
-
-def jst_month_start(d: date) -> datetime:
-    """JST暦月の月初0時(再選択境界)。"""
-    return datetime.combine(d.replace(day=1), time(0, 0), tzinfo=JST)
 
 
 async def select_jev_rows(

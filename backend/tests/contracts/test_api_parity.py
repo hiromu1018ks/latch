@@ -41,7 +41,9 @@ async def transport(api_client):
     return ReferenceTransport(api_client)
 
 
-@pytest.mark.parametrize("case", CONTRACT_CASES, ids=[c.case_id for c in CONTRACT_CASES])
+@pytest.mark.parametrize(
+    "case", CONTRACT_CASES, ids=[c.case_id for c in CONTRACT_CASES]
+)
 async def test_contract_case(case, harness, transport):
     variables = {**harness.clock_vars(), **await harness.prepare_case_vars(case)}
     problems = await run_case(
@@ -90,8 +92,18 @@ def test_case_coverage_by_area():
     """主要API領域をケースが網羅していること(T0完了条件の自己検査)。"""
     areas = {c.area for c in CONTRACT_CASES}
     expected = {
-        "auth", "users", "consent", "intents.parse", "intents.crud", "expiry",
-        "latches", "chat", "attendance", "safety", "notifications", "account",
+        "auth",
+        "users",
+        "consent",
+        "intents.parse",
+        "intents.crud",
+        "expiry",
+        "latches",
+        "chat",
+        "attendance",
+        "safety",
+        "notifications",
+        "account",
         "ratelimit",
     }
     missing = expected - areas

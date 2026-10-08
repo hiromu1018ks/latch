@@ -9,12 +9,11 @@ from __future__ import annotations
 import json
 import threading
 from abc import ABC, abstractmethod
-from datetime import UTC, date, datetime, timedelta, timezone
-
-from latch.settings import Settings
+from datetime import UTC, date, datetime, timedelta
 
 # 日本に夏時間はないため、固定オフセット+9時間で確定させる。
-JST = timezone(timedelta(hours=+9))
+from latch.domain.time import JST  # 定義の単一源(T2・再export)
+from latch.settings import Settings
 
 
 class Clock(ABC):
