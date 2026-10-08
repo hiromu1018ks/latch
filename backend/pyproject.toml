@@ -47,6 +47,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
     "integration: compose常設環境(ci)への到達を確認する試験(make test-ciで実行)",
+    "cloudflare_local: ローカルpywrangler dev(cloudflare/api)が起動中のみ実行する実測probe(make cf-dev→make cf-probe)",
 ]
 
 [tool.ruff]

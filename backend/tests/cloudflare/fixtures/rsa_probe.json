@@ -1,0 +1,20 @@
+{
+ "_note": "T1 probe\u7528RSA\u8cc7\u7523(2048bit\u30fb\u30c6\u30b9\u30c8\u5c02\u7528\u30fb\u672c\u756a\u9375\u3067\u306f\u306a\u3044)",
+ "n_hex": "c37f25610fb2e4eca6f34f116462d0d269456f32475a5a3b5a49b577de6e5de4ceeedfe371f5a4c9218a2b57f3a2b799b026a366e0a0b31ba8e66b048531b361075cf12389339a6d67573b8bf789841d8e78749129fca975bb63ccf131ee9e2a06ceb1c3d1a21b33c52e0858be1cd9c399edc50eb80ec20c7c6e759feebe47c9b7416fbae14b5bdcd9dbdc10eaff0b2a95d7dee50f4167e66da67cd023a86dd82c56660889637df996b3f37569eb605e759cc1e124a14c8fcb65dd77f6874232b09ac68bf1d4e01b6bcd51f84065fb2bfbb3143aaf70775abfa0649f722f5670cf0934ca9f0049f45fcaf19a082cfede73321a2ec4f3f5d61d7221d298cb6993",
+ "e": 65537,
+ "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6InByb2JlLXJzYS0xIiwidHlwIjoiSldUIn0.eyJzdWIiOiJwcm9iZS1ycy11c2VyIiwiaXNzIjoiaHR0cHM6Ly9pZHAuY2kubGF0Y2gudGVzdC9nb29nbGUiLCJhdWQiOiJsYXRjaC10ZXN0LWFwcCIsImV4cCI6OTk5OTk5OTk5OX0.Fv_C4xPjyK094pd5jPSqYzezcxVHiN9e_t_UWwRCBFioPC96EVIzuBZxRquB9ugjE6FV4vduYoAGEIVpHHI7lO_af_5oTnS5AARE4w2iY8t0dtUMllsWab7oSreVvHt0OGbwbyAbzW9wh23OBfv8tVc8ye7loCChjculowrZu4qo0nNzJaCAHqq_QQbEFaDn46AaRYuqhFFvLqgmCcm55rljZtRNX3gaeP_0F5mf7Lzt_q_e2djuKsLXvSyRoMFja1u0Tb71iTBzXJq1rmQtK6Yg9YUba1_smQYkR_CKjlUU78oqSwsIwOnF98VgUdaY15j7ERDtaZFna5dsb0jQrQ",
+ "claims": {
+  "sub": "probe-rs-user",
+  "iss": "https://idp.ci.latch.test/google",
+  "aud": "latch-test-app",
+  "exp": 9999999999
+ },
+ "jwk": {
+  "kty": "RSA",
+  "kid": "probe-rsa-1",
+  "alg": "RS256",
+  "use": "sig",
+  "n": "w38lYQ-y5Oym808RZGLQ0mlFbzJHWlo7Wkm1d95uXeTO7t_jcfWkySGKK1fzoreZsCajZuCgsxuo5msEhTGzYQdc8SOJM5ptZ1c7i_eJhB2OeHSRKfypdbtjzPEx7p4qBs6xw9GiGzPFLghYvhzZw5ntxQ64DsIMfG51n-6-R8m3QW-64Utb3Nnb3BDq_wsqldfe5Q9BZ-ZtpnzQI6ht2CxWZgiJY335lrPzdWnrYF51nMHhJKFMj8tl3Xf2h0IysJrGi_HU4BtrzVH4QGX7K_uzFDqvcHdav6Bkn3IvVnDPCTTKnwBJ9F_K8ZoILP7eczIaLsTz9dYdciHSmMtpkw",
+  "e": "AQAB"
+ }
+}

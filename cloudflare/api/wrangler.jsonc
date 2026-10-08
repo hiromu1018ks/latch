@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "latch-api",
+  "main": "entry.py",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["python_workers"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": false
+  },
+  "vars": {
+    "LATCH_ENV": "local-probe",
+    "PROBE_TEXT_VAR": "probe-value"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "latch-core",
+      "database_id": "local-probe-db",
+      "preview_database_id": "local-probe-db-preview"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "JOBS",
+        "queue": "latch-jobs-local"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "latch-jobs-local",
+        "max_batch_size": 10,
+        "max_retries": 3
+      }
+    ]
+  },
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+}

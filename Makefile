@@ -1,4 +1,4 @@
-.PHONY: setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs loadusers loadperf loadbf loadmass load-stub-flat load-migrate load-geo-import staging-nfr-reset staging-nfr-test staging-probe staging-d16 staging-dump staging-db2-up staging-restore staging-db2-switch staging-db2-down
+.PHONY: cf-dev cf-probe cf-unit setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs loadusers loadperf loadbf loadmass load-stub-flat load-migrate load-geo-import staging-nfr-reset staging-nfr-test staging-probe staging-d16 staging-dump staging-db2-up staging-restore staging-db2-switch staging-db2-down
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -54,6 +54,19 @@ jev-smoke: ## Jev実APIスモーク(1呼び出し・課金。.envにLATCH_LLM_MO
 
 g2-gate: ## G2日本語評価harness(実API・課金。.envにLATCH_LLM_MODE=real+3鍵必須。引数は make g2-gate ARGS="--limit 2 --route both" — makeは--以降の転送をしないため)
 	cd backend && uv run --env-file ../.env python -m latch.g2gate $(ARGS)
+
+# --- Cloudflare移行(T1〜・2026-10-08移行計画。ローカル実測のみ・実配備は別承認) ---
+
+CF_ENV = UV_CACHE_DIR=$(CURDIR)/.uv-cache UV_PYTHON_INSTALL_DIR=$(CURDIR)/.uv-python npm_config_cache=$(CURDIR)/.npm-cache XDG_CONFIG_HOME=$(CURDIR)/.xdg-config
+
+cf-dev: ## T1 probe用にcloudflare/api workerをローカル起動(別ターミナルで実行)
+	cd cloudflare/api && $(CF_ENV) uv sync --quiet && $(CF_ENV) uv run pywrangler dev --port 8787
+
+cf-probe: ## T1互換性probe実行(cf-dev起動中に実行・レポートをdocs/testassets/results/へ)
+	cd backend && $(CF_ENV) uv run pytest tests/cloudflare -m cloudflare_local -q -s
+
+cf-unit: ## cloudflare資産の単体試験(worker起動不要)
+	cd backend && uv run pytest tests/cloudflare -m "not cloudflare_local" -q
 
 # --- staging/load環境(M4 ws-1・別プロジェクト。ciのcompose.yamlと既存ターゲットは触らない)---
 
