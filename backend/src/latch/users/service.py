@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from latch.auth.tokens import AccessTokenClaims
 from latch.core.clock import Clock
+from latch.domain.time import age_years  # noqa: F401 — 再export(T2分離)
 from latch.intents.deletion import cascade_delete_intent
 from latch.users.errors import (
     DependencyUnavailableError,
@@ -32,10 +33,6 @@ from latch.users.errors import (
     UserNotFoundError,
     UsersError,
 )
-
-
-from latch.domain.time import age_years  # noqa: F401 — 再export(T2分離)
-
 
 # users表のUNIQUE制約名(alembic 0001)。IntegrityError分類に使う
 _USERS_SUBJECT_CONSTRAINT = "uq_users_auth_provider_subject"
