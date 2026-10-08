@@ -1,0 +1,68 @@
+gate:
+  can_open_writer: true
+  journal_ready: true
+  replay_proven: true
+  source_drained: true
+  verify_ok: true
+journal_rows: 0
+manifest:
+  deletion_watermark: tombstones:full
+  export_at: '2026-10-08T15:56:35.848005+00:00'
+  integrity_hashes:
+    blocks: 4f53cda18c2baa0c0354bb5f9a3ecbe5
+    calibration_records: c01f3ebb18867dde7e6991998f21d4c9
+    geofeatures: 5d9a2b68429159ab3965489c4852c082
+    group_candidates: 4f53cda18c2baa0c0354bb5f9a3ecbe5
+    intents: 95b4c232177e67a0f9c1c14b8706269e
+    latch_status_events: 5754412877abe69855fc3b31e986259f
+    latches: 25645eb7bcbe5131c763cc73391385f8
+    match_candidates: 4f53cda18c2baa0c0354bb5f9a3ecbe5
+    match_events: 904f33568920a6605f600bd1c3ab6c29
+    messages: 4f53cda18c2baa0c0354bb5f9a3ecbe5
+    notifications: 4f53cda18c2baa0c0354bb5f9a3ecbe5
+    reports: 4f53cda18c2baa0c0354bb5f9a3ecbe5
+    users: 4a95a9bddb34e96d7857d464a04fa74d
+  notes:
+  - 旧系への書込み停止後に取得すること(T12-2)
+  - 権限・秘密情報のコピーは必要範囲だけ(鍵類は設定移行・DBへ入れない)
+  pending_jobs: 1
+  schema_head: 0008
+  table_counts:
+    blocks: 0
+    calibration_records: 41
+    geofeatures: 7
+    group_candidates: 0
+    intents: 46
+    latch_status_events: 1
+    latches: 1
+    match_candidates: 0
+    match_events: 5267
+    messages: 0
+    notifications: 0
+    reports: 0
+    users: 79
+  writer_generation: 1
+note: 本番切替の実データ作業・デプロイは別の明示的承認後に実施
+rehearsal: seed-based cutover (production data absent)
+verification:
+  counts_match:
+    blocks: true
+    calibration_records: true
+    geofeatures: true
+    group_candidates: true
+    intents: true
+    latch_status_events: true
+    latches: true
+    match_candidates: true
+    match_events: true
+    messages: true
+    notifications: true
+    reports: true
+    users: true
+  integrity:
+    latch_participants_consistent: true
+    matched_intents_closed: true
+    no_orphan_intents: true
+    no_orphan_latch_events: true
+    no_orphan_messages: true
+  ok: true

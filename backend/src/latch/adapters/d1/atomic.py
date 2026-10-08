@@ -311,7 +311,11 @@ class D1AtomicRepository:
                 table_name="latches",
                 row_id=latch_id,
                 before=dict(row),
-                after=None,
+                after={
+                    "id": latch_id,
+                    "status": new_status,
+                    "responses": canonical_json(after),
+                },
                 now=now,
             )
         )

@@ -25,10 +25,10 @@ measurements:
     wall_ms: 0.16
   I1:
     external_calls: 1
-    wall_ms: 0.37
+    wall_ms: 0.39
   I1+I2:
     external_calls: 0
-    wall_ms: 0.26
+    wall_ms: 0.25
 notes:
 - 測定はローカル決定的試験(fake Clock・stub LLM結果・外部呼出し数厳密)
 - 実環境(実Workers・日本からの実測・実LLM)は実配備の別承認後
