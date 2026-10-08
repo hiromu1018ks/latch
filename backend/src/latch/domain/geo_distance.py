@@ -53,7 +53,7 @@ def geodesic_distance_m(lon1: float, lat1: float, lon2: float, lat2: float) -> f
             cos_2sigma_m = cos_sigma - 2.0 * sin_u1 * sin_u2 / cos_sq_alpha
         c = f / 16.0 * cos_sq_alpha * (4.0 + f * (4.0 - 3.0 * cos_sq_alpha))
         lam_prev = lam
-        lam = l + (1.0 - c) * f * sin_alpha * (
+        lam = delta_lam + (1.0 - c) * f * sin_alpha * (
             sigma
             + c
             * sin_sigma
