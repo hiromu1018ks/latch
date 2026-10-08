@@ -377,3 +377,27 @@ CREATE TABLE IF NOT EXISTS retrieval_snapshot_rows (
 );
 CREATE INDEX IF NOT EXISTS idx_retrieval_snapshot_rows_intent
     ON retrieval_snapshot_rows (intent_id);
+
+-- 評価cache(I2・計画§5.3・T6): 検証済み数値結果と由来のみ保存。
+-- 最終提案・公開許可は保存しない(提案scoreは現行係数で計算)。
+-- 実モデル不明の結果は対象外(actual_model NOT NULL)。pair単位で
+-- ユーザーに紐づく(別利用者間で流用しない)。
+CREATE TABLE IF NOT EXISTS evaluation_cache (
+    cache_key TEXT PRIMARY KEY,
+    pair_key TEXT NOT NULL,
+    intent_a_id TEXT NOT NULL,
+    intent_b_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    context_version TEXT NOT NULL DEFAULT '',
+    requested_provider TEXT NOT NULL,
+    requested_model TEXT NOT NULL,
+    actual_provider TEXT NOT NULL,
+    actual_model TEXT NOT NULL,
+    result TEXT NOT NULL,               -- 検証済み数値結果+由来のJSON
+    expires_at INTEGER NOT NULL,        -- min(両Intent期限, 評価+30日)
+    created_at INTEGER NOT NULL,
+    last_hit_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_evaluation_cache_pair
+    ON evaluation_cache (intent_a_id, intent_b_id);
