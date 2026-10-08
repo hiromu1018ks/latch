@@ -21,7 +21,6 @@ from typing import Any
 from latch.adapters.d1.database import LocalD1Database
 from latch.adapters.d1.retrieval import (
     D1RetrievalRepository,
-    RetrievedCandidate,
     RetrievalResult,
 )
 from latch.domain.types import IntentSnapshot

@@ -23,7 +23,7 @@ from latch.adapters.cloudflare.vectorize import (
     parse_vector_id,
     vector_id,
 )
-from latch.adapters.d1.database import LocalD1Database, canonical_json
+from latch.adapters.d1.database import LocalD1Database
 from latch.adapters.d1.retrieval import D1RetrievalRepository
 from latch.domain.time import micros
 from latch.domain.types import IntentSnapshot
