@@ -1,7 +1,18 @@
 # Cloudflare移行 実施進行記録(2026-10-08〜)
 
 計画: docs/superpowers/plans/2026-10-08-cloudflare-migration.md
-本書は実装セッション横断の作業状態記録。最終報告書の材料とする。
+本書は実装セッション横断の作業状態記録。最終報告書は
+docs/reviews/cloudflare-migration-implementation-report.md。
+
+## 最終状態(2026-10-09): T0〜T12 全完了・全試験緑・本番切替は承認待ち
+
+- test-ci全套: **1988 passed, 1 skipped, 0 failed**(クリーンDB)
+- frontend: 236 passed
+- 最終報告書: docs/reviews/cloudflare-migration-implementation-report.md
+- 本番切替手順: docs/operations/cloudflare-cutover.md
+- 採否記録: Vectorize=deferred(docs/testassets/results/cloudflare-vectorize-decision.yaml)
+  I1/I2/I3/I5=採用・I4=一部採用(永続cacheは承認待ち)・I6=別実験
+- 承認待ち: 実配備probe(T1)・実D1確認(T3)・実環境実測(T11)・実push(ws-9)
 
 ## 完了タスク
 

@@ -7,40 +7,40 @@ gate:
 journal_rows: 0
 manifest:
   deletion_watermark: tombstones:full
-  export_at: '2026-10-08T16:04:28.081866+00:00'
+  export_at: '2026-10-08T16:20:12.387601+00:00'
   integrity_hashes:
     blocks: 4f53cda18c2baa0c0354bb5f9a3ecbe5
-    calibration_records: 6755fcd123a29e47a4fe7a2547a7fb18
-    geofeatures: 2920df69509ffb9f72a050ffe72f2d1c
+    calibration_records: 4f53cda18c2baa0c0354bb5f9a3ecbe5
+    geofeatures: 813af0ee4a151842184624bddd7b1531
     group_candidates: 4f53cda18c2baa0c0354bb5f9a3ecbe5
-    intents: 2cd8dc1549c3d726e03347959f5f873e
-    latch_status_events: d8bee5683acfd292ac505c9b967d7b73
-    latches: f4ec643dcc89b3362aca8859ed7f7b8f
+    intents: 81f609af92803a6ac12190cd5dfd01fd
+    latch_status_events: 420d57f46adccc23dcd6e3edf4412383
+    latches: b246ed98e915a718b89d0004996a8f66
     match_candidates: 4f53cda18c2baa0c0354bb5f9a3ecbe5
-    match_events: d906e2cfd245a6449a4057f4599519f3
+    match_events: 3435c74824cf488609f6512d12e7dac8
     messages: 4f53cda18c2baa0c0354bb5f9a3ecbe5
     notifications: 4f53cda18c2baa0c0354bb5f9a3ecbe5
     reports: 4f53cda18c2baa0c0354bb5f9a3ecbe5
-    users: 39baeb7189ae7551877bad3cc78468e5
+    users: 833ceadd8c9181213b145dd1d4cbd88f
   notes:
   - 旧系への書込み停止後に取得すること(T12-2)
   - 権限・秘密情報のコピーは必要範囲だけ(鍵類は設定移行・DBへ入れない)
-  pending_jobs: 45
+  pending_jobs: 1
   schema_head: 0008
   table_counts:
     blocks: 0
-    calibration_records: 42
+    calibration_records: 0
     geofeatures: 7
     group_candidates: 0
-    intents: 47
+    intents: 2
     latch_status_events: 1
     latches: 1
     match_candidates: 0
-    match_events: 6169
+    match_events: 1
     messages: 0
     notifications: 0
     reports: 0
-    users: 84
+    users: 2
   writer_generation: 1
 note: 本番切替の実データ作業・デプロイは別の明示的承認後に実施
 rehearsal: seed-based cutover (production data absent)

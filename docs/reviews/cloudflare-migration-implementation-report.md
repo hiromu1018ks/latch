@@ -130,7 +130,17 @@ DBまで戻す場合はjournal replay→照合→再開。
 
 ## 6. 最終確認
 
-(本報告書と同時に実施した test-ci 全套の結果をここに記載)
+test-ci全套(クリーンDB・worker停止・load DB起動・`LATCH_LLM_MODE=stub`):
+
+**1988 passed, 1 skipped, 0 failed**(2026-10-09・所要6分44秒)
+
+内訳: unit全套 + integration全套 + contracts 121 + cloudflare suite 107
+(1 skipped = cloudflare_local probe〔make cf-dev起動時に実行〕)
+frontend vitest: 236 passed(24 files)
+
+備考: 共有ci DBは実行中の並行pytestで候補等が蓄積するため、
+異常終行後はTRUNCATE(geofeatures以外)してから再実行すること
+(本報告の最終実行はクリーン状態で実施)。
 
 ## 7. 結論
 
