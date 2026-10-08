@@ -59,21 +59,32 @@
   同一fixtureで候補ID・版・順位完全一致・similarity 1e-6以内・pass_count一致
   (共有DB汚染回避のため遠未来時間窓+teardownで分離)
 
+### T5: Queues/outbox/処理権/全LLM試行記録 ✅ (commits bd8753e〜344bafb)
+- 0002_jobs.sql: jobs完全版(lease/fencing/max_attempts) +
+  evaluation_claims + llm_attempts(usage不明はcost NULL)
+- adapters/d1/jobs.py: claim_due条件付きUPDATE仲裁・lease回収(上限failed)・
+  outbox event_id重複検出・D1UsageGuard(usage_counters原子予約)
+- adapters/d1/evaluations.py + attempts.py: claim/complete(fencing破棄)・
+  試行記録(prepare→finish・二重finish不採用・SDK内部再試行回数)
+- runtime/cloudflare/jobs.py: EvaluationJobRunner
+  (claim→prepare→sender→finish→complete・timeout=unknown+job記録)
+- 13試験: 同キー20並行=外部呼出1回・別キー全実行・lease奪取fencing・
+  送信境界試行残存(usage不明0円なし)・fallback実モデル記録・再配送・
+  回収・20並行×上限5→ちょうど5・peer新版は別仕事・系統別費用集計
+- 関連既存契約: tests/unit/llm + cost 197 passed・
+  integration test_matching_jev 全pass
+
 ## テスト現況
 
-- unit全套: 1499 passed (make test相当)
-- cloudflare suite: 34 passed (test_d1_commands 19 + retrieval 10 +
-  runtime_probe unit 5)
+- unit全套: 1478+34 passed(make test相当 + cloudflare unit)
+- cloudflare suite: 47 passed(d1_commands 19 + retrieval 10 +
+  runtime_probe 5 + job_recovery 13)
 - contracts: 119+2 passed(参照実装・compose api)
 - test-ci全面緑は「最終確認」で再取得(実行時 LATCH_LLM_MODE=stub +
   load DB起動 + worker停止を忘れずに)
 
-## 次のタスク(T5から)
+## 次のタスク(T6から)
 
-- T5: 0002_jobs.sql(jobs完全版: lease/fencing/next_due/attempt記録) +
-  adapters/d1/jobs.py・evaluations.py・attempts.py +
-  runtime/cloudflare/jobs.py + test_job_recovery.py
-  (I1の20並行claim・送信前prepared・unknown・SDK再試行記録)
 - T6: domain/evaluation_key.py + adapters/d1/evaluation_cache.py +
   test_evaluation_cache.py(I2のhit/miss/削除/calibration・A/B方向)
 - T7: domain/parse_key.py + test_parse_reuse.py(I4・フロントの
