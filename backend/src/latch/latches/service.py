@@ -52,16 +52,9 @@ def _wrap_unexpected(exc: Exception) -> DependencyUnavailableError:
     return DependencyUnavailableError("latches dependency unavailable")
 
 
-def compute_new_status(response: str, responses: list[dict], total: int) -> str:
-    """手順3の純計算(design §2.4)。responsesは追記後の全量。
-
-    yes→全員yesでmatched・未満でpartial_accept(必要人数=|S|・D-06)。
-    no/defer→即rejected(グループでも部分成立なし)。
-    """
-    if response != RESPONSE_YES:
-        return "rejected"
-    yes = sum(1 for r in responses if r.get("response") == RESPONSE_YES)
-    return "matched" if yes == total else "partial_accept"
+from latch.domain.latch_status import (  # noqa: F401 — 再export(T2分離)
+    compute_new_status,
+)
 
 
 class LatchesService:
