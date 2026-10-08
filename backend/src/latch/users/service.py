@@ -34,17 +34,7 @@ from latch.users.errors import (
 )
 
 
-def age_years(birth_date: date, today: date) -> int:
-    """満年齢(design §2.3)。(月, 日)タプル比較 — 誕生日当日に加算。
-
-    2月29日生まれは、その暦日に2月29日を持たない年は3月1日に加算される
-    (自己申告値のため1日の差は許容して比較を単純に保つ)。
-    """
-    return (
-        today.year
-        - birth_date.year
-        - ((today.month, today.day) < (birth_date.month, birth_date.day))
-    )
+from latch.domain.time import age_years  # noqa: F401 — 再export(T2分離)
 
 
 # users表のUNIQUE制約名(alembic 0001)。IntegrityError分類に使う

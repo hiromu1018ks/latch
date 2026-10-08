@@ -839,6 +839,18 @@ class D1AtomicRepository:
                     " WHERE id = ? AND status = 'matched' AND expires_at <= ?"
                 ).bind(now_us, pid, now_us)
             )
+        # 検索snapshotの無効化(§3.3: 削除・同意撤回時は集合も無効化)
+        stmts.append(
+            self.db.prepare(
+                "DELETE FROM retrieval_snapshot_rows WHERE intent_id = ?"
+            ).bind(row["id"])
+        )
+        stmts.append(
+            self.db.prepare(
+                "DELETE FROM retrieval_snapshots WHERE id NOT IN ("
+                " SELECT DISTINCT snapshot_id FROM retrieval_snapshot_rows)"
+            )
+        )
         stmts.append(self._outbox_stmt(row["id"], row["version"], "deleted", now))
         await self.db.batch(stmts)
         response = {"deleted": True, "intent_id": row["id"]}
@@ -1009,7 +1021,7 @@ class D1AtomicRepository:
         user = (
             await self.db.prepare(
                 "SELECT id FROM users WHERE id = ?"
-            " AND auth_subject NOT LIKE 'deleted:%'"
+                " AND auth_subject NOT LIKE 'deleted:%'"
             )
             .bind(user_id)
             .first()

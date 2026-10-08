@@ -351,3 +351,29 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_pending ON jobs (status, next_due_at);
+
+-- 検索snapshot(T4・計画§3.3): 検索元と候補のID・版・条件・Embeddingを
+-- 固定した短期の検索集合。cursor分割読取の前提。削除・同意撤回で無効化。
+CREATE TABLE IF NOT EXISTS retrieval_snapshots (
+    id TEXT PRIMARY KEY,
+    origin_id TEXT NOT NULL,
+    origin_version INTEGER NOT NULL,
+    pass_count INTEGER NOT NULL,        -- LIMIT前の通過件数(§9固定値)
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS retrieval_snapshot_rows (
+    snapshot_id TEXT NOT NULL REFERENCES retrieval_snapshots (id),
+    intent_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    similarity REAL NOT NULL,           -- origin embeddingとのcosine類似度
+    lon REAL,
+    lat REAL,
+    radius_m INTEGER,
+    time_start INTEGER,
+    budget_max INTEGER,
+    soft_texts TEXT,
+    PRIMARY KEY (snapshot_id, intent_id)
+);
+CREATE INDEX IF NOT EXISTS idx_retrieval_snapshot_rows_intent
+    ON retrieval_snapshot_rows (intent_id);

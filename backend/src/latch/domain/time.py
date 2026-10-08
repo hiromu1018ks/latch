@@ -38,3 +38,16 @@ def micros(dt: datetime) -> int:
 def from_micros(value: int) -> datetime:
     """UTC整数マイクロ秒 → tz-aware datetime(D1保存形式の復元)。"""
     return datetime.fromtimestamp(value / 1_000_000, tz=UTC)
+
+
+def age_years(birth_date, today) -> int:
+    """満年齢(users.service.age_years と同一・T2分離)。
+
+    (月, 日)タプル比較 — 誕生日当日に加算。2月29日生まれは、その暦日に
+    2月29日を持たない年は3月1日に加算(1日の差は許容して比較を単純に保つ)。
+    """
+    return (
+        today.year
+        - birth_date.year
+        - ((today.month, today.day) < (birth_date.month, birth_date.day))
+    )
