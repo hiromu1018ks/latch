@@ -45,3 +45,5 @@ docs/interview/
 
 # staging/load環境の鍵ペア(M4 ws-1・gen-keypairの出力先)
 .staging/
+.npm-cache/
+.uv-cache/

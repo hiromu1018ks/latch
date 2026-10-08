@@ -1,0 +1,21 @@
+code_revision: 3603ca6a955da8c0da6c32da15c297d391bb5d4f
+fixture_hashes:
+  g1_alcohol: b88d5c586667d86f06623d5d5ba9e7083b7ec5500dfbbee308c496743d67f9ac
+  g1_parser_struct: 37169a64a33240128addee6179a86f30c630ce88b9b2848742cb9aec91dc7013
+  g2_jev_goldset: c4ef0abb475310d46b13d7ff1a3cc365134b9773478f185027acf0de4b101809
+  m4_seed: d66cabcce9e97bf27d3d06d36e473484457eeb3b93cf3c94a8ebab006821a32c
+limits:
+  k_cheap: 20
+  k_jev: 8
+  k_vectors: 50
+  latch_threshold: 0.6
+  one_on_one_min: 4
+model_ids:
+  embedding: gemini-embedding-001
+  jev: jev-1.13.0
+  jev_fallback: claude-haiku-4-5
+  parser: claude-haiku-4-5
+prompt_hashes:
+  jev_questions: 10a3d7d71dd4e282b611540be72df70f39cb2b7023bf0803a4e13d35a754fb67
+  parser_system_prompt: 5e7e91020d7b25497254241d5f311915f21ccc28d7457e2b4c2b4718519ffa5e
+schema_head: 0008

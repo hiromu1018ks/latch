@@ -1,0 +1,29 @@
+measured:
+  parse_parallel_identical_20:
+    dedup: none
+    llm_calls: 20
+    note: asyncio.gather 20並行(I4改善の対照)
+    requests: 20
+  parse_sequential_identical_3:
+    dedup: none
+    llm_calls: 3
+    note: IntentParseService直列3要求(上のtestで固定)
+    requests: 3
+parser_protocol: CountingParser(SupportsParseIntent適合)
+referenced:
+  frontend_parse_debounce:
+    debounce_ms: 1000
+    evidence: frontend/tests/parseFlow.test.js(233 passed)
+    note: abortはサーバー課金の取消を保証しない
+    same_text_skip: true
+  jev_same_version_second_event:
+    evidence: tests/integration/test_matching_jev.py(jev_result IS NULLの成功済み再利用・layer4)
+    llm_calls: 0
+    note: 並行API呼出しの防止ではない(計画§5.2確認済み)
+  parse_server_aggregation:
+    aggregation: none
+    evidence: 本test_b0_parse_no_server_dedup
+  reeval_suppression:
+    evidence: src/latch/worker/cost/reeval.py + tests/unit/cost
+    note: 抑制中の新しい版を残すdirty状態はB0に無し(I3対象)
+    window_minutes: 30
