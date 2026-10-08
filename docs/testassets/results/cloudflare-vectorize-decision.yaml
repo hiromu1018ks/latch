@@ -1,0 +1,25 @@
+# Vectorize採否記録(T9・2026-10-08移行計画 §3.3/§6 T9)
+decision: deferred          # 見送り(正確検索を残す・再判断条件付き)
+recorded_at: "2026-10-09"
+task: T9
+
+rationale:
+  - "計画の初期要件は『決定的ケースで正確検索と一致』。VectorizeはANNであり、
+     同点順位(intent_id昇順)・高密度の同点帯での完全一致を保証できない"
+  - "ローカル(wrangler dev)にVectorize bindingのシミュレータが無く、
+     実indexでの品質・反映遅延・削除・費用の比較は実配備の別承認が必要
+     (計画§6 T9: 検索品質・反映遅延・削除・安全性・費用の全結果、が揃うまで
+     採用しない)"
+  - "現行スケールでは正確検索(T4)のD1読取はbbox+index+snapshot方式で
+     抑えられており、PostgreSQL実測と完全一致している。ANNに置き換える
+     品質リスク(取りこぼし回復不能 — §3.3)に対する費用利得が現時点で無い"
+  - "Embeddingモデル・768次元・正規化文はVectorize側でも再利用可能なため、
+     将来の再判断のコストは低い(vector ID=IntentID+内容世代の設計済み)"
+
+revisit_conditions:
+  - "高密度地域で正確検索のD1読取行数・CPUが費用要件(§8)を超えた場合"
+  - "実indexでの比較試験(品質・反映遅延・削除反映・費用)を承認して実施できた場合"
+  - "近似検索の品質許容差(取りこぼし率)を別途承認できた場合"
+
+comparison_ready: false    # 実Vectorize index比較は未実施(承認待ち)
+fallback: "adapters/d1/retrieval.py の正確検索(決定的ケースで両者一致を試験済み)"
