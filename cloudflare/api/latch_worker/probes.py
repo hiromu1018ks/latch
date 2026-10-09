@@ -435,12 +435,14 @@ def create_app() -> FastAPI:
 
     @app.get("/probe/mem")
     async def mem_probe(mb: int = 8) -> dict:
+        mb = min(max(mb, 1), 48)  # 上限(悪用対策)
         data = bytearray(mb * 1024 * 1024)
         data[::4096] = b"\x01" * len(data[::4096])
         return {"allocated_mb": mb, "ok": True}
 
     @app.get("/probe/cpu")
     async def cpu_probe(iterations: int = 200_000) -> dict:
+        iterations = min(max(iterations, 1), 2_000_000)  # 上限(悪用対策)
         start_ns = time.time_ns()
         total = 0
         for i in range(iterations):

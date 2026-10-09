@@ -6,7 +6,7 @@
   "compatibility_flags": ["python_workers"],
   "workers_dev": true,
   "observability": {
-    "enabled": true
+    "enabled": false
   },
   "vars": {
     "LATCH_ENV": "probe",
@@ -35,6 +35,6 @@
     ]
   },
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": ["*/5 * * * *"]
   }
 }
