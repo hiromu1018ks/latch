@@ -57,3 +57,5 @@ cloudflare/jobs/python_modules/
 cloudflare/jobs/.wrangler/
 cloudflare/api/pylock.toml
 cloudflare/jobs/pylock.toml
+# 本体実装: ビルド時にbackend/src/latchからコピーされる(make cf-sync)
+cloudflare/api/latch/

@@ -9,7 +9,8 @@
     "enabled": false
   },
   "vars": {
-    "LATCH_ENV": "probe",
+    "LATCH_ENV": "api",
+    "LATCH_LLM_MODE": "stub",
     "PROBE_TEXT_VAR": "probe-value"
   },
   "d1_databases": [

@@ -4,10 +4,58 @@
 本書は実装セッション横断の作業状態記録。最終報告書は
 docs/reviews/cloudflare-migration-implementation-report.md。
 
-## 現在のフェーズ: 本体実装(D1版LATCH APIのWorkers組立)— 未着手
+## 現在のフェーズ: 本体実装(D1版LATCH API)デプロイ済み・実環境契約実行残
 
-T0〜T12完了・実配備probe完了のうえ、次は**本物のLATCH APIをWorkers上に
-組み立てる**段階(過去の「切替」ではなく新規本番構築 — 本番データ無し)。
+T0〜T12・実配備probe完了に引き続き、本体LATCH APIをWorkers上に組み立て
+**デプロイ済み**(2026-10-09・version 3b89e393・gzip 7.9MB)。
+残り: 実環境URLでの契約116ケース実行(remote mode)と make test-ci 全面確認。
+
+## 本体実装の成果(2026-10-09)
+
+- **組立**: cloudflare/api/latch_worker/ — app.py(本体routes再利用の
+  FastAPI)・state.py(env→services構築ミドルウェア)・svc_*.py(D1読取サービス)
+- **認証**: jwt_pure.py(純Python HS256/RS256・pyjwt API互換)を _compat.py
+  が sys.modules['jwt'] へ登録 — auth/tokens.py・idp.py が原改変なしで動作
+  (実pyjwt発行トークンとの相互運用を実証)。shims: sqlalchemy/redis/
+  cryptography/anthropic/typesafe_sdk はimport互換stub(実行時不使用)
+- **再利用と差し替えの境界**: routes・schemas・domain計算・errors・
+  AuthService・UserService・ConsentService・IntentParseService・RateLimiter
+  は本体クラスをそのまま使用(注入関数だけD1)。書込は atomic.apply_*
+  (command marker+outbox)。読取は svc_*.py が参照実装と同一SQL意味でD1化
+- **バンドル**: latchパッケージは `make cf-sync`(rsync)で
+  cloudflare/api/latch/ へコピー(bundlerはsymlinkを辿らない)。
+  **デプロイは `make cf-deploy` を使うこと**(cf-sync込み)
+- **geofeatures**: 0004_geofeatures_normalized.sql(正規化名列追加)+
+  ci実データ7行シード(backend/tests/cloudflare/fixtures/geofeatures_seed.sql)
+  を実D1へ適用済み
+- **契約試験**: tests/contracts/test_cloudflare_parity.py +
+  cloudflare_harness.py(local in-process / miniflare / remoteの3モード)
+  - local in-process(ASGI+LocalD1Database): **116/116 passed**
+  - miniflare(実Pyodide・実D1 API・shims/jwt_pure実経路): **116/116 passed**
+  - remote(実環境): **未実施**(ネットワーク切断で中断 — 再開手順は下記)
+- cf-unit(cloudflare資産試験): 107 passed(既存資産無傷)
+
+## 実環境契約実行の再開手順(次セッション)
+
+```
+export CLOUDFLARE_API_TOKEN=$(grep ^CLOUDFLARE_API_TOKEN= .env | cut -d= -f2-)
+cd backend
+LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
+  uv run pytest tests/contracts/test_cloudflare_parity.py -q
+# seed/cleanupはwrangler d1 execute --remote(subprocess)で行う
+# miniflare検証時は LATCH_CF_D1_SQLITE=<devのD1 sqliteパス> を代わりに指定
+```
+
+## 実配備環境(2026-10-09時点・稼働中)
+
+- Worker(API本体+probe併設): https://latch-api.hiromu1018ks.workers.dev
+  (cloudflare/api — gzip 7.9MB・cron */5・observability off・
+  vars: LATCH_ENV=api, LATCH_LLM_MODE=stub)
+- D1: latch-core(id: f40367ac-7631-4506-a083-c52e7ab51787)
+  マイグレーション0001〜0004適用済み+geofeatures 7行+probe_events表
+- Queues: latch-jobs-probe(producer/consumer稼働)
+- 認証: .envのCLOUDFLARE_API_TOKEN・アカウント67e928741c8e73415fe206699d0f1667
+- プラン: Workers Paid(2026-10のみ契約・ユーザー申告)
 
 ## 実配備環境(2026-10-09時点・稼働中)
 
@@ -152,8 +200,11 @@ T0〜T12完了・実配備probe完了のうえ、次は**本物のLATCH APIをWo
 - test-ci系実行時は `LATCH_LLM_MODE=stub` 明示必須(実環境にrealが漏れている)
 - uv: `export UV_CACHE_DIR=/home/misty/Projects/latch/.uv-cache`
   (wrangler系はMakefileのCF_ENVが一括設定: UV_PYTHON_INSTALL_DIR等)
-- ローカル検証: `make cf-unit`(worker不要)・`make cf-dev`+`make cf-probe`
-- 実配備: `cd cloudflare/api && uv run pywrangler deploy`
-  (CLOUDFLARE_API_TOKEN は .env から export してから)
+- ローカル検証: `make cf-unit`(worker不要)・`make cf-dev`(cf-sync込み・
+  別ターミナル)+`make cf-probe`
+- 実配備: **`make cf-deploy`**(cf-sync+latchコピー込み。直pywrangler deployは
+  latchコピーが更新されないため使わない)
 - 実D1確認: `npx wrangler d1 execute latch-core --remote --command "..."`
+- miniflareのD1は `wrangler d1 execute --local` がdev serverと別sqliteを
+  参照する点に注意(devが使う実ファイルへ直接sqlite3でマイグレーションした)
 - **実LLM呼出し・実データ移行はユーザー承認待ちのまま**(実配備・実D1は承認済み)

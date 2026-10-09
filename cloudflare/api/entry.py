@@ -1,10 +1,12 @@
-"""Cloudflare API Worker エントリーポイント(T1 probe)。
+"""Cloudflare API Worker エントリーポイント(本体実装・2026-10-09)。
 
-- fetch: FastAPI appをASGI経由で提供(workers.asgi.entrypoint)
-- scheduled: Cron Triggerのprobe記録(§5.4 I3のCron前提確認)
-- queue: Queues consumerのprobe記録(at-least-once再配送はT5で扱う)
+- fetch: 本体LATCH API(latch_worker.app)+ 従来のT1互換性probe(/probe/*)
+  をworkers.asgi経由で提供
+- scheduled: Cron(cron5分毎・probe記録をD1へ永続化)
+- queue: Queues consumerの受領記録(at-least-onceはT5資産・ここでは記録+ack)
 
-probeは stub のみ・外部送信なし。実配備は別承認後。
+shims(_compat)はlatchパッケージimportより先に登録する(pyjwt/sqlalchemy等の
+重依存をバンドルせず本体コードを再利用するため)。
 """
 
 from __future__ import annotations
@@ -14,9 +16,20 @@ import time
 
 from workers import asgi
 
-from latch_worker.probes import QUEUE_MESSAGES, SCHEDULED_RUNS, create_app
+from latch_worker import _compat
 
-app = create_app()
+_compat.install_shims()
+
+from latch_worker.app import create_workers_app  # noqa: E402
+from latch_worker.probes import QUEUE_MESSAGES, SCHEDULED_RUNS, create_app as create_probe_app  # noqa: E402
+
+app = create_workers_app()
+
+# 従来のprobe endpoint群(/probe/*)を本体アプリへ併設(cf-probe資産の存続)。
+# /health は本体定義を優先させるためprobe側ルートは末尾へ追加する。
+_probe = create_probe_app()
+_probe_routes = [r for r in _probe.routes if getattr(r, "path", "") != "/health"]
+app.router.routes.extend(_probe_routes)
 
 _Entry = asgi.entrypoint(app)
 

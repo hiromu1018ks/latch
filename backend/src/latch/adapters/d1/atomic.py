@@ -673,7 +673,10 @@ class D1AtomicRepository:
     async def _update_intent(self, command_id, row, mutation, now) -> CommandResult:
         now_us = micros(now)
         fields = mutation.get("fields", {})
-        new_version = row["version"] + 1
+        # version明示指定(本体実装): 参照実装の遷移規則(pause=不変・
+        # draft→active同一内容=不変・resume/update=+1)をservice層で再現する
+        # ため、mutation["version"]で上書きできる。未指定は従来どおり+1。
+        new_version = mutation.get("version", row["version"] + 1)
         new_status = fields.get("status", row["status"])
         sets = ["updated_at = ?", "version = ?", "status = ?"]
         params: list[Any] = [now_us, new_version, new_status]
