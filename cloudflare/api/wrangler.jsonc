@@ -4,32 +4,31 @@
   "main": "entry.py",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["python_workers"],
-  "workers_dev": false,
+  "workers_dev": true,
   "observability": {
-    "enabled": false
+    "enabled": true
   },
   "vars": {
-    "LATCH_ENV": "local-probe",
+    "LATCH_ENV": "probe",
     "PROBE_TEXT_VAR": "probe-value"
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "latch-core",
-      "database_id": "local-probe-db",
-      "preview_database_id": "local-probe-db-preview"
+      "database_id": "f40367ac-7631-4506-a083-c52e7ab51787"
     }
   ],
   "queues": {
     "producers": [
       {
         "binding": "JOBS",
-        "queue": "latch-jobs-local"
+        "queue": "latch-jobs-probe"
       }
     ],
     "consumers": [
       {
-        "queue": "latch-jobs-local",
+        "queue": "latch-jobs-probe",
         "max_batch_size": 10,
         "max_retries": 3
       }

@@ -1,0 +1,55 @@
+# 実Workers実配備probe結果(T1別承認項目・2026-10-09)
+deployed_url: https://latch-api.hiromu1018ks.workers.dev
+account_id: 67e928741c8e73415fe206699d0f1667
+worker: latch-api (Python Workers / Pyodide 3.14.2)
+plan: Workers Paid(2026-10のみ契約・ユーザー申告)
+bundle:
+  raw_kib: 33504
+  gzip_kib: 7271          # 上限10MB(gzip)内
+  modules: 2288
+  note: LLM SDK import検証はローカルのみ(実配備バンドルから除外)
+d1:
+  database: latch-core (f40367ac-7631-4506-a083-c52e7ab51787)
+  migrations_applied: ["0001_core.sql(44q)", "0002_jobs.sql(11q)", "0003_schedule.sql(2q)"]
+  probe_results:
+    prepare_first: OK
+    batch_atomic: OK
+    zero_row_update: OK (meta.changes=0)
+queues:
+  queue: latch-jobs-probe
+  e2e_send_to_delivered_s: 8.6      # consumer batch遅延込み
+  consumer_d1_record: OK
+  payload_rule: JSON文字列で送る(§4規律 — dict送信では本文が化ける)
+cron:
+  schedule: "* * * * *"
+  fired: OK(毎分・tailで「Ok」確認)
+  d1_persisted_runs: 17
+measurements:
+  cold_start_first_request_ms: 1100
+  warm_health_10_ms: [116, 120, 110, 113, 118, 126, 118, 116, 110, 110]
+  warm_note: "デプロイ直後は350〜1400ms(isolate churn)・安定後110〜126ms(日本から)"
+  jwt_hs256: OK(発行/検証/改変拒否/期限拒否)
+  jwt_rs256_pure_python: OK(128ms)
+  jwks_async_fetch: "fetch自体はOK(status取得)・workers.dev自我subrequestは404制限あり"
+  state_isolation_20parallel: OK
+  mem_32mb: OK
+  cpu_probe_time_note: "Pyodide実環境ではtime系関数がCPU中に進まないためduration計測は不正確(機能影響なし)"
+import_checks_deployed:
+  hashlib: ok
+  hmac: ok
+  decimal: ok
+  uuid: ok
+  sqlite3: ok
+  asyncio: ok
+  note: "cryptography/pyjwt/LLM SDKはバンドル外(ローカル検証済み・cloudflare-runtime-probe-20261008-142457.yaml)"
+findings:  # 実配備で発見した差異(重要)
+  - "scheduled/queueハンドラのenvはself.env(引数envはNone) — localのminiflareでは引数が入る差"
+  - "D1 .all()はD1Result{success,meta,results}を返し行はresults内 — localは行配列(.first()は同一に動作)"
+  - "本番マルチisolateではメモリ内グローバルが共有されない — scheduled/queue記録はD1永続化が必須(§2.3規律の実証)"
+  - "workers.devドメインへの自己subrequestは404 — 自己fetchにはservice bindingかカスタムドメインが必要(外部URLへのfetchは影響なし)"
+  - "JsProxy経由の値はstr()/int()で明示変換(json.loads等の型要求に注意)"
+cost_this_probe:
+  note: "Workers Paid $5/月の枠内(推定: リクエスト数千・D1読書数万行・Queues数十ops・cron 43k/月=全て付属枠内)"
+next_approval_pending:
+  - "T3実D1でのコマンド試験一式(atomic adapterをworker endpointへ組む必要あり=本体内実装)"
+  - "実LLM品質比較・実push(ws-9)・本番切替(T12手順書)"

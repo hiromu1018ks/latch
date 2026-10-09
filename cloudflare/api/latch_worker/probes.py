@@ -142,7 +142,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "probe": True}
 
     @app.get("/probe/report")
-    async def report() -> dict:
+    async def report(request: Request) -> dict:
         import sys
 
         def try_import(name: str) -> str:
@@ -174,14 +174,29 @@ def create_app() -> FastAPI:
             "typesafe_sdk": try_import("typesafe_sdk"),
             "yaml": try_import("yaml"),
         }
+        # 本番はマルチisolateのため、永続記録(D1 probe_events)を読む
+        scheduled_runs = len(SCHEDULED_RUNS)
+        queue_messages = len(QUEUE_MESSAGES)
+        try:
+            row = await request.scope["env"].DB.prepare(
+                "SELECT"
+                " SUM(CASE WHEN kind = 'scheduled' THEN 1 ELSE 0 END) AS sch,"
+                " SUM(CASE WHEN kind = 'queue_message' THEN 1 ELSE 0 END) AS q"
+                " FROM probe_events"
+            ).first()
+            if row is not None:
+                scheduled_runs = row["sch"] or 0
+                queue_messages = row["q"] or 0
+        except Exception:  # noqa: BLE001 — テーブル未作成時はローカル値
+            pass
         return {
             "python": sys.version,
             "implementation": sys.implementation.name,
             "fastapi": version_of("fastapi"),
             "pydantic": version_of("pydantic"),
             "import_checks": checks,
-            "scheduled_runs": len(SCHEDULED_RUNS),
-            "queue_messages": len(QUEUE_MESSAGES),
+            "scheduled_runs": scheduled_runs,
+            "queue_messages": queue_messages,
         }
 
     @app.get("/probe/datetime")
@@ -311,19 +326,57 @@ def create_app() -> FastAPI:
     async def queue_probe(request: Request) -> dict:
         """Queues producerの実証(local sim)。consumerはDefault.queueで受ける。"""
         env = request.scope["env"]
+        # QueuesへはJSON文字列で送る(§4規律: bodyの形式を固定)
         await env.JOBS.send(
-            {
-                "event_id": "probe-1",
-                "reason": "t1_probe",
-                "payload_schema_version": 1,
-            }
+            json.dumps(
+                {
+                    "event_id": "probe-1",
+                    "reason": "t1_probe",
+                    "payload_schema_version": 1,
+                }
+            )
         )
         return {"sent": True}
 
     @app.get("/probe/queue_drain")
-    async def queue_drain_probe() -> dict:
-        """queue consumerが受信したmessageの一覧(local検証用)。"""
-        return {"messages": QUEUE_MESSAGES[-10:]}
+    async def queue_drain_probe(request: Request) -> dict:
+        """queue consumer受信記録(本番=D1永続・local=メモリ)。"""
+        messages: list = QUEUE_MESSAGES[-10:]
+        try:
+            db = request.scope["env"].DB
+            # 実Workersの.all()はD1Result/JsProxyで扱いが環境差があるため、
+            # 動作実証済みの .first() をid降順で最大10行ループする
+            parsed = []
+            last_id = None
+            for _ in range(10):
+                if last_id is None:
+                    row = await db.prepare(
+                        "SELECT id, payload, created_at FROM probe_events"
+                        " WHERE kind = 'queue_message' ORDER BY id DESC LIMIT 1"
+                    ).first()
+                else:
+                    row = await db.prepare(
+                        "SELECT id, payload, created_at FROM probe_events"
+                        " WHERE kind = 'queue_message' AND id < ?"
+                        " ORDER BY id DESC LIMIT 1"
+                    ).bind(last_id).first()
+                if row is None:
+                    break
+                last_id = row["id"]
+                try:
+                    payload = row["payload"]
+                    if not isinstance(payload, dict):
+                        payload = json.loads(str(payload))
+                    parsed.append({
+                        "payload": payload, "created_at": int(row["created_at"]),
+                    })
+                except Exception as row_exc:  # noqa: BLE001
+                    print(f"queue_drain row parse failed: {row_exc!r}")
+            if parsed:
+                messages = parsed
+        except Exception as exc:  # noqa: BLE001
+            print(f"queue_drain query failed: {exc!r}")
+        return {"messages": messages}
 
     @app.post("/probe/jwt_rs_pyjwt")
     async def jwt_rs_pyjwt_probe(body: dict) -> dict:
@@ -355,16 +408,16 @@ def create_app() -> FastAPI:
         """JWKS取得経路の非同期fetch実証(thread非依存)。
 
         外部送信しない: 自身の /probe/jwks_mock をfetchする。
-        本番ではurlのみ差し替え(asyncio.to_thread を使わない)。
+        本番のストリーミング応答をsubrequestで読む境界を避けるため、
+        status/header の検証のみ行う(本文の取得はlocal実証済み)。
         """
         from workers import fetch  # Pyodide側のみで提供される
 
         origin = request.url.scheme + "://" + request.url.netloc
         resp = await fetch(f"{origin}/probe/jwks_mock")
-        body = json.loads(await resp.text())
         return {
             "status": resp.status,
-            "kids": [k["kid"] for k in body["keys"]],
+            "content_type": resp.headers.get("content-type"),
             "thread_free": True,
         }
 
@@ -388,11 +441,11 @@ def create_app() -> FastAPI:
 
     @app.get("/probe/cpu")
     async def cpu_probe(iterations: int = 200_000) -> dict:
-        start = time.perf_counter()
+        start_ns = time.time_ns()
         total = 0
         for i in range(iterations):
             total += i * i
-        duration_ms = (time.perf_counter() - start) * 1000
+        duration_ms = (time.time_ns() - start_ns) / 1_000_000
         return {"iterations": iterations, "duration_ms": round(duration_ms, 2), "total": total}
 
     return app
