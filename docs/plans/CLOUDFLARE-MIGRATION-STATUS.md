@@ -4,17 +4,53 @@
 本書は実装セッション横断の作業状態記録。最終報告書は
 docs/reviews/cloudflare-migration-implementation-report.md。
 
-## 最終状態(2026-10-09): T0〜T12 全完了・全試験緑・本番切替は承認待ち
+## 現在のフェーズ: 本体実装(D1版LATCH APIのWorkers組立)— 未着手
+
+T0〜T12完了・実配備probe完了のうえ、次は**本物のLATCH APIをWorkers上に
+組み立てる**段階(過去の「切替」ではなく新規本番構築 — 本番データ無し)。
+
+## 実配備環境(2026-10-09時点・稼働中)
+
+- Worker(probe): https://latch-api.hiromu1018ks.workers.dev
+  (cloudflare/api — FastAPI/Pyodide・gzip 7.3MB・cron */5・observability off)
+- D1: latch-core(id: f40367ac-7631-4506-a083-c52e7ab51787)
+  マイグレーション0001〜0003適用済み+probe_events表
+- Queues: latch-jobs-probe(producer/consumer稼働)
+- 認証: .envのCLOUDFLARE_API_TOKEN・アカウント67e928741c8e73415fe206699d0f1667
+- プラン: Workers Paid(2026-10のみ契約・ユーザー申告)
+
+## 実配備で判明した差異(本体実装で必ず反映)
+
+1. scheduled/queueハンドラのenvはself.envから取得(引数envはNone)
+2. D1の.all()はD1Result{success,meta,results}形式(行は.results内)。
+   .first()はlocalと同一動作 — 複数行読取は.first()ループかraw処理が確実
+3. マルチisolate: メモリ内グローバルは共有されない — 状態はD1永続化
+4. workers.devドメインへの自己subrequestは404 — service binding/カスタム
+   ドメインが必要(外部URLへのfetchは無関係)
+5. JsProxy値はstr()/int()で明示変換(json.loads等の型要求)
+
+## 本体実装の要点(次セッションの仕事)
+
+- 再利用: backend/src/latch/(routes・schemas・domain計算) +
+  adapters/d1/(atomic・latches・intents・safety・sessions・retrieval等)
+- LLM SDK・pyjwtはバンドル不可(gzip 10MB上限)→
+  LLM: fetch直書きtransport(stubで開始)・JWT: probes.pyの純Python
+  HS256/RS256実装を認証へ流用
+- 契約試験: backend/tests/contracts/(119ケース・transport自由)を
+  実環境URLへ流す — PostgreSQL用reference_harnessと同型の
+  cloudflare_harnessが必要(actor provisioningはデプロイ済みAPI経由。
+  認証鍵はwrangler secret/varで同一テスト鍵を設定)
+- 費用: Workers Paid枠内。実LLM呼出しは別承認(未実施のまま)
+
+## 過去の成果(詳細は各節)
 
 - test-ci全套: **1988 passed, 1 skipped, 0 failed**(クリーンDB)
 - frontend: 236 passed
-- 最終報告書: docs/reviews/cloudflare-migration-implementation-report.md
-- 本番切替手順: docs/operations/cloudflare-cutover.md
-- 採否記録: Vectorize=deferred(docs/testassets/results/cloudflare-vectorize-decision.yaml)
-  I1/I2/I3/I5=採用・I4=一部採用(永続cacheは承認待ち)・I6=別実験
-- 承認待ち: 実配備probe(T1)・実D1確認(T3)・実環境実測(T11)・実push(ws-9)
+- 実配備probe実測: コールド1.1秒/warm 110-126ms・Queues E2E 8.6秒・
+  cron毎分→5分・純Python RS256動作(記録: cloudflare-prod-probe-20261009.yaml)
+- 採否: I1/I2/I3/I5=採用・I4=一部採用・I6=別実験・Vectorize=deferred
 
-## 完了タスク
+## 完了タスク詳細
 
 ### T0: 比較基準と契約の固定 ✅ (commit dd2a59b)
 - backend/tests/contracts/: ContractCase 119ケース(データ駆動・全API領域)
@@ -113,8 +149,11 @@ docs/reviews/cloudflare-migration-implementation-report.md。
 
 - compose ci常設: 起動中。test-ci系は `docker compose stop worker` してから
 - massloadは `docker compose -f compose.load.yaml up -d db` が前提
+- test-ci系実行時は `LATCH_LLM_MODE=stub` 明示必須(実環境にrealが漏れている)
 - uv: `export UV_CACHE_DIR=/home/misty/Projects/latch/.uv-cache`
-- 実測値をCIに残すenv: `LATCH_LLM_MODE=stub LATCH_PUBSUB_EMULATOR_HOST=127.0.0.1:8085`
-- wrangler系: `make cf-dev`(pywrangler)→ `make cf-probe`
-  (XDG_CONFIG_HOME等はMakefileのCF_ENVが処理)
-- 実D1・実Workers配備・実データ移行はユーザー承認待ち(計画§6・目標制約)
+  (wrangler系はMakefileのCF_ENVが一括設定: UV_PYTHON_INSTALL_DIR等)
+- ローカル検証: `make cf-unit`(worker不要)・`make cf-dev`+`make cf-probe`
+- 実配備: `cd cloudflare/api && uv run pywrangler deploy`
+  (CLOUDFLARE_API_TOKEN は .env から export してから)
+- 実D1確認: `npx wrangler d1 execute latch-core --remote --command "..."`
+- **実LLM呼出し・実データ移行はユーザー承認待ちのまま**(実配備・実D1は承認済み)
