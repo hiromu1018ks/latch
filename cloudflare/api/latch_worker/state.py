@@ -3,7 +3,7 @@
 WorkersではenvがASGI scope経由で届くため(lifespanでは取得できない)、
 初回HTTPリクエスト時にscope["env"]からD1 bindingを取りservicesを構築する
 (1isolateで1回 — servicesはstatelessなため安全)。testkeys.load_jwksは
-Pyodideでdata fileを読めないため埋め込みJWKSへ差し替える。
+Pyodideでのみ埋め込みJWKSへ差し替える(CPythonでは同梱ファイルをそのまま)。
 """
 
 from __future__ import annotations
@@ -21,10 +21,21 @@ def _var(env, name: str, default: str = "") -> str:
 
 
 def _patch_testkeys_loader() -> None:
-    """load_jwks を埋め込みJWKSへ差し替え(ファイル読み込み不能なため)。"""
+    """Pyodide(ファイル読み取り不可)のときのみ load_jwks を埋め込みJWKSへ差し替え。
+
+    CPython(契約試験のin-process実行など)では同梱ファイルが読めるため
+    差し替えない — 本物のload_jwks(鍵ディレクトリ差し替え対応)をそのまま
+    使い、同一プロセスの他試験(test_tools)への影響を避ける。
+    """
+    import latch.auth.testkeys as testkeys
+
+    try:
+        testkeys.load_jwks()
+        return  # ファイル読み取り可能(CPython) — 差し替え不要
+    except Exception:  # noqa: BLE001 — PyodideはPath読み取り不可
+        pass
     from latch_worker.testjwks import EMBEDDED_JWKS
 
-    import latch.auth.testkeys as testkeys
     import latch.auth.idp as idp_mod
 
     testkeys.load_jwks = lambda: EMBEDDED_JWKS

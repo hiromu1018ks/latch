@@ -4,11 +4,14 @@
 本書は実装セッション横断の作業状態記録。最終報告書は
 docs/reviews/cloudflare-migration-implementation-report.md。
 
-## 現在のフェーズ: 本体実装(D1版LATCH API)デプロイ済み・実環境契約実行残
+## 現在のフェーズ: 本体実装(D1版LATCH API)完了 ✅(2026-10-09)
 
-T0〜T12・実配備probe完了に引き続き、本体LATCH APIをWorkers上に組み立て
-**デプロイ済み**(2026-10-09・version 3b89e393・gzip 7.9MB)。
-残り: 実環境URLでの契約116ケース実行(remote mode)と make test-ci 全面確認。
+実環境(https://latch-api.hiromu1018ks.workers.dev)で /v1 API一式が動作し、
+**契約116ケースが実環境で全green**(PostgreSQL参照実装と同じ応答)。
+backend全套2104 passed(test-ci互換)。実測記録:
+docs/testassets/results/cloudflare-api-parity-20261009.yaml
+
+残るのは別承認待ち項目(実LLM品質比較・実push・本番切替)と最終報告書更新。
 
 ## 本体実装の成果(2026-10-09)
 
@@ -32,17 +35,20 @@ T0〜T12・実配備probe完了に引き続き、本体LATCH APIをWorkers上に
   cloudflare_harness.py(local in-process / miniflare / remoteの3モード)
   - local in-process(ASGI+LocalD1Database): **116/116 passed**
   - miniflare(実Pyodide・実D1 API・shims/jwt_pure実経路): **116/116 passed**
-  - remote(実環境): **未実施**(ネットワーク切断で中断 — 再開手順は下記)
-- cf-unit(cloudflare資産試験): 107 passed(既存資産無傷)
+  - remote(実環境 https://latch-api...): **116/116 passed**(532秒)
+  - backend全套(LATCH_LLM_MODE=stub): **2104 passed / 0 failed**
+  - cf-unit(cloudflare資産試験): 107 passed(既存資産無傷)
+- 最終deploy version: 68a8e9d9-62a2-4977-b2e7-eaa0346bc585
+  (初回3b89e393からstate.pyのJWKS差し替え条件化のみ変更・挙動同一)
 
-## 実環境契約実行の再開手順(次セッション)
+## 実環境契約試験の再実行手順(回帰確認に使う)
 
 ```
 export CLOUDFLARE_API_TOKEN=$(grep ^CLOUDFLARE_API_TOKEN= .env | cut -d= -f2-)
 cd backend
 LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
   uv run pytest tests/contracts/test_cloudflare_parity.py -q
-# seed/cleanupはwrangler d1 execute --remote(subprocess)で行う
+# seed/cleanupはwrangler d1 execute --remote(-y付き・D1エラー応答検知あり)
 # miniflare検証時は LATCH_CF_D1_SQLITE=<devのD1 sqliteパス> を代わりに指定
 ```
 

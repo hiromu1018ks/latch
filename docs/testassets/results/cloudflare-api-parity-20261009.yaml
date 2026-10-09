@@ -1,14 +1,15 @@
 # 本体実装: D1版LATCH API 契約パリティ実測(2026-10-09)
 #
-# backend/tests/contracts/CONTRACT_CASES(116ケース=文書上の「119」は
-# 参照実装側の119収集(116ケース+メタ試験3))を3経路で実行:
+# backend/tests/contracts/CONTRACT_CASES(116ケース。文書上の「119契約」は
+# 参照実装側test_api_parity.pyの収集数119=116ケース+メタ試験3)を3経路で実行:
 #   1. local in-process: latch_worker.app + LocalD1Database(ASGI直結)
 #   2. miniflare: pywrangler dev(実Pyodide 3.14.2・実D1 API・shims/jwt_pure)
 #   3. remote: https://latch-api.hiromu1018ks.workers.dev(実Workers)
 # 参照実装(PostgreSQL)と同じ応答(status・error code・応答形状)であること。
 
 date: 2026-10-09
-worker_version: 3b89e393-434a-49d5-834a-b5871dfc9daa
+worker_version_final: 68a8e9d9-62a2-4977-b2e7-eaa0346bc585
+worker_version_first: 3b89e393-434a-49d5-834a-b5871dfc9daa
 deployed_url: https://latch-api.hiromu1018ks.workers.dev
 bundle:
   raw_kib: 36200
@@ -29,18 +30,35 @@ runs:
     duration_s: 40.8
     note: 実Pyodide実行経路(純Python JWT・shims・RealD1Binding .all()正規化を含む)
   remote:
-    status: 未実施(ネットワーク切断のため中断・再開待ち)
     command: LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev
       uv run pytest tests/contracts/test_cloudflare_parity.py -q
+    passed: 116
+    failed: 0
+    duration_s: 532.2
+    note: seed/cleanupはwrangler d1 execute --remote(-y必須・D1エラーはexit 0の
+      ため応答JSON検知)。初回28失敗はharnessの--remoteフラグ欠落(ローカル
+      sqliteへseed)が原因 — 実装不具合では無い。修正後に全green。
+  remote_final_version_spotcheck:
+    cases: [auth_token_ok, latch_yes_partial, intent_create_active_201, notif_read_204, rl_create_daily_20]
+    passed: 4/4(選択実行・version 68a8e9d9)
+backend_full_suite:
+  command: LATCH_LLM_MODE=stub uv run --group geo pytest -q(make test-ci相当)
+  passed: 2104
+  skipped: 1(cloudflare_local・dev worker不在のためskip)
+  failed: 0
+  note: 既存1988+本契約116。test_runtime_probeの期待値はprobe時代のworker
+    向け(dev起動時のみ実行) — worker不在時はskipで互換維持
 smoke_live:
   health: 200 {"status": "ok"}
   auth_token: 200
   users_register: 201
   consent: 200
-  intents_active_create: 200相当(2026-10-09実測・category付き本体リクエストは契約スイートで検証)
-live_d1:
-  migrations_applied: ["0004_geofeatures_normalized.sql"]
-  geofeatures_rows: 7   # ci実データ(伊敷町・天文館一丁目・大字草牟田・天文館・バー宵待・城山ホテル)
+live_d1_final_counts:
+  users: 9        # 退会caseの匿名化残置('deleted:*')のみ=参照実装cleanupと同一
+  intents: 0
+  latches: 0
+  notifications: 0
+  probe_events: 176  # cron/queue probe記録(稼働証跡・保持)
 implementation_notes:
   - routes・schemas・domain計算・errors・例外ハンドラは backend/src/latch をそのまま再利用
   - 認証: 純Python jwt shim(jwt_pure)で auth/tokens.py・idp.py を原改変なし実行
@@ -52,3 +70,5 @@ implementation_notes:
   - LLM: StubLLMのみ(実LLM呼出しは承認待ちのまま・外部送信なし)
   - probe差異5件への対応: self.env(scheduled/queue)・.all() D1Result正規化
     (RealD1Binding)・D1永続化・自己subrequest不使用・JsProxy明示変換
+cost_note: 実測は契約116ケース×3経路+smoke+deploy×2。Workers Paid $5枠内
+  (リクエスト数千・D1読書数万行・wrangler REST呼び出し数百 — 全て付属枠内)

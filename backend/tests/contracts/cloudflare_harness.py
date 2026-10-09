@@ -79,9 +79,10 @@ class WranglerD1:
             "execute",
             self._database,
         ]
-        if self._local:
-            args.append("--local")
-        args += ["--json", "--command", sql]
+        # local(miniflare検証)以外は --remote(既定がlocalのため明示必須)
+        args.append("--local" if self._local else "--remote")
+        # -y 必須: 非対話環境では確認応答なしではremote実行が失敗する
+        args += ["--json", "-y", "--command", sql]
         proc = subprocess.run(  # noqa: S603
             args,
             cwd=WRANGLER_DIR,
@@ -95,6 +96,7 @@ class WranglerD1:
             raise RuntimeError(
                 f"wrangler d1 execute failed: {proc.stderr[-2000:]}"
             )
+        _raise_on_d1_error(proc.stdout)
         return proc.stdout
 
     def apply_file(self, path: Path) -> str:
@@ -109,9 +111,8 @@ class WranglerD1:
             "execute",
             self._database,
         ]
-        if self._local:
-            args.append("--local")
-        args += ["--json", "--file", str(path)]
+        args.append("--local" if self._local else "--remote")
+        args += ["--json", "-y", "--file", str(path)]
         proc = subprocess.run(  # noqa: S603
             args,
             cwd=WRANGLER_DIR,
@@ -123,7 +124,28 @@ class WranglerD1:
         )
         if proc.returncode != 0:
             raise RuntimeError(f"wrangler d1 execute --file failed: {proc.stderr[-2000:]}")
+        _raise_on_d1_error(proc.stdout)
         return proc.stdout
+
+
+def _raise_on_d1_error(stdout: str) -> None:
+    """wranglerはD1/SQLエラーでもexit 0でJSONを返すため検知して例外へ。"""
+    stripped = stdout.strip()
+    if not stripped:
+        return
+    try:
+        start = stripped.index("[") if stripped.startswith("[") else stripped.index("{")
+        data = json.loads(stripped[start:])
+    except ValueError:
+        return
+    items = data if isinstance(data, list) else [data]
+    for item in items:
+        if isinstance(item, dict) and "error" in item:
+            err = item["error"]
+            notes = [n.get("text", "") for n in err.get("notes", []) if isinstance(n, dict)]
+            raise RuntimeError(
+                f"D1 error: {err.get('text')} {'; '.join(notes)}".strip()
+            )
 
 
 class CloudflareHarness:
