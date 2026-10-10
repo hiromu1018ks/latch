@@ -601,6 +601,8 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow, block
 
   const render = async (latch) => {
     stopTimers();
+    // chipsの選択は送信時に消費する。描画は常にサーバの真実から組み直す
+    declineReasons = new Set();
     respondFlow = createRespondFlow({
       client,
       latchId: latch.id,
