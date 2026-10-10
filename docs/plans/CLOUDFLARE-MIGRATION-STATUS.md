@@ -4,15 +4,27 @@
 本書は実装セッション横断の作業状態記録。最終報告書は
 docs/reviews/cloudflare-migration-implementation-report.md。
 
-## 現在のフェーズ: バックグラウンド処理(マッチングパイプライン)組込み完了 ✅(2026-10-10)
+## 現在のフェーズ: フロントエンド配線(Workers Assets配信)完了 ✅(2026-10-10)
 
-実環境(https://latch-api.hiromu1018ks.workers.dev)で**意図保存からLATCH成立・
-通知記録までの非同期パイプラインが稼働**。実測:
-docs/testassets/results/cloudflare-pipeline-e2e-20261010-010604.yaml
-(意図2件→提案自動生成11.7秒→回答→matched・通知配送記録4件・全job収束)。
+実環境(https://latch-api.hiromu1018ks.workers.dev)で**同一オリジンによる
+フロント配信+APIが稼働**。ブラウザ実機でログイン→同意→意図作成→提案自動
+生成→回答→成立→チャット送信まで通ることを確認。実測:
+docs/testassets/results/cloudflare-frontend-e2e-20261010-015344.yaml
+(提案は意図保存後49秒以内にホーム/お知らせへ出現・通知配送記録4件・
+D1はE2E実施前のbaselineへ復元)。
 
+- wrangler.jsoncへassets(frontend/dist/client・SPA fallback・
+  run_worker_first=[/v1/*,/health,/probe/*])を追加。run_worker_first配列形式は
+  wrangler>=4.20(実効4.149)でサポート — Sec-Fetch-Mode: navigateな/v1直接
+  naviでもworkerへ到達することを実測確認
+- make cf-deployがfrontend build(npm ci && npm run build)込みに統合
+  (唯一のデプロイ経路を維持)
+- 回帰: 契約remote 116/116(328秒・assets配信後のversionで全green)・
+  frontend vitest 236・cf-unit 111(+remote gated skip 1)・
+  gzip 7925KiB不変(assetsはscript上限外)
+- frontend/srcのコード変更ゼロ(ユーザー登録POST /v1/usersはv1フロントにUIが
+  ないためAPI直叩きで事前実施 — 記録YAMLに明記)
 - LLMはstubのまま(実LLM呼出しは承認待ち・外部送信なし)
-- 契約116ケースは組込み後も実環境で全green(2026-10-10・336秒)
 - 残るのは別承認待ち項目(実LLM品質比較・実push・本番切替)と最終報告書更新
 
 ## 本体実装の成果(2026-10-09)
@@ -72,6 +84,27 @@ docs/testassets/results/cloudflare-pipeline-e2e-20261010-010604.yaml
 - **テスト現況**: backend全套 **2108 passed / 0 failed**(2104+パイプライン4)
   ・cf-unit **111 passed**(107+4)・契約remote 116/116(2026-10-10)
 
+## フロントエンド配線の成果(2026-10-10)
+
+- **assets設定**: cloudflare/api/wrangler.jsoncへ
+  `"assets": {"directory": "../../frontend/dist/client",
+  "not_found_handling": "single-page-application",
+  "run_worker_first": ["/v1/*", "/health", "/probe/*"]}` を追加。
+  wranglerは設定ファイル相対のプロジェクト外パスを拒否しないためcf-sync的な
+  コピーは不要(ドライランで"Read 34 files"を確認)
+- **Makefile**: cf-deployが `cd frontend && npm ci && npm run build` から
+  始まる(make cf-deploy = 唯一のデプロイ経路・frontend build込み)
+- **routing実測(curl)**: (a) `/` =200 index.html (b) `/v1/intents` 無認証=
+  401 JSON(worker到達・Sec-Fetch-Mode: navigate付きでも同一=run_worker_first
+  効) (c) `/health`=200 ok・`/probe/report`=200 worker応答 (d) 未知パス=
+  200 index.html(SPA fallback) (e) 静的asset=200(正しいcontent-type)
+- **実機結合(ブラウザ=ZCode in-app browser)**: alpha=UI全面経由
+  (トークンパネル→オンボーディング同意→意図入力+条件編集→提案確認→
+  参加する→成立後チャット送信)・beta=API直叩き(相手側として許容)。
+  登録(POST /v1/users)のみAPI(v1フロントに登録UIなし・コード変更ゼロ)
+- **deploy version**: 7d9e0c78-55ba-43b7-8a67-21ac7d559e70
+  (gzip 7925.29KiB・assets 32ファイル)
+
 ## 実環境契約試験の再実行手順(回帰確認に使う)
 
 ```
@@ -85,7 +118,11 @@ LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
 
 ## 実配備環境(2026-10-10時点・稼働中)
 
-- Worker(API本体+probe併設): https://latch-api.hiromu1018ks.workers.dev
+- Worker(API本体+probe+フロントassets併設): https://latch-api.hiromu1018ks.workers.dev
+  (cloudflare/api — gzip 7925KiB(上限10MB)・cron */5・observability off・
+  vars: LATCH_ENV=api, LATCH_LLM_MODE=stub・queue consumer稼働。
+  Workers Assetsでfrontend/dist/clientを同一オリジン配信・API/probe経路は
+  run_worker_firstでworker先行)
   (cloudflare/api — gzip 7925KiB(上限10MB)・cron */5・observability off・
   vars: LATCH_ENV=api, LATCH_LLM_MODE=stub・queue consumer稼働)
 - D1: latch-core(id: f40367ac-7631-4506-a083-c52e7ab51787)

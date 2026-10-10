@@ -212,3 +212,70 @@ docs/testassets/results/cloudflare-pipeline-e2e-20261010-010604.yaml
 バンドル: gzip 7925KiB(上限10MB内・本体実装から+7KiB)・cron */5維持・
 observability off維持(cron結果はprobe_eventsへ稼働証跡として記録)。
 費用: 実測範囲(契約×2+デプロイ×2+E2E×2+cron数百回)はWorkers Paid $5枠内。
+
+## 9. フロントエンド配線: Workers Assets配信+実機結合(2026-10-10)
+
+API・パイプライン稼働中の同一Workerへ、ビルド済みフロント(v1完成済・
+API呼び出しは相対パス/v1・ハッシュルーティング)を同一オリジンで配信し、
+ブラウザ実機でログインからLATCH成立・チャットまでを確認した。
+frontend/srcのコード変更はゼロ(配信と接続の差し替えのみ)。
+
+### 9.1 配線
+
+- cloudflare/api/wrangler.jsoncへassets設定を追加:
+  `directory: ../../frontend/dist/client`(viteのoutDir。wranglerは設定
+  ファイル相対のプロジェクト外パスを受け入れるためコピー不要)、
+  `not_found_handling: single-page-application`(ハッシュルーティングの
+  未知パスはindex.htmlへ)、`run_worker_first: ["/v1/*", "/health", "/probe/*"]`
+  (SPA fallbackにAPI経路が飲まれないようworker先行。配列形式は
+  wrangler>=4.20・実効4.149でサポート)
+- Makefile cf-deployをfrontend build込みに統合
+  (`cd frontend && npm ci && npm run build` → cf-sync → pywrangler deploy)。
+  `make cf-deploy`が唯一のデプロイ経路であることは不変
+- デプロイ: version 7d9e0c78(assets 32ファイル・gzip 7925.29KiBで
+  scriptサイズ不変=assetsはscript上限外の想定どおり)
+
+### 9.2 routing実測(curl・デプロイ直後)
+
+| 検証 | 結果 |
+|---|---|
+| `/` | 200 text/html・LATCH index.html |
+| `/v1/intents`(無認証) | 401 application/json `UNAUTHENTICATED`(worker到達) |
+| `/v1/intents` + `Sec-Fetch-Mode: navigate` | 401 JSONのまま(navigation特例をrun_worker_firstが解除) |
+| `/health` | 200 `{"status":"ok"}` |
+| `/probe/report` | 200 worker応答(python 3.14.2・fastapi 0.143.0) |
+| 未知パス(navigation) | 200 index.html(SPA fallback) |
+| 静的asset(/assets/index-*.js) | 200 text/javascript |
+
+### 9.3 実機結合(ブラウザ=ZCode in-app browser)
+
+実測記録: docs/testassets/results/cloudflare-frontend-e2e-20261010-015344.yaml
+(スクリーンショット2枚添付)
+
+- alpha(主体)=UI全面経由: 開発用トークンパネルへIdPトークン貼付→接続
+  (POST /v1/auth/token)→未同意につき#/onboardingへ自動誘導→「上記に同意
+  します」→同意(POST /v1/users/me/consent)→意図一文入力(stub parseで
+  条件生成)→時間・場所を行編集(2026-10-11T19:00+09:00/天文館)→
+  「このIntentを預ける」確認モーダル→「Intentを確認する」(POST /v1/intents)
+  →ホームのLATCH候補に提案出現(保存後49秒以内・queue即時経路)→お知らせ
+  に提案通知→詳細で「参加する」→「あと1人の回答が必要」
+- beta(相手)=API直叩き(許容範囲): 同条件の意図投稿→成立後にyes回答
+- 成立: 詳細画面に集合情報(2026-10-11 19:00・鹿児島市バー宵待)・参加者
+  2名(合意後開示)・チャット領域表示。チャット1件送信し表示確認。
+  成立済みLATCHリストへ表示・お知らせに「LATCHが成立しました。」
+- ユーザー登録(POST /v1/users)のみAPIで実施 — v1フロントに登録UIは
+  存在しない(design上の前提)ため。frontend/srcは変更ゼロ
+- D1: jobs未収束0・outbox未送0・通知4件(提案2+成立2)・cron配送記録4件。
+  確認後にfe-e2e-% subject前置辞で全データを削除しE2E実施前のbaselineへ復元
+
+### 9.4 回帰(assets配信後)
+
+| スイート | 件数 | 備考 |
+|---|---|---|
+| 契約(remote) | **116/116 passed**(328秒) | 実環境・assets配信後のversion |
+| frontend vitest | **236 passed** | frontend無傷 |
+| cf-unit | **111 passed**(+remote gated E2Eのskip 1) | cloudflare資産無傷 |
+| scriptサイズ | gzip 7925.29KiB | 上限10MB内・assets追加で不変 |
+
+備考(実運用メモ): Cloudflareのbrowser integrity checkが既定UAの
+`Python-urllib`を拒否(error 1010)。curl/httpx/ブラウザは影響なし。

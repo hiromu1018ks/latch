@@ -1,0 +1,102 @@
+# フロントエンド配線 実機結合実測(Workers Assets配信開始後・2026-10-10)
+#
+# 背景: wrangler.jsoncへassets(frontend/dist/client・SPA fallback・
+# run_worker_first=[/v1/*,/health,/probe/*])を追加し、make cf-deployが
+# frontend build込みになった最初のデプロイ(version 7d9e0c78)での確認。
+# ブラウザ(ZCode in-app browser/Chromium系)で同一オリジン
+# https://latch-api.hiromu1018ks.workers.dev/ を開き、alpha側は全操作をUI経由、
+# beta側(相手)は許容範囲どおりAPI直叩きで実施。LLMはstub(実LLM呼出し無し)。
+
+date: '2026-10-10T01:53:44+00:00'
+base_url: https://latch-api.hiromu1018ks.workers.dev
+worker_version: 7d9e0c78-55ba-43b7-8a67-21ac7d559e70
+assets:
+  files_uploaded: 32
+  script_gzip_kib: 7925.29   # assets追加前後で不変(assetsはscript上限外)
+routing_checks:
+  root_index_html: {status: 200, content_type: text/html}
+  v1_intents_no_auth: {status: 401, body: '{"error":{"code":"UNAUTHENTICATED"...}}'}
+  v1_intents_navigation_header: 401 JSON(Sec-Fetch-Mode: navigateでもworker到達=run_worker_first効)
+  health: {status: 200, body: '{"status": "ok"}'}
+  probe_report: {status: 200, worker応答(python 3.14.2/fastapi 0.143.0)}
+  spa_fallback_unknown_path: 200 index.html(not_found_handling: single-page-application)
+  asset_js: {status: 200, content_type: text/javascript}
+actors:
+  alpha:
+    subject: fe-e2e-alpha-cf001
+    user_id: 40ef44bf-07df-4662-b755-0ba4433fe390
+    access: browser UI(トークンパネル)
+  beta:
+    subject: fe-e2e-beta-cf001
+    user_id: 2a6aaab8-79e4-4a52-830c-c4f71a31a09c
+    access: API直叩き(相手側として許容)
+flow_and_checks:
+  login_browser:
+    how: 開発用トークンパネルへIdPトークン貼付→「接続する」(POST /v1/auth/token)
+    result: パネル非表示+未同意につき#/onboardingへ自動誘導 ✓
+  registration:
+    how: POST /v1/users(display_name/birth_date)をAPIで事前実施
+    note: v1フロントに登録UIは存在しない(design上APIレベルの前提)ためAPI直叩き。
+      frontend/srcのコード変更はゼロ(本E2EではUI追加せず)
+  consent_browser:
+    how: オンボーディング画面で「上記に同意します」チェック→「同意する」
+      (POST /v1/users/me/consent)
+    result: 200・#/ へ復帰 ✓
+  intent_browser:
+    how: 「やりたいこと」へ一文入力→stub parse(POST /v1/intents/parse)で条件生成
+      →時間を行編集(2026-10-11T19:00+09:00)・場所を行編集(天文館)へ修正
+      →「このIntentを預ける」で確認モーダル→「Intentを確認する」(POST /v1/intents)
+    result: 201・保存モーダル表示 ✓(注: 「このIntentを預ける」は確認モーダルを
+      開く段階であり、実際の保存はモーダル内「Intentを確認する」=仕様どおり2段階)
+  intent_beta:
+    how: POST /v1/intents(同一条件: category=meal・time start同時刻・location=天文館)
+    result: 201 ✓
+  proposal:
+    how: alpha意図保存後、ホーム再読込でLATCH候補を確認
+    result: 「条件が合う候補があります/回答まち/一致度 高/締切表示」表示 ✓
+      お知らせポップオーバーにも提案通知 ✓
+  response:
+    how: alpha=詳細画面で「参加する」(POST /v1/latches/{id}/response yes)→
+      「あと1人の回答が必要」表示→beta=APIからyes
+    result: matched ✓
+  matched_detail_chat:
+    how: 詳細画面再読込
+    result: 集合情報(2026-10-11 19:00・鹿児島市バー宵待)・参加者2名表示
+      (合意後開示)・チャット領域表示 ✓ チャット1件送信し表示確認 ✓
+      成立済みLATCHリストへ表示・お知らせに「LATCHが成立しました。」通知 ✓
+latch_id: 28d79898-858e-4dc0-8103-56ee7eb11c9c
+intent_ids:
+  alpha: c0808702-6fc9-4667-bb93-3d12cadb94da   # D1照合
+  beta: bca59d6e-5ef9-46ae-8a03-3ba36df7cc0f
+timings_s:
+  note: alpha保存→提案はポーリング間隔を含む上限値(queue即時経路・cron不問)
+  browser_open_to_consent: 172
+  beta_intent_after_start: 284
+  alpha_intent_saved_after_start: 539
+  alpha_saved_to_proposal_visible: 49   # 上限(待機25s+再読込を含む)
+  alpha_yes_to_matched: 1               # betaのyes応答直後にmatched
+  chat_sent_after_matched: 42
+  notification_delivery_records_after_match: 4件がcron周期(<=5分)内に配送記録
+d1_state:
+  jobs_unsucceeded: 0
+  outbox_unsent: 0
+  notifications_fe_e2e: 4               # 提案2+成立2
+  notification_deliveries_fe_e2e: 4     # cron notify job配送記録
+  llm_attempts_jev: 6                   # pipe-e2e分3+本E2E分
+  match_candidates_evaluated: 4
+regressions:
+  contract_remote_116: passed(328s・assets配信後のversionで全green)
+  frontend_vitest: 236 passed
+  script_size: gzip 7925.29 KiB(上限10MB・assets追加で不変)
+evidence:
+  screenshots:
+    - docs/testassets/results/cloudflare-frontend-e2e-home-20261010.png
+    - docs/testassets/results/cloudflare-frontend-e2e-matched-chat-20261010.png
+cleanup:
+  method: fe-e2e-% subject前置辞で契約harnessと同一の削除バッチ
+    (users/intents/latches/messages/notifications+deliveries/journal/commands/
+    session_families/outbox/snapshots等)+ 本E2E由来のjobs(notify)・
+    llm_attempts・evaluation_claimsを個別削除
+  result: users 21(匿名化17+pipe-e2e残置6)・intents 6・latches 3・
+    notifications 12・jobs 12・outbox未送0・messages 0 = E2E実施前の
+    baselineに復元(fe-e2e由来の行は全て0を確認)

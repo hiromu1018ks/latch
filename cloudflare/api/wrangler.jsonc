@@ -8,6 +8,14 @@
   "observability": {
     "enabled": false
   },
+  // フロント配信(Workers Assets)。build済みfrontend/dist/clientを同一オリジンで
+  // 配信し、API/probe経路はworkerを先行させる(SPA fallbackに飲まれないよう
+  // run_worker_firstで明示。配列形式はwrangler>=4.20・実効4.149)。
+  "assets": {
+    "directory": "../../frontend/dist/client",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/v1/*", "/health", "/probe/*"]
+  },
   "vars": {
     "LATCH_ENV": "api",
     "LATCH_LLM_MODE": "stub",

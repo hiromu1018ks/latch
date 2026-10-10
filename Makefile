@@ -69,7 +69,8 @@ cf-dev: ## 本体LATCH API workerをローカル起動(別ターミナルで実�
 cf-probe: ## T1互換性probe実行(cf-dev起動中に実行・レポートをdocs/testassets/results/へ)
 	cd backend && $(CF_ENV) uv run pytest tests/cloudflare -m cloudflare_local -q -s
 
-cf-deploy: ## 本体LATCH API workerを実Cloudflareへデプロイ(CLOUDFLARE_API_TOKEN要export)
+cf-deploy: ## フロントbuild+本体LATCH API workerを実Cloudflareへデプロイ(唯一のデプロイ経路。CLOUDFLARE_API_TOKEN要export)
+	cd frontend && npm ci && npm run build
 	$(MAKE) cf-sync
 	cd cloudflare/api && $(CF_ENV) uv sync --quiet && $(CF_ENV) uv run pywrangler deploy
 
