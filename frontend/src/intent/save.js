@@ -1,7 +1,7 @@
 // 保存API接続(active/draft)とエラー表示マップ(design §2.9)。
 // 検証の強制はサーバ側(03 §3)− フロントはcanSubmit/canDraftで事前にブロックし、
 // サーバ422/429/503はcodeで分岐して表示位置へ振り分ける(確定値13)。
-import { buildCreateRequest } from "./format.js";
+import { buildCreateRequest, buildPatchRequest } from "./format.js";
 import { canDraft, canSubmit } from "./state.js";
 
 // design §2.9のエラー表示マップ。VALIDATION_ERRORのみmessageの先頭一致で
@@ -39,6 +39,7 @@ export const createSaveFlow = ({
   client,
   getState,
   getOptions,
+  getIntentId = () => null, // 03「条件を直す」の02編集モード(PATCH先)
   onBusy,
   onActiveSaved,
   onDraftSaved,
@@ -49,14 +50,25 @@ export const createSaveFlow = ({
   const post = async (status, onSuccess) => {
     if (pending) return; // 二重送信防止(design §2.9)
     const state = getState();
-    if (status === "active" && !canSubmit(state)) return;
-    if (status === "draft" && !canDraft(state)) return;
+    const intentId = getIntentId();
+    // 編集モードは既存Intentの全置換(必須欠落はサーバ422になるため事前ブロックも同様)
+    if (intentId == null) {
+      if (status === "active" && !canSubmit(state)) return;
+      if (status === "draft" && !canDraft(state)) return;
+    }
 
     pending = true;
     onBusy?.(true);
     try {
-      const body = buildCreateRequest(state, { status, ...getOptions() });
-      await client.call("POST", "/v1/intents", { body });
+      if (intentId != null) {
+        // PATCH /v1/intents/{id}(全置換・status省略=現状維持・05 §5)
+        await client.call("PATCH", `/v1/intents/${intentId}`, {
+          body: buildPatchRequest(state, { status: null, ...getOptions() }),
+        });
+      } else {
+        const body = buildCreateRequest(state, { status, ...getOptions() });
+        await client.call("POST", "/v1/intents", { body });
+      }
       onSuccess();
     } catch (err) {
       if (err?.code === "UNAUTHENTICATED") return; // パネル表示はonSessionExpired側で処理済み

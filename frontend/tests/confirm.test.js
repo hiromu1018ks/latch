@@ -118,8 +118,8 @@ describe("02読み解き確認(UI v2 Phase 2)", () => {
     expect(body.structured_intent.participants_includes_owner).toBe(true);
     // 期限selectの既定(23:59)をexpires_atとして送る(D-01)
     expect(body.structured_intent.expires_at).toBe("2026-12-01T23:59:00+09:00");
-    // 保存に成功したら03(プレースホルダ)へ遷移
-    await vi.waitFor(() => expect(window.location.hash).toBe("#/standby"));
+    // 保存に成功したら03の着地状態へ遷移
+    await vi.waitFor(() => expect(window.location.hash).toBe("#/standby?deposited=1"));
   });
 
   it("人数確認「含まない」は+1換算で送る(D-04)", async () => {

@@ -12,6 +12,7 @@ import { createAppState } from "./appState.js";
 import { createRouter } from "./router.js";
 import { createHome } from "./latch/home.js";
 import { createDetail } from "./latch/detail.js";
+import { createStandby } from "./latch/standby.js";
 import { createReportFlow } from "./latch/report.js";
 import { createNotice } from "./latch/notice.js";
 import { createPermissionControl } from "./latch/permission.js";
@@ -112,7 +113,7 @@ document.addEventListener("click", (event) => {
   }
 });
 
-// --- ホーム・詳細・通報・お知らせ・設定(ws-7 §2.1〜§2.2・ws-8 §2.1〜§2.7) --
+// --- ホーム・詳細・03待機中・通報・お知らせ・設定(ws-7 §2.1〜§2.2・ws-8) ----
 const home = createHome({
   client,
   el: {
@@ -121,6 +122,14 @@ const home = createHome({
     waitSection: $("#waitSection"),
   },
   onCounts: (partial) => chrome.setCounts(partial), // 待機中・候補・成立バッジ
+});
+
+// 03待機中(UI v2 Phase 3): 一覧・取り下げ(DELETE)・タイマー・候補トースト
+const standby = createStandby({
+  client,
+  chrome,
+  root: $("#standbyScreen"),
+  onCounts: (partial) => chrome.setCounts(partial),
 });
 
 // お知らせ(ws-8 design §2.1〜§2.2): 起動時1回のpreloadでドット判定
@@ -198,13 +207,17 @@ const router = createRouter({
     onboarding: $("#onboardingScreen"),
   },
   onRoute: (route) => {
+    detail.flush(); // 画面離脱時の未送信見送り(04 D-07)+タイマー停止
+    if (route.name !== "standby") standby.stop(); // 03の1秒タイマー
     chrome.setCurrentNav(NAV_BY_ROUTE[route.name] ?? null);
     if (route.name === "home") {
       intentScreen.refresh(); // 02での行編集を01のchips・CTAへ反映(再訪時)
       home.load().catch(() => {}); // 通信失敗時は空状態のまま(再訪で再試行)
       home.loadIntents().catch(() => {});
     } else if (route.name === "confirm") {
-      confirmScreen.enter();
+      confirmScreen.enter(route.id); // idあり=03「条件を直す」の02編集モード
+    } else if (route.name === "standby") {
+      standby.show().catch(() => {}); // ?deposited=1は03側で読む(着地状態)
     } else if (route.name === "settings") {
       settings.show();
     } else if (route.name === "onboarding") {
@@ -212,7 +225,6 @@ const router = createRouter({
     } else if (route.name === "latch") {
       detail.show(route.id).catch(() => {});
     }
-    // standbyはPhase 3までプレースホルダ表示のみ
   },
 });
 router.start();

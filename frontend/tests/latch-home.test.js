@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { createHome, intentCardHtml, splitStatuses } from "../src/latch/home.js";
+import {
+  createHome,
+  intentCardHtml,
+  pairCandidateLatch,
+  splitStatuses,
+} from "../src/latch/home.js";
 
 const LATCH_ID = "11111111-1111-4111-8111-111111111111";
 const fullProposal = {
@@ -80,7 +85,7 @@ describe("splitStatuses(バッジ仕分け・引用#9)", () => {
 describe("intentCardHtml(01待機中の意思カード・プロトタイプ01)", () => {
   it("カテゴリ+相対時間・原文引用・条件タグ・期限行・待機中pillを組む", () => {
     const html = intentCardHtml(intent(), NOW);
-    expect(html).toContain(`href="#/standby"`); // Phase 3で候補→04・ほか→03へ接続
+    expect(html).toContain(`href="#/standby"`); // 対応づけが確定できないときは03へ
     expect(html).toContain("飲み · 12分前に預けた");
     expect(html).toContain("「今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい」");
     expect(html).toContain(">20:00〜<");
@@ -106,11 +111,32 @@ describe("intentCardHtml(01待機中の意思カード・プロトタイプ01)",
     expect(html).toContain("&lt;img");
   });
 
-  it("候補N件=acc強調カード(proposalCount>0・Phase 3で接続する経路)", () => {
-    const html = intentCardHtml(intent(), NOW, { proposalCount: 2 });
+  it("候補N件=acc強調カード+04直結(対応づけが確定できるとき)", () => {
+    const html = intentCardHtml(intent(), NOW, {
+      proposalCount: 2,
+      proposalHref: `#/latches/${LATCH_ID}`,
+    });
     expect(html).toContain('class="intent-card lift acc"');
     expect(html).toContain("候補 2件");
     expect(html).toContain("候補を見る");
+    expect(html).toContain(`href="#/latches/${LATCH_ID}"`);
+  });
+});
+
+describe("pairCandidateLatch(候補↔Intentの対応づけ・latchesにintent_idsがないため)", () => {
+  it("active 1件×候補ありのときだけ対応を確定する(複数件はnull=契約持ち帰り)", () => {
+    const one = [intent()];
+    expect(pairCandidateLatch(one, [latch("proposed")])).toEqual({
+      latch: latch("proposed"),
+      intentId: INTENT_ID,
+    });
+    expect(
+      pairCandidateLatch(
+        [intent(), intent({ id: "bbbbbbbb-2222-4222-8222-222222222222" })],
+        [latch("proposed")],
+      ),
+    ).toBeNull();
+    expect(pairCandidateLatch(one, [])).toBeNull();
   });
 });
 
@@ -152,5 +178,21 @@ describe("createHome(01の待機中の意思+バッジ供給)", () => {
     await home.load();
     expect(client.call).toHaveBeenCalledWith("GET", "/v1/latches?limit=20");
     expect(onCounts).toHaveBeenLastCalledWith({ proposals: 2, matched: 1 });
+  });
+
+  it("active 1件×候補ありはカードが04直結になる(候補を見る)", async () => {
+    const calls = [];
+    const { el, home } = mountHome(async (method, path) => {
+      calls.push(path);
+      if (path === "/v1/intents?status=active") {
+        return { items: [intent()], next_cursor: null };
+      }
+      return { items: [latch("proposed")], next_cursor: null };
+    });
+    await home.load();
+    await home.loadIntents();
+    const card = el.intentCards.querySelector(".intent-card");
+    expect(card.getAttribute("href")).toBe(`#/latches/${LATCH_ID}`);
+    expect(card.textContent).toContain("候補 1件");
   });
 });

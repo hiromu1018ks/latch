@@ -30,21 +30,31 @@ const CATEGORY_ICON = {
   activity: "people",
 };
 
-export const intentCardHtml = (intent, nowIso, { proposalCount = 0 } = {}) => {
+export const categoryIconName = (primary) => CATEGORY_ICON[primary] ?? "glass";
+
+// 候補のIntentあて(gap分析§6: latches応答にintent_idsがないため、activeが
+// 1件のときだけ対応を確定できる。複数件時の対比は契約持ち帰り — phase2/3-report)
+export const pairCandidateLatch = (intents, candidates) => {
+  if (intents.length === 1 && candidates.length > 0) {
+    return { latch: candidates[0], intentId: intents[0].id };
+  }
+  return null;
+};
+
+export const intentCardHtml = (intent, nowIso, { proposalCount = 0, proposalHref = null } = {}) => {
   const structured = intent.structured_intent ?? {};
   const category = formatCategoryPrimary(structured.category);
   const ago = depositedAgoText(intent.created_at, nowIso);
   const tags = conditionTags(structured)
     .map((tag) => `<span class="intent-tag">${escapeHtml(tag)}</span>`)
     .join("");
-  // 候補N件=acc強調カード(プロトタイプ01)。※latches一覧応答にIntentとの
-  // 対応づけ(intent_ids)がないため、Phase 2では全カードを待機中(stb)で出す
-  // — 候補強調の呼び出し側接続はPhase 3の持ち帰り(report参照)
+  // 候補N件=acc強調カード(プロトタイプ01)。対応づけが確定できる
+  // (active1件×候補あり)ときだけ04へ直結し、それ以外は03へ
   const emphasized = proposalCount > 0;
+  const href = emphasized && proposalHref ? proposalHref : "#/standby";
   const pill = emphasized
     ? `<span class="intent-pill acc">候補 ${proposalCount}件</span>`
     : `<span class="intent-pill stb"><span class="dot" aria-hidden="true"></span>待機中</span>`;
-  const href = "#/standby"; // Phase 3で候補カード→04・ほか→03へ接続
   return `<a class="intent-card lift${emphasized ? " acc" : ""}" href="${href}">
     <div class="intent-card-head">
       <span class="intent-card-cat">${iconHtmlFor(structured.category?.primary)}<span>${escapeHtml(category)} · ${escapeHtml(ago)}</span></span>
@@ -69,23 +79,32 @@ const iconHtmlFor = (primary) => {
 export const createHome = ({ client, el, onCounts }) => {
   let latchItems = [];
   let latchCursor = null;
-  let intentCount = 0;
+  let intents = [];
 
-  const renderIntents = (items) => {
+  // カード一覧(候補との対応づけが確定できるときだけacc強調+04直結)
+  const renderIntents = () => {
     const nowIso = new Date().toISOString();
-    el.intentCards.innerHTML = items
-      .map((intent) => intentCardHtml(intent, nowIso))
+    const { candidates } = splitStatuses(latchItems);
+    const paired = pairCandidateLatch(intents, candidates);
+    el.intentCards.innerHTML = intents
+      .map((intent) => {
+        const emphasized = paired != null && paired.intentId === intent.id;
+        return intentCardHtml(intent, nowIso, {
+          proposalCount: emphasized ? candidates.length : 0,
+          proposalHref: emphasized ? `#/latches/${paired.latch.id}` : null,
+        });
+      })
       .join("");
     // 0件はヒーロー行とセクションごと隠す(プロトタイプに空状態の規定なし)
-    el.standbyLine.hidden = items.length === 0;
-    el.waitSection.hidden = items.length === 0;
-    if (items.length > 0) {
+    el.standbyLine.hidden = intents.length === 0;
+    el.waitSection.hidden = intents.length === 0;
+    if (intents.length > 0) {
       el.standbyLine.querySelector("[data-standby-count]").textContent =
-        `${items.length}件の意思が待機中 — いまは何もしなくて大丈夫`;
+        `${intents.length}件の意思が待機中 — いまは何もしなくて大丈夫`;
     }
   };
 
-  // latches一覧はバッジ(候補・成立)のカウント供給のみ(一覧表示はPhase 3/4)
+  // latches一覧はバッジ(候補・成立)のカウント供給とカードの対応づけ
   const renderCounts = () => {
     const { candidates, matched } = splitStatuses(latchItems);
     onCounts?.({ proposals: candidates.length, matched: matched.length });
@@ -96,6 +115,7 @@ export const createHome = ({ client, el, onCounts }) => {
     latchItems = data.items;
     latchCursor = data.next_cursor;
     renderCounts();
+    renderIntents();
   };
 
   const loadMore = async () => {
@@ -107,13 +127,14 @@ export const createHome = ({ client, el, onCounts }) => {
     latchItems = latchItems.concat(data.items);
     latchCursor = data.next_cursor;
     renderCounts();
+    renderIntents();
   };
 
   const loadIntents = async () => {
     const data = await client.call("GET", "/v1/intents?status=active");
-    intentCount = data.items.length;
-    renderIntents(data.items);
-    onCounts?.({ standby: intentCount });
+    intents = data.items;
+    renderIntents();
+    onCounts?.({ standby: intents.length });
   };
 
   return { load, loadMore, loadIntents };

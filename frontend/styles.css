@@ -152,12 +152,33 @@ body.modal-open{overflow:hidden}
   animation:toastIn .5s cubic-bezier(.2,.8,.2,1) both;
 }
 .toast-msg{margin:0;padding:6px 8px 6px 14px;font-size:15px;font-weight:700;color:var(--t1)}
+/* 候補トースト(03の構成: ロゴ+文言+「見る」リンク) */
+.toast-link{
+  display:grid;grid-template-columns:44px minmax(0, 1fr) auto;gap:14px;align-items:center;
+  padding:6px 8px;border-radius:12px;color:var(--t1);text-decoration:none;
+}
+.toast-logo{
+  width:44px;height:44px;box-sizing:border-box;border-radius:12px;
+  display:grid;place-items:center;background:var(--bg);border:1px solid var(--line);
+}
+.toast-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.toast-kicker{font-size:12.5px;color:var(--t2)}
+.toast-link .toast-msg{padding:0;font-size:15px}
+.toast-see{display:inline-flex;align-items:center;gap:4px;color:var(--acc);font-size:14px;font-weight:700}
 .toast-close{
   width:44px;height:44px;padding:0;border-radius:12px;
   border:1px solid transparent;background:transparent;color:var(--t2);
   display:grid;place-items:center;cursor:pointer;
 }
 @keyframes toastIn{from{opacity:0;transform:translateY(-14px) scale(.98)}to{opacity:1;transform:none}}
+
+/* <dialog>の本文部品(03の取り下げdialogほか) */
+.dlg-quote{
+  margin:0;padding:14px 16px;border-radius:14px;background:var(--s2);
+  font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-size:16px;line-height:1.7;
+}
+.dlg-desc{margin:0;font-size:14px;line-height:1.8;color:var(--t2)}
 
 /* ===== スピナー・reduced motion ===== */
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -237,8 +258,9 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   margin:0;display:flex;align-items:center;gap:12px;
   font-size:14px;color:var(--t2);
 }
-.standby-line .beacon{position:relative;width:7px;height:7px;flex:none;border-radius:999px;background:var(--stb)}
-.standby-line .beacon::after{
+/* 待機ビーコン(01のヒーロー行・03のバッジ共通) */
+.beacon{position:relative;width:7px;height:7px;flex:none;border-radius:999px;background:var(--stb)}
+.beacon::after{
   content:"";position:absolute;inset:0;border-radius:999px;background:inherit;
   animation:beacon 2.4s ease-out infinite;
 }
@@ -799,6 +821,360 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
 .placeholder-view{display:grid;gap:12px}
 .placeholder-view p{margin:0;color:var(--t2);font-size:15px;line-height:1.9}
 
+/* ===========================================================================
+   03 待機中 — プロトタイプ03のinline styleが正源(UI v2 Phase 3)
+   =========================================================================== */
+.page-main--standby{max-width:1200px;padding-top:clamp(32px, 6vw, 88px)}
+.sb-hero{
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(min(480px, 100%), 1fr));
+  gap:48px;align-items:center;
+}
+.sb-col{display:flex;flex-direction:column;gap:26px;min-width:0}
+.sb-badge{
+  margin:0;align-self:flex-start;display:inline-flex;align-items:center;gap:10px;
+  padding:7px 14px;border-radius:999px;background:var(--stb-soft);
+  border:1px solid var(--stb-line);font-size:14px;font-weight:700;color:var(--stb);
+}
+.sb-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(34px, 4.6vw, 64px);line-height:1.25;letter-spacing:0.02em;
+}
+.sb-lead{margin:0;max-width:520px;font-size:16.5px;line-height:1.9;color:var(--t2);text-wrap:pretty}
+
+/* メイン条件カード */
+.sb-main{
+  display:flex;flex-direction:column;gap:18px;
+  padding:clamp(20px, 3vw, 26px) clamp(20px, 3vw, 28px);
+  border-radius:24px;background:var(--s1);border:1px solid var(--line);
+}
+.sb-main-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.sb-main-cat{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--t2)}
+.sb-pill{
+  display:inline-flex;align-items:center;gap:8px;padding:5px 11px;border-radius:999px;
+  font-size:13px;font-weight:700;
+}
+.sb-pill .dot{width:6px;height:6px;border-radius:999px;background:currentColor}
+.sb-pill.stb{background:var(--stb-soft);color:var(--stb)}
+.sb-pill.gone{background:var(--s2);color:var(--t3)}
+.sb-main-quote{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-size:clamp(19px, 2vw, 21px);line-height:1.7;color:var(--t1);
+}
+.sb-main-quote.gone{color:var(--t3)}
+.sb-tags{display:flex;flex-wrap:wrap;gap:6px}
+.sb-tag{padding:6px 11px;border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px}
+.sb-main-foot{
+  display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;
+  padding-top:18px;border-top:1px solid var(--line);
+}
+.sb-main-foot--gone{align-items:center}
+.sb-timer{display:flex;flex-direction:column;gap:4px}
+.sb-timer-label{font-size:13.5px;color:var(--t3)}
+.sb-timer [data-sb-timer]{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:30px;font-weight:500;
+  letter-spacing:0.04em;color:var(--t1);font-variant-numeric:tabular-nums;
+}
+.sb-main-actions{display:flex;flex-wrap:wrap;gap:8px}
+.sb-edit{
+  display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;
+  box-sizing:border-box;border-radius:999px;border:1px solid var(--line-strong);
+  color:var(--t2);font-size:14px;text-decoration:none;
+}
+.sb-again{
+  display:inline-flex;align-items:center;min-height:44px;padding:0 18px;
+  box-sizing:border-box;border-radius:999px;border:1px solid var(--line-strong);
+  color:var(--t1);font-size:14px;text-decoration:none;
+}
+.sb-gone-note{font-size:14px;color:var(--t2)}
+.sb-main-actions .danger,.sb-row-actions .danger{
+  min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--dng-line);
+  background:transparent;color:var(--dng);font-family:inherit;font-size:14px;cursor:pointer;
+}
+
+/* オーブ(円環+2アーク+ripple+条件チップ浮遊) */
+.sb-orb{position:relative;width:min(100%, 440px);aspect-ratio:1 / 1;margin:0 auto}
+.orb-haze{
+  position:absolute;inset:-12%;border-radius:50%;
+  background:radial-gradient(closest-side, rgba(157, 178, 219, 0.14), rgba(11, 12, 18, 0) 70%);
+}
+.orb-ring{position:absolute;inset:0;border-radius:50%;border:1px solid var(--line)}
+.orb-ring2{position:absolute;inset:13%;border-radius:50%;border:1px solid #262A3E}
+.orb-core{
+  position:absolute;inset:26%;border-radius:50%;border:1px solid #2C3249;
+  background:radial-gradient(closest-side, rgba(20, 23, 36, 0.9), rgba(14, 16, 24, 0.9));
+}
+@keyframes ripple{0%{transform:scale(.55);opacity:0}15%{opacity:.75}100%{transform:scale(1.4);opacity:0}}
+.ripple{
+  position:absolute;inset:26%;border-radius:50%;border:1px solid rgba(157, 178, 219, 0.5);
+  animation:ripple 4.2s cubic-bezier(.2,.6,.3,1) infinite;
+}
+.ripple.d2{animation-delay:1.4s}.ripple.d3{animation-delay:2.8s}
+.orb-svg{
+  position:absolute;inset:0;width:100%;height:100%;
+  filter:drop-shadow(0 0 14px rgba(157, 178, 219, 0.45));
+}
+@keyframes breatheL{0%,100%{transform:translateX(-16px)}50%{transform:translateX(-9px)}}
+@keyframes breatheR{0%,100%{transform:translateX(16px)}50%{transform:translateX(9px)}}
+.arcL{animation:breatheL 4.2s ease-in-out infinite}
+.arcR{animation:breatheR 4.2s ease-in-out infinite}
+.orb-chip{
+  position:absolute;padding:8px 14px;border-radius:999px;
+  background:rgba(18, 20, 29, 0.9);border:1px solid var(--line);color:var(--t2);font-size:13px;
+}
+.orb-chip[data-mono]{font-family:'IBM Plex Mono',ui-monospace,monospace}
+.orb-chip.bright{background:rgba(18, 20, 29, 0.92);color:var(--t1)}
+
+/* いま、LATCHがしていること(3カード) */
+.sb-doing{display:flex;flex-direction:column;gap:24px}
+.sb-h2{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(24px, 3vw, 28px);
+}
+.doing-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(min(300px, 100%), 1fr));gap:16px}
+.doing-card{
+  display:flex;flex-direction:column;gap:14px;padding:26px;border-radius:22px;
+  background:#10121A;border:1px solid var(--line);
+}
+.doing-no{font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:0.12em;color:var(--stb)}
+.doing-card h3{margin:0;font-size:18px;font-weight:700}
+.doing-card p{margin:0;font-size:15px;line-height:1.85;color:var(--t2)}
+.doing-notify{
+  display:grid;grid-template-columns:34px minmax(0, 1fr) auto;gap:12px;align-items:center;
+  padding:12px 14px;border-radius:16px;background:var(--s2);border:1px solid var(--line);
+}
+.doing-notify-ic{
+  width:34px;height:34px;box-sizing:border-box;border-radius:9px;display:grid;place-items:center;
+  background:var(--bg);border:1px solid var(--line);
+}
+.doing-notify-body{display:flex;flex-direction:column;gap:1px;min-width:0}
+.doing-notify-app{font-size:13px;font-weight:700;color:var(--t1)}
+.doing-notify-text{font-size:14px;color:var(--t2)}
+.doing-notify-time{font-size:13px;color:var(--t3)}
+
+/* ほかに待機中の意思 */
+.sb-others-sec{display:flex;flex-direction:column;gap:18px}
+.sb-others-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px}
+.sb-new{
+  display:inline-flex;align-items:center;gap:8px;min-height:44px;
+  color:var(--t1);font-size:14px;font-weight:700;text-decoration:none;
+}
+.sb-others{
+  list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+  border-radius:22px;background:#10121A;border:1px solid var(--line);overflow:hidden;
+}
+.sb-row{
+  display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px;
+  padding:20px clamp(16px, 3vw, 24px);
+}
+.sb-row[data-border]{border-top:1px solid var(--line)}
+.sb-row-ic{
+  width:44px;height:44px;flex:none;border-radius:12px;display:grid;place-items:center;
+  background:var(--s2);color:var(--stb);
+}
+.sb-row-body{flex:1 1 280px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.sb-row-text{
+  font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:18px;
+}
+.sb-row-meta{font-size:13.5px;color:var(--t3)}
+.sb-row-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.sb-row-edit{
+  display:inline-flex;align-items:center;min-height:44px;padding:0 14px;box-sizing:border-box;
+  border-radius:999px;border:1px solid var(--line-strong);color:var(--t2);
+  font-size:14px;text-decoration:none;
+}
+.sb-row-empty{padding:28px 24px;font-size:14.5px;color:var(--t2)}
+
+/* ===========================================================================
+   04 候補が届く(詳細の提案姿) — プロトタイプ04のinline styleが正源(UI v2 Phase 3)
+   =========================================================================== */
+.page-main--proposal{display:block;max-width:1200px;padding-top:clamp(28px, 5vw, 72px)}
+.haze-proposal{top:-180px;left:-240px;width:1100px;height:1100px}
+.pv-detail{position:relative;display:flex;flex-direction:column;gap:20px}
+/* 並び順：スマホ＝見出し→判断→照合→図、PC＝図｜見出し／照合｜判断 */
+.pv-grid{
+  display:grid;grid-template-columns:minmax(0, 1fr);
+  grid-template-areas:"text" "decide" "fit" "visual";gap:32px;
+}
+.pv-text{grid-area:text}
+.pv-visual{grid-area:visual}
+.pv-fit{grid-area:fit}
+.pv-decide{grid-area:decide}
+@media (min-width:980px){
+  .pv-grid{
+    grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:"visual text" "fit decide";gap:40px 24px;align-items:start;
+  }
+  .pv-visual{align-self:center}
+}
+
+/* オーブ(04=acc色版・rippleとアークの動きは03と別規定) */
+.pv-visual{position:relative;width:min(100%, 440px);aspect-ratio:1 / 1;margin:0 auto}
+.pv-orb-haze{
+  position:absolute;inset:-6%;border-radius:50%;
+  background:radial-gradient(closest-side, rgba(95, 212, 174, 0.22), rgba(11, 12, 18, 0) 70%);
+}
+.pv-orb-ring2{position:absolute;inset:13%;border-radius:50%;border:1px solid #272B3E}
+.pv-orb-core{
+  position:absolute;inset:26%;border-radius:50%;border:1px solid var(--acc-line);
+  background:radial-gradient(closest-side, rgba(16, 28, 25, 0.92), rgba(12, 17, 18, 0.92));
+}
+@keyframes ripplePv{0%{transform:scale(.6);opacity:0}15%{opacity:.85}100%{transform:scale(1.45);opacity:0}}
+.pripple{
+  position:absolute;inset:26%;border-radius:50%;border:1px solid var(--acc-line);
+  animation:ripplePv 3.2s cubic-bezier(.2,.6,.3,1) infinite;
+}
+.pripple.d2{animation-delay:1.06s}.ppripple.d3{animation-delay:2.12s}
+.pv-visual .orb-svg{filter:drop-shadow(0 0 16px var(--acc-glow))}
+@keyframes nearL{0%,100%{transform:translateX(-6px)}50%{transform:translateX(-1.5px)}}
+@keyframes nearR{0%,100%{transform:translateX(6px)}50%{transform:translateX(1.5px)}}
+.parcL{animation:nearL 2.6s ease-in-out infinite}
+.parcR{animation:nearR 2.6s ease-in-out infinite}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.rise{animation:rise .6s cubic-bezier(.2,.8,.2,1) both}
+.rise.r2{animation-delay:.1s}.rise.r3{animation-delay:.2s}
+
+/* ヒーロー+4情報カード */
+.pv-text{display:flex;flex-direction:column;gap:24px;min-width:0;align-self:center}
+.pv-badge{
+  margin:0;align-self:flex-start;display:inline-flex;align-items:center;gap:10px;
+  padding:7px 14px;border-radius:999px;background:var(--acc-soft);
+  border:1px solid var(--acc-line);font-size:14px;font-weight:700;color:var(--acc);
+}
+.pv-badge-dot{
+  width:7px;height:7px;border-radius:999px;background:var(--acc);
+  box-shadow:0 0 12px var(--acc-glow);
+}
+.pv-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(36px, 4.8vw, 68px);line-height:1.22;letter-spacing:0.02em;
+}
+.pv-lead{margin:0;max-width:520px;font-size:16.5px;line-height:1.9;color:var(--t2);text-wrap:pretty}
+.pv-cards{display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:10px}
+.pv-card{
+  display:flex;flex-direction:column;gap:6px;padding:16px 18px;border-radius:18px;
+  background:var(--s1);border:1px solid var(--line);
+}
+.pv-card-label{font-size:13px;color:var(--t3)}
+.pv-card-value{font-size:25px;font-weight:700;line-height:1.3;color:var(--t1)}
+.pv-card-value.mono{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:28px;font-weight:500;line-height:1.2;
+}
+.pv-card-sub{font-size:13px;color:var(--t2)}
+.pv-minimal{
+  display:inline-flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;
+  background:var(--stb-soft);border:1px solid var(--stb-line);
+  font-size:14px;line-height:1.7;color:var(--t1);
+}
+.pv-minimal svg{flex:none;margin-top:3px;color:var(--stb)}
+
+/* 照合表(自分の条件×候補の対比較) */
+.pv-fit{
+  min-width:0;padding:28px 32px 24px;border-radius:24px;background:var(--s1);
+  border:1px solid var(--line);display:flex;flex-direction:column;gap:6px;
+}
+.pv-fit-head{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;
+  padding-bottom:12px;
+}
+.pv-fit-sum{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:700;color:var(--t1)}
+.pv-fit-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.fit-row{
+  display:grid;grid-template-columns:52px minmax(0, 1fr) 18px minmax(0, 1fr) 28px;
+  gap:12px;align-items:center;padding:15px 0;border-top:1px solid var(--line);
+}
+.fit-label{font-size:13.5px;color:var(--t3)}
+.fit-mine{font-size:14.5px;color:var(--t2)}
+.fit-theirs{font-size:15px;font-weight:700;color:var(--t1)}
+.fit-row > svg{color:var(--line-strong)}
+.fit-ok{
+  width:28px;height:28px;border-radius:999px;display:grid;place-items:center;
+  background:var(--s2);color:var(--t1);
+}
+.pv-fit-note{
+  margin:10px 0 0;padding:14px 16px;border-radius:14px;background:#0F1119;
+  font-size:14px;line-height:1.75;color:var(--t2);
+}
+
+/* 判断カード(回答期限タイマー+アバター+4状態) */
+.pv-decide{
+  min-width:0;padding:28px 32px 30px;border-radius:24px;background:var(--s1);
+  border:1px solid var(--acc-line);box-shadow:0 50px 140px -60px var(--acc-glow);
+  display:flex;flex-direction:column;gap:24px;
+}
+.pv-decide-head{
+  display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:16px;
+}
+.pv-decide-timer{display:flex;flex-direction:column;gap:4px}
+.pv-timer{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:clamp(34px, 4vw, 40px);font-weight:500;line-height:1.1;letter-spacing:0.04em;
+  color:var(--t1);font-variant-numeric:tabular-nums;
+}
+.timer-low{color:var(--dng) !important}
+.pv-deadline-note{font-size:13.5px;color:var(--t3)}
+.pv-avatars{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.pv-avatar-stack{display:flex;align-items:center}
+.pv-avatar{
+  width:52px;height:52px;box-sizing:border-box;border-radius:999px;display:grid;place-items:center;
+}
+.pv-avatar.me{
+  position:relative;z-index:3;background:var(--s3);border:2px solid var(--line-strong);
+  color:var(--t1);font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;
+}
+.pv-avatar.blind{
+  position:relative;z-index:2;margin-left:-12px;background:#0F1119;
+  border:1.5px dashed var(--line-strong);color:var(--t3);
+}
+.pv-who{font-size:13.5px;color:var(--t2)}
+.pv-states{display:flex;flex-direction:column;gap:14px}
+.pv-state{display:flex;flex-direction:column;gap:14px}
+.pv-join{
+  display:flex;align-items:center;justify-content:center;gap:12px;min-height:64px;padding:0 28px;
+  border-radius:999px;border:none;background:var(--acc);color:var(--on-acc);
+  font-family:inherit;font-size:18px;font-weight:700;cursor:pointer;
+  box-shadow:0 18px 56px -14px var(--acc-glow);
+}
+.pv-defer{
+  min-height:52px;padding:0 24px;border-radius:999px;border:1px solid var(--line-strong);
+  background:transparent;color:var(--t1);font-family:inherit;font-size:15px;cursor:pointer;
+}
+.pv-note{margin:4px 0 0;font-size:13.5px;line-height:1.75;color:var(--t3);text-align:center}
+.pv-state-card{display:flex;flex-direction:column;gap:14px;padding:22px;border-radius:18px}
+.pv-state-card.joined{background:var(--acc-soft);border:1px solid var(--acc-line)}
+.pv-state-card.allin{background:var(--acc-soft);border:1px solid var(--acc)}
+.pv-state-card.declined{background:#0F1119;border:1px solid var(--line);gap:16px}
+.pv-state-title{
+  margin:0;display:flex;align-items:center;gap:10px;
+  font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-size:22px;font-weight:700;
+}
+.pv-state-title svg{color:var(--acc)}
+.pv-state-body{margin:0;font-size:14.5px;line-height:1.8;color:var(--t1)}
+.pv-state-card.declined .pv-state-body{color:var(--t2)}
+.pv-state-note{margin:0;font-size:13.5px;line-height:1.7;color:var(--t2)}
+.pv-state-actions{display:flex;flex-wrap:wrap;gap:8px}
+.pv-solid-link{
+  display:inline-flex;align-items:center;min-height:44px;padding:0 18px;box-sizing:border-box;
+  border-radius:999px;background:var(--s3);color:var(--t1);font-size:14px;font-weight:700;
+  text-decoration:none;cursor:pointer;border:none;font-family:inherit;
+}
+.pv-chat{
+  display:flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 24px;
+  border-radius:999px;background:var(--acc);color:var(--on-acc);
+  font-family:inherit;font-size:17px;font-weight:700;cursor:pointer;border:none;
+}
+.pv-reasons{display:flex;flex-direction:column;gap:10px}
+.pv-reason-label{font-size:14px;color:var(--t1)}
+.pv-reason-sub{display:block;font-size:13px;color:var(--t3)}
+.pv-reason-chips{display:flex;flex-wrap:wrap;gap:8px}
+.reason-chip{
+  display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;
+  border-radius:999px;border:1px solid var(--line-strong);background:transparent;
+  color:var(--t2);font-family:inherit;font-size:14px;cursor:pointer;
+}
+.reason-chip[aria-pressed="true"]{background:var(--s3);border-color:var(--t2);color:var(--t1)}
+
 /* --- 暫定のレスポンシブ(旧800/560pxを720pxへ統合+02の520px) ----------------- */
 @media (max-width:720px){
   .chat-message{max-width:92%}
@@ -811,4 +1187,8 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   .slot-row{grid-template-columns:minmax(0, 1fr) 44px;gap:12px}
   .slot-ic{display:none}
   .seg label{padding:0 16px}
+  /* 04の照合表(プロトタイプ04の520px指定) */
+  .fit-row{grid-template-columns:minmax(0, 1fr) 16px minmax(0, 1fr) 28px;gap:6px 10px}
+  .fit-row .fit-label{grid-column:1 / -1}
+  .pv-fit,.pv-decide{padding-left:20px;padding-right:20px}
 }

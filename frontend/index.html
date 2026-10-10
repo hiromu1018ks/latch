@@ -218,11 +218,52 @@
         </div>
       </section>
 
-      <!-- Phase 3で03「待機中」を実装 -->
-      <section class="placeholder-view" id="standbyScreen" aria-labelledby="standbyTitle" hidden>
-        <h1 id="standbyTitle">待機中</h1>
-        <p>この画面は準備中です。預けた条件はLATCHが照らし合わせ続けます。</p>
-      </section>
+      <!-- 03 待機中 — UI v2 Phase 3(プロトタイプ03が正源) -->
+      <div class="page-main page-main--standby" id="standbyScreen" hidden>
+        <section class="sb-hero" aria-labelledby="h-standby">
+          <div class="sb-col">
+            <p class="sb-badge"><span class="beacon" aria-hidden="true"></span><span data-sb-badge>待機中 · 0件</span></p>
+            <h1 id="h-standby" class="sb-title"><span data-sb-title-a>条件が揃うのを、</span><br><span data-sb-title-b>待っています。</span></h1>
+            <p class="sb-lead" data-sb-lead>あなたが預けた条件です。別の誰かの条件と成立し得ると判断された瞬間にだけ、お知らせします。</p>
+            <article class="sb-main" data-sb-main aria-label="預けた条件" hidden></article>
+          </div>
+          <div class="sb-orb" data-sb-orb aria-hidden="true" hidden></div>
+        </section>
+
+        <section class="sb-doing" aria-labelledby="h-doing">
+          <h2 id="h-doing" class="sb-h2">いま、LATCHがしていること</h2>
+          <div class="doing-grid">
+            <div class="doing-card">
+              <span aria-hidden="true" class="doing-no">01</span>
+              <h3>照らし合わせ続ける</h3>
+              <p>あなたの条件を、ほかの待機中の意思と照らし合わせ続けています。そのあいだ、あなたの条件は誰にも表示されません。</p>
+            </div>
+            <div class="doing-card">
+              <span aria-hidden="true" class="doing-no">02</span>
+              <h3>成立し得るかだけを見る</h3>
+              <p>見るのは人柄や相性ではなく、その時・その条件で二つの意思が成立し得るか。片方だけが大満足する提案は出しません。</p>
+            </div>
+            <div class="doing-card">
+              <span aria-hidden="true" class="doing-no">03</span>
+              <h3>揃ったら、ひとことだけ</h3>
+              <p>通知の本文はこの一文だけ。ロック画面に意思が漏れることはありません。</p>
+              <div class="doing-notify" aria-hidden="true">
+                <span class="doing-notify-ic"><svg width="18" height="18" viewBox="0 0 40 40" fill="none"><path d="M19 5 A15 15 0 0 0 19 35" style="stroke: var(--t1)" stroke-width="4" stroke-linecap="round"></path><path d="M22 5 A15 15 0 0 1 22 35" style="stroke: var(--acc)" stroke-width="4" stroke-linecap="round"></path></svg></span>
+                <span class="doing-notify-body"><span class="doing-notify-app">LATCH</span><span class="doing-notify-text">LATCH候補があります</span></span>
+                <span class="doing-notify-time">今</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sb-others-sec" aria-labelledby="h-others">
+          <div class="sb-others-head">
+            <h2 id="h-others" class="sb-h2">ほかに待機中の意思</h2>
+            <a class="sb-new" href="#/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>新しく預ける</a>
+          </div>
+          <ul class="sb-others" data-sb-others></ul>
+        </section>
+      </div>
 
       <section class="detail-view" id="detailScreen" hidden></section>
       <section class="settings-view" id="settingsScreen" hidden>

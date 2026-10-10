@@ -7,9 +7,10 @@ const LATCH_ID = "11111111-1111-4111-8111-111111111111";
 const ME = "22222222-2222-4222-8222-222222222222";
 const PEER = "33333333-3333-4333-8333-333333333333";
 const DEADLINE = "2026-12-01T12:00:00+09:00"; // 遠い未来(残時間テストを安定化)
+const NOW = "2026-10-10T12:00:00+09:00"; // proposalTimePartsの「今夜/明日」を安定化
 
 const fullProposal = {
-  time_summary: "2026-10-01 20:00",
+  time_summary: "2026-10-10 20:30",
   area_name: "天文館周辺",
   headcount: 2,
   category_primary: "drinking",
@@ -18,6 +19,18 @@ const fullProposal = {
   match_level: "high",
 };
 const minimalProposal = { headcount: 2, match_level: "medium" };
+
+const myIntent = {
+  id: "aaaaaaaa-1111-4111-8111-111111111111",
+  structured_intent: {
+    category: { primary: "drinking", secondary: "軽く飲みたい" },
+    time: { start: "2026-10-10T20:00:00+09:00", end: null },
+    location: { name: "天文館", radius_m: null },
+    budget: { max: 5000, currency: "JPY" },
+    participants: { min: 2, max: 4 },
+    participants_includes_owner: true,
+  },
+};
 
 const baseLatch = (overrides = {}, proposal = fullProposal) => ({
   id: LATCH_ID,
@@ -41,8 +54,8 @@ const participants = [
 const makeDetail = (callImpl) => {
   const client = { call: vi.fn(callImpl) };
   const appState = {
-    me: { id: ME, display_name: "自分", profile: {} },
-    ensureMe: vi.fn(async () => ({ id: ME, display_name: "自分", profile: {} })),
+    me: { id: ME, display_name: "自見", profile: {} },
+    ensureMe: vi.fn(async () => ({ id: ME, display_name: "自見", profile: {} })),
   };
   const chrome = { showToast: vi.fn() };
   const root = document.createElement("section");
@@ -51,91 +64,273 @@ const makeDetail = (callImpl) => {
   return { client, appState, chrome, root, reportFlow, detail };
 };
 
-// GET詳細とGET messagesの両方に応答する既定モック
-const apiFor = (latch) => async (method, path) => {
+// GET詳細・GET intents一覧・GET messagesに応答する既定モック
+const apiFor = (latch, intents = []) => async (method, path) => {
   if (path === `/v1/latches/${latch.id}/messages?limit=100`) {
     return { items: [], next_cursor: null };
+  }
+  if (path === "/v1/intents?status=active") return { items: intents, next_cursor: null };
+  if (path.startsWith("/v1/latches/") && path.endsWith("/response")) {
+    return { latch };
   }
   return { latch };
 };
 
-describe("detail 3姿(design §2.3)", () => {
-  it("提案姿(全形): 条件サマリ・一致度・残時間・回答3択", async () => {
-    const { root, detail } = makeDetail(apiFor(baseLatch()));
+describe("04 提案姿(全面再構成・プロトタイプ04)", () => {
+  it("全形: ヒーロー・4情報カード・照合表・残時間タイマー・回答2択(D-05)", async () => {
+    const { root, detail } = makeDetail(apiFor(baseLatch(), [myIntent]));
     await detail.show(LATCH_ID);
-    expect(root.textContent).toContain("2026-10-01 20:00");
+    expect(root.querySelector("h1").textContent).toBe("条件が、揃いそうです。");
+    // 4情報カード(開始=mono・エリア・人数・予算)
+    expect(root.textContent).toContain("20:30");
+    expect(root.textContent).toContain("今夜 · 10/10（土）");
     expect(root.textContent).toContain("天文館周辺");
-    expect(root.textContent).toContain("ひとり5,000円まで");
-    expect(root.textContent).toContain("一致度 高");
-    expect(root.textContent).toContain("で締切"); // 残時間表示
-    const buttons = [...root.querySelectorAll(".respond-button")];
-    expect(buttons.map((b) => b.dataset.value)).toEqual(["yes", "defer", "no"]);
-    expect(buttons.map((b) => b.textContent))
-      .toEqual(["参加する", "今回は見送る", "辞退する"]);
+    expect(root.textContent).toContain("¥5,000");
+    expect(root.textContent).toContain("あなた＋1人");
+    // 照合表(自分の条件→候補)
+    expect(root.textContent).toContain("あなたの条件との照合");
+    expect(root.textContent).toContain("5項目すべて条件内");
+    expect(root.textContent).toContain("2〜4人（あなたを含む）");
+    // 回答期限タイマー(role=timer)
+    expect(root.querySelector('[role="timer"]')).not.toBeNull();
+    // 回答2択(辞退するは廃止・D-05)
+    const buttons = [...root.querySelectorAll("[data-role=respond]")];
+    expect(buttons.map((b) => b.dataset.value)).toEqual(["yes", "defer"]);
+    expect(buttons.map((b) => b.textContent)).toEqual(["参加する", "今回は見送る"]);
   });
 
-  it("提案姿(最小形): 条件サマリなし・「条件が合う候補があります」+一致度・残時間", async () => {
+  it("最小形(hidden_until_match): 4カード・照合表なし+案内ボックス+回答2択", async () => {
     const { root, detail } = makeDetail(
       apiFor(baseLatch({}, minimalProposal)),
     );
     await detail.show(LATCH_ID);
     expect(root.textContent).toContain("条件が合う候補があります");
-    expect(root.textContent).not.toContain("天文館周辺");
-    expect(root.textContent).toContain("一致度 中");
-    expect(root.textContent).toContain("で締切");
-    expect(root.querySelectorAll(".respond-button").length).toBe(3);
+    expect(root.textContent).toContain("全員が「参加する」と答えたときにわかります");
+    expect(root.querySelector("[data-role=pv-fit]")).toBeNull(); // 照合表なし
+    expect(root.querySelector(".pv-visual")).toBeNull(); // オーブなし
+    expect(root.querySelectorAll("[data-role=respond]").length).toBe(2);
+    expect(root.querySelector('[role="timer"]')).not.toBeNull();
   });
 
-  it("回答済み(my_response=yes): 3択を差し替え「参加します」", async () => {
+  it("照合表は自分のIntentを値マッチングで特定する(見つからない行は「—」)", async () => {
+    const { root, detail } = makeDetail(apiFor(baseLatch(), [])); // active 0件
+    await detail.show(LATCH_ID);
+    expect(root.textContent).toContain("候補は、あなたの条件の範囲で選ばれています");
+    expect(root.textContent).not.toContain("5項目すべて条件内");
+  });
+
+  it("回答期限タイマー: 分:秒・残5分以下でtimer-low", async () => {
+    vi.useFakeTimers();
+    try {
+      const soon = new Date(Date.now() + 4 * 60 * 1000).toISOString();
+      const { root, detail } = makeDetail(
+        apiFor(baseLatch({ response_deadline: soon })),
+      );
+      await detail.show(LATCH_ID);
+      const timer = root.querySelector('[role="timer"]');
+      expect(timer.textContent).toMatch(/^\d+:\d{2}$/);
+      expect(timer.classList.contains("timer-low")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("open状態: 参加する→POST yes(pending制御つき)", async () => {
+    const latch = baseLatch();
+    const calls = [];
+    const client = {
+      call: vi.fn(async (method, path, opts) => {
+        calls.push([method, path, opts]);
+        if (path === `/v1/latches/${LATCH_ID}/response`) return { latch };
+        return apiFor(latch, [myIntent])(method, path);
+      }),
+    };
+    const { root, detail } = makeDetail((m, p, o) => client.call(m, p, o));
+    await detail.show(LATCH_ID);
+    const join = root.querySelector('[data-role=respond][data-value="yes"]');
+    join.click();
+    await vi.waitFor(() => {
+      expect(calls.some(([m, p]) => m === "POST" && p.endsWith("/response"))).toBe(true);
+    });
+    expect(calls.find(([m, p]) => p.endsWith("/response"))[2]).toEqual({
+      body: { response: "yes" },
+    });
+  });
+
+  it("joined状態(my_response=yes): 待ち文言+「回答を取り消す」→POST undo", async () => {
+    const calls = [];
+    const latch = baseLatch({ status: "partial_accept", my_response: "yes", remaining_responses: 1 });
+    const client = {
+      call: vi.fn(async (method, path, opts) => {
+        calls.push([method, path, opts]);
+        if (path.endsWith("/response/undo")) return { latch: baseLatch() };
+        return apiFor(latch, [myIntent])(method, path);
+      }),
+    };
+    const { root, detail } = makeDetail((m, p, o) => client.call(m, p, o));
+    await detail.show(LATCH_ID);
+    expect(root.textContent).toContain("参加と回答しました。");
+    expect(root.textContent).toContain("ほかの1人の回答を待っています");
+    const undoButton = root.querySelector("[data-role=undo]");
+    expect(undoButton.textContent).toBe("回答を取り消す");
+    undoButton.click();
+    await vi.waitFor(() => {
+      expect(calls.some(([m, p]) => p.endsWith("/response/undo"))).toBe(true);
+    });
+  });
+
+  it("グループ提案のjoined: 残回答から現況(誰が回答済みかは出さない)", async () => {
     const { root, detail } = makeDetail(
-      apiFor(baseLatch({ status: "partial_accept", my_response: "yes", remaining_responses: 1 })),
+      apiFor(
+        baseLatch(
+          { is_group: true, status: "partial_accept", my_response: "yes", remaining_responses: 2 },
+          { ...fullProposal, headcount: 3 },
+        ),
+        [myIntent],
+      ),
     );
     await detail.show(LATCH_ID);
-    expect(root.querySelectorAll(".respond-button").length).toBe(0);
-    expect(root.textContent).toContain("参加します");
-    expect(root.textContent).toContain("あと1人の回答が必要"); // partial_acceptの現況
+    expect(root.textContent).toContain("ほかの2人の回答を待っています。");
   });
 
-  it("グループ提案: 必要人数の現況を表示(誰が回答済みかは出さない)", async () => {
-    const { root, detail } = makeDetail(
-      apiFor(baseLatch({ is_group: true, remaining_responses: 2 })),
-    );
+  it("declined(未送信): chipsを選んで「待機中に戻る」でdefer+reasonsを送る(D-07)", async () => {
+    const calls = [];
+    const latch = baseLatch();
+    const client = {
+      call: vi.fn(async (method, path, opts) => {
+        calls.push([method, path, opts]);
+        if (path.endsWith("/response")) return { latch };
+        return apiFor(latch, [myIntent])(method, path);
+      }),
+    };
+    const { root, detail } = makeDetail((m, p, o) => client.call(m, p, o));
     await detail.show(LATCH_ID);
-    expect(root.textContent).toContain("あと2人の回答が必要");
+    // 見送る=即座には送らない(理由chips→離脱時に送信)
+    root.querySelector('[data-role=respond][data-value="defer"]').click();
+    expect(calls.some(([, p]) => p.endsWith("/response"))).toBe(false);
+    expect(root.textContent).toContain("見送りました。");
+    // 理由chips(任意・複数)。再描画でノードが変わるため都度取り直す
+    const chips = [...root.querySelectorAll(".reason-chip")];
+    expect(chips.map((c) => c.dataset.reason)).toEqual(["time", "place", "size", "mood"]);
+    root.querySelector('.reason-chip[data-reason="time"]').click();
+    root.querySelector('.reason-chip[data-reason="mood"]').click();
+    await vi.waitFor(() => {
+      expect(root.querySelector('.reason-chip[data-reason="time"]')?.getAttribute("aria-pressed")).toBe("true");
+      expect(root.querySelector('.reason-chip[data-reason="mood"]')?.getAttribute("aria-pressed")).toBe("true");
+    });
+    // 待機中に戻る=defer+選択理由を送って03へ
+    root.querySelector("[data-role=confirm-decline]").click();
+    await vi.waitFor(() => {
+      const posted = calls.find(([, p]) => p.endsWith("/response"));
+      expect(posted).toBeTruthy();
+    });
+    expect(calls.find(([, p]) => p.endsWith("/response"))[2]).toEqual({
+      body: { response: "defer", reasons: ["time", "mood"] },
+    });
+    await vi.waitFor(() => expect(window.location.hash).toBe("#/standby"));
   });
 
-  it("成立済み姿: 参加者(表示名)・集合情報・次アクション・チャット領域", async () => {
+  it("declined(未送信)の取り消し: 画面操作のみでAPIを呼ばない", async () => {
+    const calls = [];
+    const latch = baseLatch();
+    const { root, detail } = makeDetail(async (m, p, o) => {
+      calls.push([m, p]);
+      return apiFor(latch, [myIntent])(m, p);
+    });
+    await detail.show(LATCH_ID);
+    root.querySelector('[data-role=respond][data-value="defer"]').click();
+    root.querySelector("[data-role=cancel-decline]").click();
+    expect(root.textContent).toContain("全員が「参加する」と答えたときだけ"); // openに戻る
+    expect(calls.some(([, p]) => p.includes("/response"))).toBe(false);
+  });
+
+  it("declined(送信済み=my_response=defer・rejected): chips+「取り消す」→POST undo", async () => {
+    const calls = [];
+    const latch = baseLatch({ status: "rejected", my_response: "defer" });
+    const client = {
+      call: vi.fn(async (method, path, opts) => {
+        calls.push([method, path, opts]);
+        if (path.endsWith("/response/undo")) return { latch: baseLatch() };
+        return apiFor(latch, [myIntent])(method, path);
+      }),
+    };
+    const { root, detail } = makeDetail((m, p, o) => client.call(m, p, o));
+    await detail.show(LATCH_ID);
+    expect(root.textContent).toContain("見送りました。");
+    expect(root.querySelectorAll(".reason-chip").length).toBe(4);
+    root.querySelector("[data-role=undo]").click();
+    await vi.waitFor(() => {
+      expect(calls.some(([, p]) => p.endsWith("/response/undo"))).toBe(true);
+    });
+  });
+
+  it("yes回答で全員がそろった場合: 04のallIn状態(チャットを開く→05)を一度だけ出す", async () => {
     const matched = baseLatch(
-      { status: "matched", remaining_responses: 0 },
+      { status: "matched", my_response: "yes", remaining_responses: 0 },
       minimalProposal,
     );
     matched.participants = participants;
-    matched.time_summary = "2026-10-01 20:00";
-    matched.area_name = "天文館周辺";
-    const { root, detail } = makeDetail(apiFor(matched));
+    let state = baseLatch();
+    const client = {
+      call: vi.fn(async (method, path) => {
+        if (path.endsWith("/response")) {
+          state = matched; // 全員参加で成立
+          return { latch: matched };
+        }
+        if (path === `/v1/latches/${LATCH_ID}/messages?limit=100`) {
+          return { items: [], next_cursor: null };
+        }
+        return { latch: state };
+      }),
+    };
+    const { root, detail } = makeDetail((m, p) => client.call(m, p));
     await detail.show(LATCH_ID);
-    expect(root.textContent).toContain("相手"); // 参加者表示名
-    expect(root.textContent).toContain("よろしく"); // プロフィールbio
-    expect(root.textContent).toContain("2026-10-01 20:00");
-    expect(root.textContent).toContain("チャットで挨拶を交わしましょう");
-    expect(root.querySelector(".chat-messages")).not.toBeNull();
-    expect(root.querySelectorAll(".respond-button").length).toBe(0); // 回答操作なし
+    root.querySelector('[data-role=respond][data-value="yes"]').click();
+    await vi.waitFor(() => {
+      expect(root.textContent).toContain("全員が参加しました。");
+    });
+    expect(root.textContent).toContain("チャットを開く");
+    // チャットを開く→05(チャット画面)
+    root.querySelector("[data-role=open-chat]").click();
+    await vi.waitFor(() => {
+      expect(root.querySelector(".chat-messages")).not.toBeNull();
+    });
   });
 
-  it("completed姿: チャットは読取専用文言・attendance質問を表示", async () => {
-    const completed = baseLatch(
-      { status: "completed", remaining_responses: 0 },
+  it("matchedへ直行(再訪・再読み込み)は05のチャット画面", async () => {
+    const matched = baseLatch(
+      { status: "matched", my_response: "yes", remaining_responses: 0 },
       minimalProposal,
     );
-    completed.participants = participants;
-    completed.time_summary = "2026-10-01 20:00";
-    completed.area_name = null;
-    const { root, detail } = makeDetail(apiFor(completed));
+    matched.participants = participants;
+    const { root, detail } = makeDetail(apiFor(matched));
     await detail.show(LATCH_ID);
-    expect(root.textContent)
-      .toContain("対象時刻を過ぎたため、このチャットは閲覧のみできます");
-    expect(root.textContent).toContain("実際に会いましたか?");
-    expect(root.querySelectorAll(".attendance-field button").length).toBe(2);
+    expect(root.querySelector(".chat-messages")).not.toBeNull();
+    expect(root.querySelectorAll("[data-role=respond]").length).toBe(0);
+  });
+
+  it("flush: 未送信の見送りを画面離脱時に送る(理由つき)", async () => {
+    const calls = [];
+    const latch = baseLatch();
+    const client = {
+      call: vi.fn(async (method, path, opts) => {
+        calls.push([method, path, opts]);
+        if (path.endsWith("/response")) return { latch };
+        return apiFor(latch, [myIntent])(method, path);
+      }),
+    };
+    const { root, detail } = makeDetail((m, p, o) => client.call(m, p, o));
+    await detail.show(LATCH_ID);
+    root.querySelector('[data-role=respond][data-value="defer"]').click();
+    root.querySelector('.reason-chip[data-reason="place"]').click();
+    detail.flush();
+    await vi.waitFor(() => {
+      const posted = calls.find(([, p]) => p.endsWith("/response"));
+      expect(posted).toBeTruthy();
+    });
+    expect(calls.find(([, p]) => p.endsWith("/response"))[2]).toEqual({
+      body: { response: "defer", reasons: ["place"] },
+    });
   });
 
   it("不成立(my_response=no): 自身の操作履歴「辞退しました」", async () => {
@@ -153,6 +348,32 @@ describe("detail 3姿(design §2.3)", () => {
     );
     await detail.show(LATCH_ID);
     expect(root.textContent).toContain(CLOSED_TEXT);
+  });
+
+  it("undo不可(409)はトーストで伝える", async () => {
+    const latch = baseLatch({ status: "rejected", my_response: "defer" });
+    const chrome = { showToast: vi.fn() };
+    const client = {
+      call: vi.fn(async (method, path) => {
+        if (path.endsWith("/response/undo")) {
+          throw new ApiError(409, "LATCH_CLOSED", "closed");
+        }
+        return apiFor(latch, [myIntent])(method, path);
+      }),
+    };
+    const root = document.createElement("section");
+    const detail = createDetail({
+      client,
+      appState: { me: { id: ME, display_name: "自" }, ensureMe: async () => ({ id: ME, display_name: "自" }) },
+      chrome,
+      root,
+      reportFlow: { open: vi.fn() },
+    });
+    await detail.show(LATCH_ID);
+    root.querySelector("[data-role=undo]").click();
+    await vi.waitFor(() => {
+      expect(chrome.showToast).toHaveBeenCalledWith("この回答は取り消せませんでした");
+    });
   });
 
   it("404は「提案が見つかりません」+ホームへ戻る導線", async () => {
@@ -174,20 +395,18 @@ describe("detail 3姿(design §2.3)", () => {
 
   it("通報導線: 提案1対1=あり/グループ提案=なし/成立済み=あり", async () => {
     // 提案1対1
-    const oneOnOne = makeDetail(apiFor(baseLatch()));
+    const oneOnOne = makeDetail(apiFor(baseLatch(), [myIntent]));
     await oneOnOne.detail.show(LATCH_ID);
     expect(oneOnOne.root.textContent).toContain("この提案を通報する");
     // グループ提案(参加者非開示のため導線なし)
     const group = makeDetail(
-      apiFor(baseLatch({ is_group: true, remaining_responses: 2 })),
+      apiFor(baseLatch({ is_group: true, remaining_responses: 2 }), [myIntent]),
     );
     await group.detail.show(LATCH_ID);
     expect(group.root.textContent).not.toContain("通報");
     // 成立済み
     const matched = baseLatch({ status: "matched" }, minimalProposal);
     matched.participants = participants;
-    matched.time_summary = "2026-10-01 20:00";
-    matched.area_name = null;
     const done = makeDetail(apiFor(matched));
     await done.detail.show(LATCH_ID);
     expect(done.root.textContent).toContain("このLATCHを通報する");

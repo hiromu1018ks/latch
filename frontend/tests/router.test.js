@@ -14,16 +14,17 @@ afterEach(() => {
 
 describe("parseHash(design §2.1)", () => {
   it("#/ と空と未知のhashはホームへ", () => {
-    expect(parseHash("#/")).toEqual({ name: "home", id: null });
-    expect(parseHash("")).toEqual({ name: "home", id: null });
-    expect(parseHash("#/unknown/path")).toEqual({ name: "home", id: null });
-    expect(parseHash("#/latches/")).toEqual({ name: "home", id: null });
+    expect(parseHash("#/")).toEqual({ name: "home", id: null, query: {} });
+    expect(parseHash("")).toEqual({ name: "home", id: null, query: {} });
+    expect(parseHash("#/unknown/path")).toEqual({ name: "home", id: null, query: {} });
+    expect(parseHash("#/latches/")).toEqual({ name: "home", id: null, query: {} });
   });
 
   it("#/latches/{uuid} を解析する", () => {
     expect(parseHash(`#/latches/${UUID}`)).toEqual({
       name: "latch",
       id: UUID,
+      query: {},
     });
   });
 
@@ -34,25 +35,41 @@ describe("parseHash(design §2.1)", () => {
   });
 
   it("#/settings をsettingsへ解析する(厳密一致・ws-8 design §2.4)", () => {
-    expect(parseHash("#/settings")).toEqual({ name: "settings", id: null });
+    expect(parseHash("#/settings")).toEqual({ name: "settings", id: null, query: {} });
   });
 
   it("#/onboarding をonboardingへ解析する(厳密一致・M4 ws-5)", () => {
-    expect(parseHash("#/onboarding")).toEqual({ name: "onboarding", id: null });
-    expect(parseHash("#/onboarding/")).toEqual({ name: "home", id: null });
-    expect(parseHash("#/onboarding/x")).toEqual({ name: "home", id: null });
+    expect(parseHash("#/onboarding")).toEqual({ name: "onboarding", id: null, query: {} });
+    expect(parseHash("#/onboarding/")).toEqual({ name: "home", id: null, query: {} });
+    expect(parseHash("#/onboarding/x")).toEqual({ name: "home", id: null, query: {} });
   });
 
   it("#/confirm・#/standby を解析する(UI v2 02/03・厳密一致)", () => {
-    expect(parseHash("#/confirm")).toEqual({ name: "confirm", id: null });
-    expect(parseHash("#/standby")).toEqual({ name: "standby", id: null });
-    expect(parseHash("#/confirm/")).toEqual({ name: "home", id: null });
-    expect(parseHash("#/standby/x")).toEqual({ name: "home", id: null });
+    expect(parseHash("#/confirm")).toEqual({ name: "confirm", id: null, query: {} });
+    expect(parseHash("#/standby")).toEqual({ name: "standby", id: null, query: {} });
+    expect(parseHash("#/confirm/")).toEqual({ name: "home", id: null, query: {} });
+    expect(parseHash("#/standby/x")).toEqual({ name: "home", id: null, query: {} });
+  });
+
+  it("#/standby?deposited=1 を着地状態つきで解析する(UI v2 03)", () => {
+    expect(parseHash("#/standby?deposited=1")).toEqual({
+      name: "standby",
+      id: null,
+      query: { deposited: "1" },
+    });
+  });
+
+  it("#/confirm?intent={uuid} を02編集モードで解析する(UI v2 03の「条件を直す」)", () => {
+    expect(parseHash(`#/confirm?intent=${UUID}`)).toEqual({
+      name: "confirm",
+      id: UUID,
+      query: {},
+    });
   });
 
   it("#/settings/ など末尾に追加がある場合は未知hashとしてホームへ", () => {
-    expect(parseHash("#/settings/")).toEqual({ name: "home", id: null });
-    expect(parseHash("#/settings/x")).toEqual({ name: "home", id: null });
+    expect(parseHash("#/settings/")).toEqual({ name: "home", id: null, query: {} });
+    expect(parseHash("#/settings/x")).toEqual({ name: "home", id: null, query: {} });
   });
 });
 
@@ -67,7 +84,7 @@ describe("createRouter(hashchangeで画面section切替)", () => {
     router.start();
     expect(screens.home.hidden).toBe(false);
     expect(screens.latch.hidden).toBe(true);
-    expect(onRoute).toHaveBeenCalledWith({ name: "home", id: null });
+    expect(onRoute).toHaveBeenCalledWith({ name: "home", id: null, query: {} });
     router.stop();
   });
 
@@ -81,7 +98,7 @@ describe("createRouter(hashchangeで画面section切替)", () => {
     window.dispatchEvent(new Event("hashchange"));
     expect(screens.home.hidden).toBe(true);
     expect(screens.latch.hidden).toBe(false);
-    expect(onRoute).toHaveBeenLastCalledWith({ name: "latch", id: UUID });
+    expect(onRoute).toHaveBeenLastCalledWith({ name: "latch", id: UUID, query: {} });
     window.location.hash = "#/";
     window.dispatchEvent(new Event("hashchange"));
     expect(screens.home.hidden).toBe(false);
@@ -116,7 +133,7 @@ describe("createRouter(hashchangeで画面section切替)", () => {
     expect(screens.settings.hidden).toBe(false);
     expect(screens.home.hidden).toBe(true);
     expect(screens.latch.hidden).toBe(true);
-    expect(onRoute).toHaveBeenLastCalledWith({ name: "settings", id: null });
+    expect(onRoute).toHaveBeenLastCalledWith({ name: "settings", id: null, query: {} });
     router.stop();
   });
 });

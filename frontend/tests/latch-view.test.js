@@ -4,21 +4,31 @@ import {
   CHAT_UNAVAILABLE_TEXT,
   CLOSED_TEXT,
   RATE_LIMIT_TEXT,
+  REASON_CHIPS,
   REPORT_REASON_OPTIONS,
   RESPONSE_BUTTONS,
 } from "../src/latch/texts.js";
 import {
   closedText,
   conditionSummaryLines,
+  countdownText,
   escapeHtml,
+  fitRows,
+  formatYen,
   groupNeedText,
+  hhmmssText,
   isMinimalProposal,
+  joinedWaitText,
   latchMode,
   matchLevelText,
   messageSide,
+  pickMyIntent,
+  proposalStateOf,
+  proposalTimeParts,
   remainingMs,
   remainingTimeText,
   senderName,
+  whoLineText,
 } from "../src/latch/view.js";
 
 // API応答のfixture(§2-1のLatchDetail型・proposalは全フィールド版)
@@ -211,11 +221,10 @@ describe("texts.jsの定数ピン(design §2.8・ws-8参照)", () => {
       .toBe("操作が集中しています。少し時間をおいてもう一度お試しください。");
   });
 
-  it("回答3択と回答済み文言・通報理由4値コード", () => {
+  it("回答2択(D-05で辞退を廃止)と回答済み文言・通報理由4値コード", () => {
     expect(RESPONSE_BUTTONS).toEqual([
       ["yes", "参加する"],
       ["defer", "今回は見送る"],
-      ["no", "辞退する"],
     ]);
     expect(ANSWERED_TEXT).toEqual({
       yes: "参加します",
@@ -228,5 +237,112 @@ describe("texts.jsの定数ピン(design §2.8・ws-8参照)", () => {
       ["suspected_impersonation", "なりすまし疑い"],
       ["other", "その他"],
     ]);
+    expect(REASON_CHIPS).toEqual([
+      ["time", "時間が合わない"],
+      ["place", "場所が合わない"],
+      ["size", "人数が合わない"],
+      ["mood", "今日は気分じゃない"],
+    ]);
+  });
+});
+
+describe("04の4状態(proposalStateOf・D-05〜D-07)", () => {
+  it("open/joined/allIn/declinedをmy_responseとremaining_responsesから出す", () => {
+    expect(proposalStateOf(latch({ my_response: null }))).toBe("open");
+    expect(
+      proposalStateOf(latch({ my_response: "yes", remaining_responses: 1 })),
+    ).toBe("joined");
+    expect(
+      proposalStateOf(latch({ status: "matched", my_response: "yes", remaining_responses: 0 })),
+    ).toBe("allIn");
+    expect(proposalStateOf(latch({ my_response: "defer" }))).toBe("declined");
+  });
+});
+
+describe("04の表示純関数(プロトタイプ04)", () => {
+  it("proposalTimePartsはtime_summaryから時刻と日付文を出す", () => {
+    expect(proposalTimeParts("2026-10-10 20:30", "2026-10-10T12:00:00+09:00"))
+      .toEqual({ clock: "20:30", date: "今夜 · 10/10（土）" });
+    expect(proposalTimeParts("2026-10-11 20:30", "2026-10-10T12:00:00+09:00"))
+      .toEqual({ clock: "20:30", date: "明日 · 10/11（日）" });
+    expect(proposalTimeParts("2026-10-12 20:30", "2026-10-10T12:00:00+09:00").date)
+      .toBe("10/12（月）");
+    expect(proposalTimeParts("うまくない", "2026-10-10T12:00:00+09:00")).toBeNull();
+  });
+
+  it("countdownTextは分:秒・hhmmssTextはHH:MM:SS(負は0固定)", () => {
+    expect(countdownText(27 * 60 * 1000 + 48_000)).toBe("27:48");
+    expect(countdownText(0)).toBe("0:00");
+    expect(countdownText(-5)).toBe("0:00");
+    expect(hhmmssText(17140_000)).toBe("04:45:40");
+    expect(hhmmssText(-1)).toBe("00:00:00");
+  });
+
+  it("formatYenは¥+3桁区切り", () => {
+    expect(formatYen(4000)).toBe("¥4,000");
+  });
+
+  it("whoLineTextは状態ごとの一文(プロトタイプ04のwhoLine)", () => {
+    expect(whoLineText("open", latch())).toBe("あなた ＋ まだ見えない1人");
+    expect(whoLineText("joined", latch())).toBe("あなた（参加）＋ 回答待ちの1人");
+    expect(whoLineText("allIn", latch())).toBe("2人全員が参加");
+    expect(whoLineText("declined", latch())).toBe("あなた ＋ まだ見えない1人");
+  });
+
+  it("joinedWaitTextは残回答から現況文を組む(回答済み0は括弧なし)", () => {
+    expect(joinedWaitText(latch({ remaining_responses: 1 })))
+      .toBe("ほかの1人の回答を待っています。全員がそろったら、お知らせします。");
+    expect(
+      joinedWaitText(
+        latch({ is_group: true, remaining_responses: 1 }, { ...fullProposal, headcount: 3 }),
+      ),
+    ).toBe("ほかの2人の回答を待っています（1人が回答済み）。全員がそろったら、お知らせします。");
+  });
+});
+
+describe("照合表(fitRows・自分の条件×候補)", () => {
+  const myIntent = {
+    structured_intent: {
+      category: { primary: "drinking", secondary: "軽く飲みたい" },
+      time: { start: "2026-10-10T20:00:00+09:00", end: null },
+      location: { name: "天文館", radius_m: null },
+      budget: { max: 5000, currency: "JPY" },
+      participants: { min: 2, max: 4 },
+      participants_includes_owner: true,
+    },
+  };
+  const NOW = "2026-10-10T12:00:00+09:00";
+
+  it("5行を自分の条件→候補で組む(✓は双方の値が揃った行)", () => {
+    const rows = fitRows(myIntent, latch(), NOW);
+    expect(rows.map((r) => r.label)).toEqual(["時間", "場所", "人数", "予算", "目的"]);
+    expect(rows[0]).toEqual({ label: "時間", mine: "今日20:00 以降", theirs: "20:00 開始", ok: true });
+    expect(rows[1]).toEqual({ label: "場所", mine: "天文館", theirs: "天文館周辺", ok: true });
+    expect(rows[2].mine).toBe("2〜4人（あなたを含む）");
+    expect(rows[2].theirs).toBe("2人");
+    expect(rows[3]).toEqual({ label: "予算", mine: "5,000円まで", theirs: "5,000円前後", ok: true });
+    expect(rows[4]).toEqual({ label: "目的", mine: "軽く飲みたい", theirs: "軽く飲めるお店", ok: true });
+  });
+
+  it("自分のIntentが特定できない行は「—」でok=false(見出し文言を替える)", () => {
+    const rows = fitRows(null, latch(), NOW);
+    expect(rows.every((r) => r.mine === "—" && r.ok === false)).toBe(true);
+  });
+
+  it("pickMyIntentは値マッチングで自分のIntentを特定する(該当なしはnull)", () => {
+    const intents = [
+      myIntent,
+      {
+        structured_intent: {
+          category: { primary: "activity", secondary: null },
+          time: { start: "2026-10-10T20:00:00+09:00", end: null },
+          location: { name: "博多駅", radius_m: null },
+          budget: { max: 2000, currency: "JPY" },
+          participants: { min: 2, max: 4 },
+        },
+      },
+    ];
+    expect(pickMyIntent(intents, latch())).toBe(myIntent);
+    expect(pickMyIntent([intents[1]], latch())).toBeNull();
   });
 });

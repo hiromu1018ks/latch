@@ -3,12 +3,15 @@
 // ハイライト)・読み取った条件5行+行編集・人数確認seg(D-04)・足せる条件
 // トグル・公開範囲と通知カード+期限select(D-01・D-02)・CTA「この条件で
 // 預ける」(人数確認必須)→保存→#/standby。stateは01と共有。
+// UI v2 Phase 3: 03の「条件を直す」(#/confirm?intent={id})では保存済みIntentを
+// GET /v1/intents/{id}で復元し、CTA保存をPATCH /v1/intents/{id}(全置換)に切替える。
 // 意図文言をログに出さない(01 §21)。
 import { missingRequired } from "./state.js";
 import { buildWordsSegments } from "./highlight.js";
-import { beginRowEdit, renderExtras, renderRows, rowModels } from "./conditions.js";
+import { beginRowEdit, EXTRAS, renderExtras, renderRows, rowModels } from "./conditions.js";
 import { createSaveFlow } from "./save.js";
 import { applyExpiryOptions, fetchExpiryOptions, selectedExpiry } from "./expiry.js";
+import { applyIntentSnapshot } from "./state.js";
 import { DEFAULT_NOTIFICATION_LEVEL, DEFAULT_VISIBILITY } from "./format.js";
 import { icon } from "../ui/icons.js";
 
@@ -30,6 +33,7 @@ export const initConfirmScreen = ({ client, chrome, state }) => {
 
   let extrasPicked = [];
   let busy = false;
+  let editingIntentId = null; // 03「条件を直す」のPATCH先(null=新規保存)
 
   // --- あなたの言葉(原文ハイライト・D-03) ------------------------------------
   const renderWords = () => {
@@ -145,9 +149,11 @@ export const initConfirmScreen = ({ client, chrome, state }) => {
   };
 
   // --- 保存(02で確定保存→#/standby。D-13: 下書き導線は01側) ------------------
+  // 編集モード(03「条件を直す」)ではPATCH /v1/intents/{id}(全置換・status維持)
   const saveFlow = createSaveFlow({
     client,
     getState: () => state,
+    getIntentId: () => editingIntentId,
     getOptions: () => ({
       visibility: DEFAULT_VISIBILITY, // D-02: 既定値で確定送信
       notificationLevel: DEFAULT_NOTIFICATION_LEVEL,
@@ -159,7 +165,8 @@ export const initConfirmScreen = ({ client, chrome, state }) => {
       refreshActions();
     },
     onActiveSaved: () => {
-      location.hash = "#/standby"; // 03(Phase 3実装。着地状態は03側で表現)
+      // 新規は03の着地状態・編集は通常の待機中へ(クエリで03側が2姿を切替える)
+      location.hash = editingIntentId == null ? "#/standby?deposited=1" : "#/standby";
     },
     onDraftSaved: () => {},
     onFormError: (placement) => {
@@ -175,17 +182,60 @@ export const initConfirmScreen = ({ client, chrome, state }) => {
   });
   cta.addEventListener("click", () => saveFlow.saveActive());
 
-  // --- 画面へ入る(route時・01を経由せず来たら01へ戻す) ------------------------
-  const enter = () => {
+  // --- 画面へ入る(route時) ----------------------------------------------------
+  // 新規: 01を経由せず来たら01へ戻す。編集(#/confirm?intent={id}): 保存済み
+  // IntentをGETで復元してから描画する(復元失敗は03へ戻す)
+  const enterNew = () => {
     if (!state.rawText.trim()) {
       location.hash = "#/";
       return;
     }
+    editingIntentId = null;
     errorEl.hidden = true;
     renderWords();
     rerenderRows();
     refreshActions();
     refreshExpiry();
+  };
+
+  const enterEdit = async (intentId) => {
+    editingIntentId = intentId;
+    errorEl.hidden = true;
+    let currentExpiry = null;
+    try {
+      const data = await client.call("GET", `/v1/intents/${intentId}`);
+      Object.assign(state, applyIntentSnapshot(state, data.intent));
+      currentExpiry = data.intent?.expires_at ?? null;
+    } catch {
+      // 消済み・他者Intentは待機中へ戻す(状態の文言を出さない)
+      location.hash = "#/standby";
+      return;
+    }
+    // 02の固定トグル分はsoftRowsでなくextrasPickedへ(保存時に重複しない)
+    const softTexts = state.softRows.map((row) => row.text);
+    extrasPicked = EXTRAS.filter((extra) => softTexts.includes(extra.label)).map(
+      (extra) => extra.label,
+    );
+    renderWords();
+    rerenderRows();
+    refreshActions();
+    await refreshExpiry();
+    // 保存済みのexpires_atが3択にあればそれを選んでおく(無い値は既定選択のまま)
+    const idx = [...expirySelect.options].findIndex(
+      (option) => option.value === currentExpiry,
+    );
+    if (idx >= 0) {
+      expirySelect.selectedIndex = idx;
+      syncExpiryLabel();
+    }
+  };
+
+  const enter = (intentId = null) => {
+    if (intentId == null) {
+      enterNew();
+      return;
+    }
+    void enterEdit(intentId);
   };
 
   return { enter };

@@ -60,7 +60,7 @@ describe("画面構成(UI v2 Phase 2・01ホーム+02読み解き確認)", () =>
     expect(mainJs()).toContain("chrome.setCurrentNav"); // aria-current
     expect(mainJs()).toContain("chrome.setCounts"); // バッジ件数
     expect(mainJs()).toContain("createFormState"); // 01↔02で共有するフォーム状態
-    expect(mainJs()).toContain("confirmScreen.enter()"); // #/confirmで02を初期化
+    expect(mainJs()).toContain("confirmScreen.enter(route.id)"); // #/confirmで02を初期化(idあり=編集モード)
   });
 
   it("chrome.jsはバッジ・aria-current・toast・dialog制御を持ち旧モーダルを持たない", () => {

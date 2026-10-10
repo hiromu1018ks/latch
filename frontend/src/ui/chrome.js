@@ -3,7 +3,7 @@
 // aria-currentと件数バッジ ②右上toast ③<dialog class="dlg">の土台
 // ④popover(お知らせ・アカウント)。デザイン値はprototype/v2の共通<style>と
 // 03(drop-dlg・toast)に拠る。
-import { icon } from "./icons.js";
+import { icon, logoSvg } from "./icons.js";
 
 const TOAST_AUTO_HIDE_MS = 2400;
 
@@ -46,7 +46,9 @@ export const initChrome = ({ popovers = [], toast, appDialog }) => {
     if (button) button.textContent = letter;
   };
 
-  // --- 右上toast(03のtoast-pos/toast・自動消滅は現行挙動を維持) -------------
+  // --- 右上toast(03のtoast-pos/toast) ---------------------------------------
+  // 2形: showToast("文言")=従来型(自動消滅)・showToast({message, href, kicker})
+  // =候補トースト(03の構成・ロゴ+「見る」リンク・自動消滅しない)
   let toastTimer;
 
   const hideToast = () => {
@@ -54,19 +56,44 @@ export const initChrome = ({ popovers = [], toast, appDialog }) => {
     toast.replaceChildren();
   };
 
-  const showToast = (message) => {
+  const showToast = (messageOrOptions) => {
     window.clearTimeout(toastTimer);
     const card = document.createElement("div");
     card.className = "toast";
-    const msg = document.createElement("p");
-    msg.className = "toast-msg";
-    msg.textContent = message; // 文言はそのまま設定する(HTMLとして解釈しない)
     const close = document.createElement("button");
     close.type = "button";
     close.className = "toast-close ghost";
     close.setAttribute("aria-label", "通知を閉じる");
     close.append(icon("close", 18));
     close.addEventListener("click", hideToast);
+    if (typeof messageOrOptions === "object" && messageOrOptions !== null) {
+      const { message, href, kicker = "LATCH · いま" } = messageOrOptions;
+      const link = document.createElement("a");
+      link.className = "toast-link";
+      link.href = href;
+      const logoBox = document.createElement("span");
+      logoBox.className = "toast-logo";
+      logoBox.append(logoSvg(24));
+      const body = document.createElement("span");
+      body.className = "toast-body";
+      const kick = document.createElement("span");
+      kick.className = "toast-kicker";
+      kick.textContent = kicker;
+      const msg = document.createElement("span");
+      msg.className = "toast-msg";
+      msg.textContent = message; // 文言はそのまま設定する(HTMLとして解釈しない)
+      body.append(kick, msg);
+      const see = document.createElement("span");
+      see.className = "toast-see";
+      see.append("見る", icon("arrowRight", 15));
+      link.append(logoBox, body, see);
+      card.append(link, close);
+      toast.replaceChildren(card); // 候補トーストは閉じるまで残る(プロトタイプ03)
+      return;
+    }
+    const msg = document.createElement("p");
+    msg.className = "toast-msg toast-msg--plain";
+    msg.textContent = messageOrOptions; // 文言はそのまま設定する(HTMLとして解釈しない)
     card.append(msg, close);
     toast.replaceChildren(card);
     toastTimer = window.setTimeout(hideToast, TOAST_AUTO_HIDE_MS);

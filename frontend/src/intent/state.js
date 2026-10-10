@@ -70,3 +70,45 @@ export const canSubmit = (state) =>
 
 // 下書き=テキスト非空のみ(draftはraw_textのみ必須・05 §5)
 export const canDraft = (state) => state.rawText.trim().length > 0;
+
+// 保存済みIntent(GET /v1/intents/{id}応答)→フォーム状態への復元
+// (03の「条件を直す」=02編集モード)。structured_intentはリクエストと同形で
+// 再構成されている(mapping.py to_response_structured)ため、そのまま取り込む。
+// softのうち02の固定トグル分(EXTRAS)は呼び出し側がextrasPickedへ回す
+export const applyIntentSnapshot = (state, intent) => {
+  const s = intent.structured_intent ?? {};
+  return {
+    ...state,
+    rawText: intent.raw_text ?? "",
+    structured: {
+      category: {
+        primary: s.category?.primary ?? null,
+        secondary: s.category?.secondary ?? null,
+      },
+      alcohol_involved: s.alcohol_involved ?? null,
+      time: {
+        start: s.time?.start ?? null,
+        end: s.time?.end ?? null,
+      },
+      location: {
+        name: s.location?.name ?? null,
+        radius_m: s.location?.radius_m ?? null,
+      },
+      budget: { max: s.budget?.max ?? null, currency: s.budget?.currency ?? "JPY" },
+      participants: {
+        min: s.participants?.min ?? null,
+        max: s.participants?.max ?? null,
+      },
+    },
+    participantsIncludesOwner: s.participants_includes_owner ?? true,
+    softRows: (s.soft_constraints ?? []).map((text, i) => ({
+      id: `soft-${i}`,
+      text,
+    })),
+    ngRows: (s.ng_unverifiable ?? []).map((text, i) => ({
+      id: `ng-${i}`,
+      text,
+    })),
+    parseStatus: "ok",
+  };
+};

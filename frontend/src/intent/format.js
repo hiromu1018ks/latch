@@ -216,32 +216,41 @@ export const effectiveParticipants = (participants, includesOwner) => {
   return { min: plus1(participants?.min), max: plus1(participants?.max) };
 };
 
+const buildStructuredIntent = (state, opts) => ({
+  category: { ...state.structured.category },
+  alcohol_involved: state.structured.alcohol_involved,
+  time: {
+    start: state.structured.time.start,
+    end: null, // 編集UIなし・サーバ側でtime.start+3h補完(05 §5・completion.py)
+    flexibility_minutes: null,
+  },
+  location: { ...state.structured.location },
+  budget: { ...state.structured.budget },
+  participants: effectiveParticipants(
+    state.structured.participants,
+    state.participantsIncludesOwner,
+  ),
+  participants_includes_owner: state.participantsIncludesOwner ?? true, // 既定true(05 §2・D-04)
+  visibility: opts.visibility,
+  notification_level: opts.notificationLevel,
+  expires_at: opts.expiresAt,
+  soft_constraints: [
+    ...state.softRows.map((row) => row.text),
+    ...(opts.softExtras ?? []),
+  ],
+  ng_unverifiable: state.ngRows.map((row) => row.text),
+  negative_constraints: [], // FR-42: 常に空配列
+});
+
 export const buildCreateRequest = (state, opts) => ({
   raw_text: state.rawText.trim(),
   status: opts.status,
-  structured_intent: {
-    category: { ...state.structured.category },
-    alcohol_involved: state.structured.alcohol_involved,
-    time: {
-      start: state.structured.time.start,
-      end: null, // 編集UIなし・サーバ側でtime.start+3h補完(05 §5・completion.py)
-      flexibility_minutes: null,
-    },
-    location: { ...state.structured.location },
-    budget: { ...state.structured.budget },
-    participants: effectiveParticipants(
-      state.structured.participants,
-      state.participantsIncludesOwner,
-    ),
-    participants_includes_owner: state.participantsIncludesOwner ?? true, // 既定true(05 §2・D-04)
-    visibility: opts.visibility,
-    notification_level: opts.notificationLevel,
-    expires_at: opts.expiresAt,
-    soft_constraints: [
-      ...state.softRows.map((row) => row.text),
-      ...(opts.softExtras ?? []),
-    ],
-    ng_unverifiable: state.ngRows.map((row) => row.text),
-    negative_constraints: [], // FR-42: 常に空配列
-  },
+  structured_intent: buildStructuredIntent(state, opts),
+});
+
+// PATCH /v1/intents/{id}(03の「条件を直す」)。status未指定=現状維持(05 §5)・
+// raw_text+structured_intentの全置換
+export const buildPatchRequest = (state, opts) => ({
+  raw_text: state.rawText.trim(),
+  structured_intent: buildStructuredIntent(state, opts),
 });

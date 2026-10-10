@@ -157,3 +157,53 @@ describe("UI v2シェル(Phase 1)", () => {
     expect(css()).toContain("env(safe-area-inset-bottom)");
   });
 });
+
+describe("03待機中・04候補が届く(UI v2 Phase 3)", () => {
+  it("03の主要フック(バッジ・見出し2行・メインカード・オーブ・ほかの意思)", () => {
+    const ids = ["standbyScreen"];
+    for (const id of ids) expect(html()).toContain(`id="${id}"`);
+    for (const hook of [
+      "data-sb-badge",
+      "data-sb-title-a",
+      "data-sb-title-b",
+      "data-sb-lead",
+      "data-sb-main",
+      "data-sb-orb",
+      "data-sb-others",
+    ]) {
+      expect(html()).toContain(hook);
+    }
+    // 3カード(いま、LATCHがしていること)+通知プレビュー
+    expect(html()).toContain("いま、LATCHがしていること");
+    expect(html()).toContain("照らし合わせ続ける");
+    expect(html()).toContain("成立し得るかだけを見る");
+    expect(html()).toContain("揃ったら、ひとことだけ");
+    expect(html()).toContain("LATCH候補があります");
+    expect(html()).toContain("ほかに待機中の意思");
+    expect(html()).toContain("新しく預ける");
+    // プレースホルダは解消済み
+    expect(html()).not.toContain("この画面は準備中です");
+  });
+
+  it("03・04のスタイル(オーブ・タイマー・照合表・4状態・timer-low)", () => {
+    for (const cls of [
+      ".sb-main{",
+      ".sb-timer [data-sb-timer]{",
+      ".orb-chip{",
+      ".ripple{",
+      ".pv-grid{",
+      ".pv-cards{",
+      ".fit-row{",
+      ".pv-decide{",
+      ".pv-timer{",
+      ".pv-state-card.joined{",
+      ".pv-state-card.allin{",
+      ".pv-state-card.declined{",
+      ".reason-chip{",
+      ".timer-low{color:var(--dng)",
+      ".toast-link{",
+    ]) {
+      expect(css()).toContain(cls);
+    }
+  });
+});

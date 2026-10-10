@@ -35,11 +35,11 @@ export const STATUS_TEXT = {
   completed: "完了",
 };
 
-// 回答操作3択(03 §5のUI文言→API値・design §2.5)
+// 回答操作2択(03 §5のUI文言→API値・D-05で「辞退する」(no)のUI導線は廃止。
+// APIの3値は温存・noはAPI直叩きでのみ到達)
 export const RESPONSE_BUTTONS = [
   ["yes", "参加する"],
   ["defer", "今回は見送る"],
-  ["no", "辞退する"],
 ];
 
 // 回答済み表示(design §2.4)
@@ -48,6 +48,74 @@ export const ANSWERED_TEXT = {
   defer: "今回は見送りました",
   no: "辞退しました",
 };
+
+// --- UI v2 Phase 3追記: 04候補が届く(D-05〜D-07・プロトタイプ04が正源) ------
+
+// 4状態の見出し(プロトタイプ04のdecideカード)
+export const PROPOSAL_HERO_TEXT = "条件が、揃いそうです。";
+export const PROPOSAL_LEAD_TEXT =
+  "相手の姿は、全員が「参加する」と答えたときにはじめて見えます。あなたの条件も、まだ誰にも渡っていません。";
+export const JOINED_TITLE = "参加と回答しました。";
+export const ALL_IN_TITLE = "全員が参加しました。";
+export const DECLINED_TITLE = "見送りました。";
+export const FIT_TITLE = "あなたの条件との照合";
+export const FIT_ALL_TEXT = "5項目すべて条件内";
+export const FIT_NOTE_TEXT =
+  "この案は、ほかの参加候補それぞれの条件にも収まっています。片方だけが大満足する提案は出しません。";
+export const FIT_UNAVAILABLE_TEXT = "候補は、あなたの条件の範囲で選ばれています";
+export const MINIMAL_PROPOSAL_NOTE =
+  "くわしい内容は、全員が「参加する」と答えたときにわかります";
+export const RESPONSE_NOTE_TEXT =
+  "全員が「参加する」と答えたときだけ、相手が見えてチャットが開きます。あなたの回答は、次の提案の精度に活かされます。";
+export const JOINED_WAIT_NOTE =
+  "誰かが見送った場合は、何も起きずに待機に戻ります。誰が見送ったかは、お互いに分かりません。";
+export const JOINED_DONE_NOTE = "全員がそろったら、お知らせします。";
+export const DECLINED_NOTE_TEXT =
+  "条件はそのまま、待機を続けます。見送ったことは、ほかの参加候補には伝わりません。";
+export const ALL_IN_LEAD_TEXT = "LATCHが成立しました。ここから、お互いの姿が見えます。";
+export const OPEN_CHAT_LABEL = "チャットを開く";
+export const BACK_TO_STANDBY_LABEL = "待機中に戻る";
+export const UNDO_JOINED_LABEL = "回答を取り消す";
+export const UNDO_DECLINED_LABEL = "取り消す";
+export const UNDO_BLOCKED_TOAST_TEXT = "この回答は取り消せませんでした";
+export const DEADLINE_LINE_SUFFIX = " を過ぎると、この候補は静かに消えます";
+
+// 見送り理由chips(D-07・値はAPIのtime/place/size/mood・任意複数)
+export const REASON_CHIPS = [
+  ["time", "時間が合わない"],
+  ["place", "場所が合わない"],
+  ["size", "人数が合わない"],
+  ["mood", "今日は気分じゃない"],
+];
+export const REASON_LABEL_TEXT = "よければ理由を教えてください（任意・複数可）";
+export const REASON_NOTE_TEXT = "次の提案をより合うものにするために使います";
+
+// --- UI v2 Phase 3追記: 03待機中(プロトタイプ03が正源) ----------------------
+
+export const STANDBY_TITLE_A = "条件が揃うのを、";
+export const STANDBY_TITLE_B = "待っています。";
+export const STANDBY_DEPOSITED_A = "預けました。";
+export const STANDBY_DEPOSITED_B = "あとは、待つだけ。";
+export const STANDBY_LEAD =
+  "あなたが預けた条件です。別の誰かの条件と成立し得ると判断された瞬間にだけ、お知らせします。";
+export const STANDBY_DEPOSITED_LEAD =
+  "LATCHがこの条件を預かっています。別の誰かの条件と成立し得ると判断された瞬間にだけ、お知らせします。";
+export const STANDBY_PILL_TEXT = "待機中";
+export const WITHDRAWN_PILL_TEXT = "取り下げ済み";
+export const WITHDRAWN_NOTE_TEXT =
+  "この条件は取り下げました。もう誰とも照らし合わされません。";
+export const DEPOSIT_AGAIN_LABEL = "もう一度預ける";
+export const EDIT_CONDITION_LABEL = "条件を直す";
+export const WITHDRAW_BUTTON_LABEL = "取り下げる";
+export const NEW_DEPOSIT_LABEL = "新しく預ける";
+export const NO_OTHERS_TEXT = "ほかに待機中の意思はありません。";
+export const WITHDRAW_DIALOG_TITLE = "この条件を取り下げますか？";
+export const WITHDRAW_DIALOG_NOTE =
+  "取り下げると、照らし合わせを止めます。届いている候補も消えます。相手に通知されることはありません。";
+export const WITHDRAW_CANCEL_LABEL = "やめておく";
+export const WITHDRAWN_TOAST_TEXT = "取り下げました";
+export const CANDIDATE_TOAST_TEXT = "LATCH候補があります"; // 03の右上トースト
+export const CANDIDATE_TOAST_SEE_LABEL = "見る";
 
 // 通報理由の選択式4値(08 §5.2・API値はws-5実装の英語コード)
 export const REPORT_REASON_OPTIONS = [
