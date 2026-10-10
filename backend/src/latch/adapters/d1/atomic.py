@@ -222,6 +222,9 @@ class D1AtomicRepository:
             "response": response["value"],
             "answered_at": now.isoformat(),
         }
+        # 見送り理由(05 §2・D-07)。defer時のみ受理はroute層のPydanticで検証済み
+        if response["value"] == "defer" and response.get("reasons"):
+            item["reason_codes"] = list(response["reasons"])
         after = [*responses, item]
         new_status = _compute_new_status(response["value"], after, len(intent_ids))
 
@@ -466,6 +469,311 @@ class D1AtomicRepository:
         if latch_now["status"] not in _RESPONSE_ACCEPTING:
             return CommandResult(CommandStatus.REJECTED, error_code="LATCH_CLOSED")
         return CommandResult(CommandStatus.CONFLICT)
+
+    # ------------------------------------------------------------------
+    # apply_response_undo(回答取り消し・05 §5 D-06)
+    # ------------------------------------------------------------------
+
+    async def apply_response_undo(
+        self,
+        command_id: str,
+        expected_revision: int | None,
+        mutation: dict[str, Any],
+        now,
+    ) -> CommandResult:
+        """latches.undo_response と同じ業務結果(参照実装service.undo_response相当)。
+
+        mutation = {latch_id, user_id}。残った他者のno/deferがある場合は
+        状態がrejectedへ戻らないため REJECTED/LATCH_CLOSED。
+        """
+        existing = await self._marker(command_id)
+        if existing is not None and existing["applied_at"] is not None:
+            return CommandResult(
+                status=CommandStatus(existing["result_status"]),
+                response=_loads(existing["result_response"], None),
+            )
+
+        latch_id = mutation["latch_id"]
+        user_id = mutation["user_id"]
+        row = (
+            await self.db.prepare(
+                "SELECT id, intent_ids, responses, status, response_deadline,"
+                " expires_at, proposal, group_candidate_id, score, created_at,"
+                " completed_at, left_user_ids FROM latches WHERE id = ?"
+            )
+            .bind(latch_id)
+            .first()
+        )
+        if row is None:
+            return CommandResult(CommandStatus.REJECTED, error_code="NOT_FOUND")
+        my_intents = (
+            await self.db.prepare(
+                "SELECT id FROM intents WHERE user_id = ? AND id IN ("
+                " SELECT value FROM json_each(?))"
+            )
+            .bind(user_id, row["intent_ids"])
+            .all()
+        )
+        if not my_intents:
+            # 05 §5 undo: 参加者以外は404(参照実装と同一)
+            return CommandResult(CommandStatus.REJECTED, error_code="NOT_FOUND")
+
+        responses: list[dict] = _loads(row["responses"], [])
+        mine = next((r for r in responses if r.get("user_id") == user_id), None)
+        if mine is None:
+            return CommandResult(CommandStatus.REJECTED, error_code="UNANSWERED")
+        deadline = from_micros(row["response_deadline"])
+        expires = from_micros(row["expires_at"])
+        if deadline <= now or expires <= now:
+            return CommandResult(CommandStatus.REJECTED, error_code="LATCH_EXPIRED")
+        remaining = [r for r in responses if r is not mine]
+        new_status = status_after_undo(remaining)
+        if row["status"] not in ("proposed", "partial_accept", "rejected") or (
+            new_status is None
+        ):
+            return CommandResult(CommandStatus.REJECTED, error_code="LATCH_CLOSED")
+
+        before_json = canonical_json(responses)
+        after_json = canonical_json(remaining)
+        guard = (
+            "EXISTS (SELECT 1 FROM latches WHERE id = ? AND status = ?"
+            " AND responses = ?)"
+        )
+        guard_params = (latch_id, new_status, after_json)
+        now_us = micros(now)
+        stmts = [
+            self.db.prepare(
+                "INSERT OR IGNORE INTO commands"
+                " (id, kind, target_id, requested_at, applied_at,"
+                "  result_status, result_response)"
+                " VALUES (?, 'response_undo', ?, ?, NULL, NULL, NULL)"
+            ).bind(command_id, latch_id, now_us),
+            # 主更新(条件付き: 参照実装 _UPDATE_RESPONSE_UNDO と同一条件)
+            self.db.prepare(
+                "UPDATE latches SET responses = ?, status = ? WHERE id = ?"
+                " AND status = ? AND responses = ?"
+                " AND response_deadline > ? AND expires_at > ?"
+                " AND NOT EXISTS (SELECT 1 FROM json_each(intent_ids) je"
+                "   JOIN intents i ON i.id = je.value"
+                "   WHERE i.status NOT IN ('active', 'paused'))"
+            ).bind(
+                after_json,
+                new_status,
+                latch_id,
+                row["status"],
+                before_json,
+                now_us,
+                now_us,
+            ),
+            self.db.prepare(
+                "INSERT INTO latch_status_events"
+                " (id, latch_id, from_status, to_status, user_id, created_at)"
+                " SELECT ?, ?, ?, ?, ?, ? WHERE " + guard
+            ).bind(
+                _new_id(),
+                latch_id,
+                row["status"],
+                new_status,
+                user_id,
+                now_us,
+                *guard_params,
+            ),
+            # rejected確定時に作られたcalibrationの破棄(参照実装と同一・
+            # 取り消した確定は無かったものとし再確定のUNIQUE衝突を防ぐ)
+            *(
+                [
+                    self.db.prepare(
+                        "DELETE FROM calibration_records WHERE latch_id = ?"
+                        " AND " + guard
+                    ).bind(latch_id, *guard_params)
+                ]
+                if row["status"] == "rejected"
+                else []
+            ),
+            self._journal_stmt(
+                command_id,
+                1,
+                change_kind="upsert",
+                table_name="latches",
+                row_id=latch_id,
+                before=dict(row),
+                after={
+                    "id": latch_id,
+                    "status": new_status,
+                    "responses": after_json,
+                },
+                now=now,
+            ),
+        ]
+        results = await self.db.batch(stmts)
+        main_update_changes = results[1].changes
+        latch_now = (
+            await self.db.prepare("SELECT responses, status FROM latches WHERE id = ?")
+            .bind(latch_id)
+            .first()
+        )
+        reached = (
+            latch_now is not None
+            and latch_now["status"] == new_status
+            and latch_now["responses"] == after_json
+        )
+        if not reached and main_update_changes == 0:
+            classified = await self._classify_response_conflict(latch_now, user_id, now)
+            await self._finish_marker(command_id, classified.status.value, None, now)
+            return classified
+        if not reached:
+            await self._finish_marker(command_id, "conflict", None, now)
+            return CommandResult(CommandStatus.CONFLICT)
+
+        intent_ids = _loads(row["intent_ids"], [])
+        api_response = {
+            "latch": {
+                "id": latch_id,
+                "status": new_status,
+                "my_response": None,
+                "remaining_responses": _remaining(remaining, len(intent_ids)),
+            }
+        }
+        await self._finish_marker(command_id, "applied", api_response, now)
+        return CommandResult(
+            CommandStatus.APPLIED,
+            response=api_response,
+            revision=len(remaining),
+        )
+
+    # ------------------------------------------------------------------
+    # apply_leave(参加取り消し・05 §5 D-08)
+    # ------------------------------------------------------------------
+
+    async def apply_leave(
+        self,
+        command_id: str,
+        expected_revision: int | None,
+        mutation: dict[str, Any],
+        now,
+    ) -> CommandResult:
+        """latches.leave と同じ業務結果(参照実装service.leave相当)。
+
+        mutation = {latch_id, user_id, display_name}。
+        ①left_user_ids追記②システム行(sender_id NULL)挿入
+        ③calibration.cancelled_after=1を単一batchで確定する。
+        statusはmatchedのまま(解散しない)。
+        """
+        existing = await self._marker(command_id)
+        if existing is not None and existing["applied_at"] is not None:
+            return CommandResult(
+                status=CommandStatus(existing["result_status"]),
+                response=_loads(existing["result_response"], None),
+            )
+
+        latch_id = mutation["latch_id"]
+        user_id = mutation["user_id"]
+        row = (
+            await self.db.prepare(
+                "SELECT id, status, left_user_ids FROM latches WHERE id = ?"
+            )
+            .bind(latch_id)
+            .first()
+        )
+        if row is None:
+            return CommandResult(CommandStatus.REJECTED, error_code="NOT_FOUND")
+        my_intents = (
+            await self.db.prepare(
+                "SELECT id FROM intents WHERE user_id = ? AND id IN ("
+                " SELECT value FROM json_each((SELECT intent_ids FROM latches"
+                "  WHERE id = ?)))"
+            )
+            .bind(user_id, latch_id)
+            .all()
+        )
+        if not my_intents:
+            # 05 §5 leave: 参加者以外は404(参照実装と同一)
+            return CommandResult(CommandStatus.REJECTED, error_code="NOT_FOUND")
+        if row["status"] != "matched":
+            return CommandResult(CommandStatus.REJECTED, error_code="LATCH_CLOSED")
+        left: list[str] = _loads(row["left_user_ids"], [])
+        if user_id in left:
+            return CommandResult(CommandStatus.REJECTED, error_code="ALREADY_LEFT")
+
+        after_left = [*left, user_id]
+        left_json = canonical_json(after_left)
+        guard = (
+            "EXISTS (SELECT 1 FROM latches WHERE id = ? AND status = ?"
+            " AND left_user_ids = ?)"
+        )
+        guard_params = (latch_id, "matched", left_json)
+        now_us = micros(now)
+        body = f"{mutation.get('display_name') or '参加者'}が参加を取り消しました"
+        stmts = [
+            self.db.prepare(
+                "INSERT OR IGNORE INTO commands"
+                " (id, kind, target_id, requested_at, applied_at,"
+                "  result_status, result_response)"
+                " VALUES (?, 'leave', ?, ?, NULL, NULL, NULL)"
+            ).bind(command_id, latch_id, now_us),
+            # 主更新(条件付き: matched・未脱退・snapshot一致)
+            self.db.prepare(
+                "UPDATE latches SET left_user_ids = ? WHERE id = ?"
+                " AND status = 'matched' AND left_user_ids = ?"
+            ).bind(left_json, latch_id, canonical_json(left)),
+            # システム行(sender_id NULL・主更新に従属)
+            self.db.prepare(
+                "INSERT INTO messages (id, latch_id, sender_id, body, created_at)"
+                " SELECT ?, ?, NULL, ?, ? WHERE " + guard
+            ).bind(_new_id(), latch_id, body, now_us, *guard_params),
+            # 成立後キャンセル記録(行なしは0行で正常・参照実装と同一裁定)
+            self.db.prepare(
+                "UPDATE calibration_records SET cancelled_after = 1,"
+                " updated_at = ? WHERE latch_id = ? AND cancelled_after IS NULL"
+                " AND " + guard
+            ).bind(now_us, latch_id, *guard_params),
+            self._journal_stmt(
+                command_id,
+                1,
+                change_kind="upsert",
+                table_name="latches",
+                row_id=latch_id,
+                before=dict(row),
+                after={"id": latch_id, "status": "matched", "left_user_ids": left_json},
+                now=now,
+            ),
+        ]
+        results = await self.db.batch(stmts)
+        latch_now = (
+            await self.db.prepare(
+                "SELECT status, left_user_ids FROM latches WHERE id = ?"
+            )
+            .bind(latch_id)
+            .first()
+        )
+        reached = (
+            latch_now is not None
+            and latch_now["status"] == "matched"
+            and latch_now["left_user_ids"] == left_json
+        )
+        if not reached and results[1].changes == 0:
+            # 並行で先に書いた(再脱退・状態変化)→ 再分類
+            if latch_now is None:
+                classified = CommandResult(
+                    CommandStatus.REJECTED, error_code="NOT_FOUND"
+                )
+            elif latch_now["status"] != "matched":
+                classified = CommandResult(
+                    CommandStatus.REJECTED, error_code="LATCH_CLOSED"
+                )
+            else:
+                classified = CommandResult(
+                    CommandStatus.REJECTED, error_code="ALREADY_LEFT"
+                )
+            await self._finish_marker(command_id, classified.status.value, None, now)
+            return classified
+        if not reached:
+            await self._finish_marker(command_id, "conflict", None, now)
+            return CommandResult(CommandStatus.CONFLICT)
+
+        api_response = {"latch": {"id": latch_id, "status": "matched", "left": True}}
+        await self._finish_marker(command_id, "applied", api_response, now)
+        return CommandResult(CommandStatus.APPLIED, response=api_response)
 
     async def _calibration_prediction(self, row, intent_ids, new_status):
         """参照実装と同じ選択規則(pick_eval_row / pick_min_pair)。"""
@@ -1269,6 +1577,13 @@ def _compute_new_status(response: str, responses: list[dict], total: int) -> str
     from latch.domain.latch_status import compute_new_status
 
     return compute_new_status(response, responses, total)
+
+
+def status_after_undo(responses: list[dict]) -> str | None:
+    """domain の同一実装を使う(T2: 計算の複製をしない)。"""
+    from latch.domain.latch_status import status_after_undo as _impl
+
+    return _impl(responses)
 
 
 def _jst_day_start_us(now):

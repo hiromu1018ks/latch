@@ -6,7 +6,7 @@
 
 ## 現在
 
-- フェーズ: **M4完了・G4承認済み(2026-10-06)→ UI v2移行Phase 0完了(2026-10-10)→ UI v2 Phase 1完了(2026-10-10)**。次は**UI v2 Phase 2(01ホーム+02読み解き確認)**(Phase 1Bは並行可)。P2〜P6を経て11 Phase 0(内部α)へ(12 v0.4第3.1節・UI v2欄参照)。ws-9(FCM実機送信)は資材待ちで独立挿入可
+- フェーズ: **M4完了・G4承認済み(2026-10-06)→ UI v2移行Phase 0完了(2026-10-10)→ UI v2 Phase 1完了(2026-10-10)→ UI v2 Phase 1B完了(2026-10-10)**。次は**UI v2 Phase 2(01ホーム+02読み解き確認)**。P2〜P6を経て11 Phase 0(内部α)へ(12 v0.4第3.1節・UI v2欄参照)。ws-9(FCM実機送信)は資材待ちで独立挿入可
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
@@ -23,7 +23,7 @@
 |---|---|---|---|
 | 0 | 判断14項目の裁断+仕様基準をprototype/v2へ切替 | なし | 完了(2026-10-10) |
 | 1 | デザイン基盤(トークン・フォント・SVGアイコン)と新シェル | P0 | 完了(2026-10-10) |
-| 1B | (オプション)決定分のAPI拡張をbackendへ(D-01期限3択・D-04人数確認保存・D-06回答取り消し・D-07見送り理由・D-08参加取り消し=05 v0.6) | P0 | 未着手 |
+| 1B | (オプション)決定分のAPI拡張をbackendへ(D-01期限3択・D-04人数確認保存・D-06回答取り消し・D-07見送り理由・D-08参加取り消し=05 v0.6) | P0 | 完了(2026-10-10) |
 | 2 | 01ホーム+02読み解き確認+保存 | P1(P1B一部) | 未着手 |
 | 3 | 03待機中+04候補(回答2択・undo・理由) | P2 | 未着手 |
 | 4 | 05成立+チャット+通報/ブロック+参加取り消し+カレンダー | P3 | 未着手 |
@@ -33,6 +33,8 @@
 P0実施記録(2026-10-10): ユーザー指示「プロトタイプが正」(2回の確認。UI削除の推奨は取り下げ)により14項目すべて確定。docs改版(00 v1.2・01 v0.7・02 v0.4・03 v0.5・05 v0.6・07・12 v0.4)を実施。P1BのAPI拡張5件は05 v0.6に規定済み。経過はphase0-report.md。
 
 P1実施記録(2026-10-10): デザイン基盤と新シェルを切替え完了。styles.css全面書換(「夜と翡翠」トークン+共通部品)・フォントを@fontsource 3書体のself-hostへ(D-12・Phosphor廃止・SVGアイコンをsrc/ui/icons.jsへ集約)・index.htmlを新ヘッダー(topnav4項目+バッジ)・モバイルtabbar・右上toast・`<dialog>`土台で再構築・`#/confirm`・`#/standby`を追加・chrome.js再構成(バッジ・aria-current・toast・dialog)・テーマ切替とpaperテクスチャを削除。旧画面は暫定表示として機能等価で維持(一覧と独自に構成した値はphase1-report.md)。vitest 244件緑・build緑・全ルートを実機確認済み。
+
+P1B実施記録(2026-10-10): API拡張5件(D-01・D-04・D-06・D-07・D-08)をbackend(PostgreSQL+D1/Workers両実装)へ実装し契約試験まで通した。undo・leaveの2経路新設・expiry-options 3択化・structured_data.participants_includes_owner・responses.reason_codes・latches.left_user_ids/messages.sender_id NULL可(alembic 0009+D1 0005)。`make test`1579・`make test-ci`2160・契約(参照132/D1 130・P1B追加13ケース)・miniflare probe緑。backend lint残留21件とprobe試験ドリフト・cutover変換の追随も回収。詳細はphase1b-report.md。
 
 ## M0 作業単位
 

@@ -6,6 +6,7 @@
 - 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28。v0.6更新: 2026-10-10)
 - 前提文書: 01 要件定義書 v0.7 / 02 スコープ合意書 v0.4 / 03 UX仕様書 v0.5 / 04 システムアーキテクチャ設計書 v0.5
 - v0.6の変更点(UI v2基準切替): プロトタイプv2「夜と翡翠」への基準切替に伴うAPI改版(決定記録はdocs/plans/ui-v2/phase0-decisions.md)。主要変更は次のとおり。
+  - **Phase 1B実装完了(2026-10-10)**: 上記5APIのbackend実装・契約試験・エンドポイント表・遷移表への反映まで完了。実装報告はdocs/plans/ui-v2/phase1b-report.md
   - expiry-optionsの選択肢を4値から**3値(今日 22:00 / 今日 23:59 / 明日 5:00)**へ変更(D-01。completion.pyの選択肢生成を更新。実装はUI v2 Phase 1B)
   - structured_dataへ**participants_includes_owner**(あなたを含むか・既定true)を追加(D-04。「含まない」の場合はクライアントがparticipants実効値を+1して送信する)
   - **回答取り消しAPI**(POST /v1/latches/{id}/response/undo)を追加(D-06。回答済み→未回答へ戻す。04のjoined/declined状態の「回答を取り消す」に対応)
@@ -94,7 +95,7 @@ users ──1:N── notifications / reports
 | geo_center | geography(Point,4326) | NULL | PostGIS。**draftではNULL可(v0.4: 下書きはraw_textのみ必須、第5節)。active化(PATCH)時にlocation.nameのジオコーディング(04第3節)で確定する**。active行ではNULL不可(active化時の検証で強制する。DB CHECKではなくアプリ層+active化経路で保証する) |
 | geo_radius_m | integer | NULL | draftではNULL可(v0.4)。active化時に確定(未指定は1,000m既定半径、03 v0.4 D-19) |
 | budget_max | integer | NULL | NULL=制約なし(03 D-19)。minは原則使わない |
-| participants_min / participants_max | smallint | NOT NULL, DEFAULT 2 | 提案者自身を含む人数(01第15節) |
+| participants_min / participants_max | smallint | NOT NULL, DEFAULT 2 | 提案者自身を含む人数(01第15節)。**上限は5(v0.6実装・D-04の「含まない」+1換算であなた+2〜4人=合計3〜5人を送信し得るため。LATCHサイズ上限4はlatches.intent_idsのCHECKが担う)** |
 | visibility | text | NOT NULL, CHECK IN ('hidden_until_match','summary_only'), DEFAULT 'hidden_until_match' | 公開設定(02 v0.3 D-03再決定)。hidden_until_match=条件一致までは非公開(提案画面に条件サマリを表示せず、成立時に解放)、summary_only=候補にだけ概要を表示(提案画面に条件サマリを表示)。Layer 1の判定対象ではない(開示範囲はproposal生成分岐で制御)。**UIからの変更導線はv0.6で廃止(D-02)。クライアントは常に既定値hidden_until_matchで送信する(値域・A/B試験時のAPI直叩きによる変更は可)** |
 | notification_level | text | NOT NULL, CHECK IN ('proposals_only','nearby_also','muted'), DEFAULT 'proposals_only' | お知らせ設定(03 v0.4第3節、v0.4新設)。proposals_only=閾値超過の提案のみ通知、nearby_also=閾値未満候補の発生通知も送る(条件サマリ・相手情報は含まない。D-08の日次上限に含めるが同時進行上限には適用しない、06 v0.4第6節)、muted=提案通知を送らない(遷移自体はproposedまで行う、06 v0.4第6節)。UI名称は「お知らせ」(預け方パネル) |
 | status | text | NOT NULL | draft/active/paused/matched/expired/cancelled(第6節) |
@@ -172,6 +173,7 @@ intents.structured_dataは、Hard Constraintとして独立カラム化した項
 | score | numeric | NOT NULL | 提示時のスコア |
 | responses | jsonb | NOT NULL DEFAULT '[]' | 下記の構造。回答種別を区別保持(03 D-07) |
 | status | text | NOT NULL | candidate / proposed / partial_accept / matched / rejected / expired / cancelled / completed(第6節)。candidateは保留キューの行である(06第10節) |
+| left_user_ids | uuid[] | NOT NULL, DEFAULT '{}' | 参加取り消し済みのuser_id(v0.6実装・D-08)。matchedのまま自分のみ脱退した参加者の集合。以後のチャット送信は409 CHAT_READONLY・再leaveは409 ALREADY_LEFT。解散判定・headcount再判定には使わない |
 | response_deadline | timestamptz | NOT NULL | 03 D-05の導出規則で設定。candidate状態では保留登録時点の暫定値であり、提示(proposed遷移・通知送信)時に必ず再計算して上書きする(06第10節)。回答判定・表示はこの確定値のみを使う |
 | expires_at | timestamptz | NOT NULL | 参加Intentのexpires_atの最小値 |
 | created_at / completed_at | timestamptz | | |
@@ -212,7 +214,7 @@ calibration_records.proposal_snapshotはこのproposalと同形とする(09 D-09
 | blocks | id / blocker_id / blocked_id / created_at | 単方向。マッチングは双方向 (A,B)(B,A) を確認。解除は当該行の削除(第5節) |
 | reports | id / reporter_id / reportee_id / latch_id / reason / status / created_at | 第25節Safetyの通報 |
 | notifications | id / user_id / type / payload / read_at / created_at | 03 D-18のアプリ内通知 |
-| messages | id / latch_id / sender_id / body / created_at | matched以降のみ書き込み可。ブロック適用中のLATCH(08 D-23)は読み取り専用(書き込みは409 CHAT_READONLY) |
+| messages | id / latch_id / sender_id / body / created_at | matched以降のみ書き込み可。**sender_idはNULL可(v0.6実装・D-08の参加取り消しシステム行「{表示名}が参加を取り消しました」のみNULL=送信者なし)**。ブロック適用中のLATCH(08 D-23)は読み取り専用(書き込みは409 CHAT_READONLY) |
 
 ### calibration_records(07第6節の構造の形式化)
 
@@ -287,6 +289,8 @@ CREATE INDEX idx_intents_embedding ON intents
 | 404 | NOT_FOUND | リソース不在 | 全API |
 | 409 | LATCH_EXPIRED | response_deadline / expires_at経過後の回答 | LATCH回答 |
 | 409 | ALREADY_ANSWERED | 同一LATCHへの二重回答 | LATCH回答 |
+| 409 | UNANSWERED | 未回答での回答取り消し(v0.6実装・D-06) | response/undo |
+| 409 | ALREADY_LEFT | 参加取り消し済みでの再取り消し(v0.6実装・D-08) | leave |
 | 409 | LATCH_CLOSED | 競合クローズ後(他LATCH成立・参加Intent変化等、01第8節) | LATCH回答 |
 | 409 | CHAT_READONLY | ブロック適用中(08 D-23)または参加取り消し済み(D-08)のLATCHへの送信 | チャット送信 |
 | 409 | ATTENDANCE_ALREADY_SUBMITTED | 実施自己申告の二重回答(訂正不可) | attendance |
@@ -438,6 +442,8 @@ errors:   409 UNANSWERED(未回答)/ 409 LATCH_CLOSED(matched済み・競合ク�
 
 自分の回答を取り消して未回答へ戻す(04のjoined・declined状態の「回答を取り消す」「取り消す」)。latches.responsesから自分の回答を除去し、状態をpartial_acceptまたはproposedへ戻す。reason_codesが紐づく場合は同時に破棄する。latch_status_eventsへ遷移を記録する。回答APIと同一の直列化(FOR UPDATE+条件付きUPDATE、06第6節)で実装し、取り消しと回答の競合を排除する。実装はUI v2 Phase 1B。
 
+**実装が確定した細目(v0.6実装・Phase 1B)。** 取り消し後の状態は残ったresponsesから再計算する(他者のyesが残る=partial_accept・誰のyesも残らない=proposed)。他者のno/deferが残る場合は取り消してもrejectedに戻れないため409 LATCH_CLOSEDで拒否する。rejected確定時に作成されたcalibration_recordsは取り消しと同じトランザクションで破棄する(「レコードは回答確定時に作成」の規則を維持し、再確定時のUNIQUE(latch_id)衝突を防ぐ)。参加者以外は404 NOT_FOUND(回答APIの403 FORBIDDENと扱いを分ける・存在の開示範囲を attendance と同じに揃える)。
+
 ### POST /v1/latches/{latch_id}/leave — 参加取り消し(v0.6新設・D-08)
 
 ```json
@@ -446,7 +452,7 @@ response: 200 {"latch": {"id": "…", "status": "matched", "left": true}}
 errors:   409 ALREADY_LEFT(取り消し済み)/ 409 LATCH_CLOSED(matched以外)/ 404(参加者以外)
 ```
 
-matchedのLATCHで自分の参加のみを取り消す(05画面の「この成立を取り消す」)。次を一つのトランザクションで行う。①messagesへシステム行(sender_idはNULL・body「{表示名}が参加を取り消しました」)を挿入する。②自分をチャット書込不可とする(以後の送信は409 CHAT_READONLY)。③calibration_records.cancelled_after=trueを記録する。**latches.statusはmatchedのまま変わらない(残りのメンバーの会話は継続し、LATCHは解散しない。headcountの再判定も行わない)。**残りのメンバーへはシステム行で通知する(プッシュ通知はしない)。参加Intentは待機に戻らない(削除もしない)。対象はmatchedのみで、completed後は409 LATCH_CLOSED。実装はUI v2 Phase 1B。
+matchedのLATCHで自分の参加のみを取り消す(05画面の「この成立を取り消す」)。次を一つのトランザクションで行う。①messagesへシステム行(sender_idはNULL・body「{表示名}が参加を取り消しました」)を挿入する。②自分をチャット書込不可とする(latches.left_user_idsへ追記・以後の送信は409 CHAT_READONLY)。③calibration_records.cancelled_after=trueを記録する。**latches.statusはmatchedのまま変わらない(残りのメンバーの会話は継続し、LATCHは解散しない。headcountの再判定も行わない)。**残りのメンバーへはシステム行で通知する(プッシュ通知はしない)。参加Intentは待機に戻らない(削除もしない)。対象はmatchedのみで、completed後は409 LATCH_CLOSED。実装はUI v2 Phase 1B。
 
 ### POST /v1/latches/{latch_id}/attendance — 実施自己申告(09 D-09)
 
@@ -508,6 +514,7 @@ completed遷移後のLATCHに対し、参加者が「実際に会いましたか
 | candidate→expired | 保留中に参加Intentのexpires_at経過(expiry_sweeper)、または提示時に対象開始時刻まで75分を切った保留候補の破棄(03 D-05、06第10節) |
 | proposed→partial_accept | 参加者の一部がyes |
 | partial_accept→matched | 必要人数全員がyes |
+| partial_accept→proposed / rejected→proposed・partial_accept | 回答取り消し(v0.6実装・D-06。取り消し後の状態は残ったresponsesから再計算。他者のno/deferが残るrejectedは取り消し不可=409 LATCH_CLOSED) |
 | proposed・partial_accept→rejected | no回答、またはdefer(見送り) — 03 D-07 |
 | proposed・partial_accept→expired | response_deadline / expires_atの経過(expiry_sweeper。実行者・周期は06第6節) |
 | proposed・partial_accept→cancelled | ブロック・他LATCH成立による競合・参加Intent更新によるHard Constraintの変化(01第8節)。公開範囲違反によるcancelledはv0.4で友人関係の将来版化(02 v0.3 D-03)により経路から外れた |

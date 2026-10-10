@@ -133,11 +133,12 @@ def test_active_keeps_explicit_expires_at():
 
 
 def test_structured_data_shape_with_location_name_and_downgraded():
-    """05 §2の5キー+location_name・ng由来はdowngraded_from_ng=true(確定値10・34)。"""
+    """05 §2のキー+location_name・ng由来はdowngraded_from_ng=true(確定値10・34)。"""
     cols = resolve_for_active(_input(), now=NOW)
     sd = cols.structured_data
     assert set(sd) == {
         "category_secondary",
+        "participants_includes_owner",
         "soft_constraints",
         "negative_constraints",
         "time_flexibility_minutes",
@@ -145,6 +146,7 @@ def test_structured_data_shape_with_location_name_and_downgraded():
         "location_name",
     }
     assert sd["category_secondary"] == "焼肉"
+    assert sd["participants_includes_owner"] is True  # 既定true(05 §2・D-04)
     assert sd["location_name"] == "天文館"
     assert sd["soft_constraints"] == [
         {"text": "軽く飲みたい", "downgraded_from_ng": False},
@@ -153,6 +155,24 @@ def test_structured_data_shape_with_location_name_and_downgraded():
     assert sd["negative_constraints"] == []
     assert sd["time_flexibility_minutes"] is None
     assert sd["location_flexibility"] is None
+
+
+def test_participants_includes_owner_default_true_and_persisted_false():
+    """D-04: 未指定はtrue。「含まない」(false)はそのままstructured_dataへ格納。"""
+    default_cols = resolve_for_active(
+        StructuredIntentInput.model_validate(
+            {
+                "category": {"primary": "meal"},
+                "time": {"start": START.isoformat()},
+                "location": {"name": "天文館"},
+            }
+        ),
+        now=NOW,
+    )
+    assert default_cols.structured_data["participants_includes_owner"] is True
+
+    cols = resolve_for_active(_input(participants_includes_owner=False), now=NOW)
+    assert cols.structured_data["participants_includes_owner"] is False
 
 
 def test_non_empty_negative_constraints_are_saved_as_empty():
@@ -274,6 +294,7 @@ def test_columns_from_row_round_trips_saved_columns():
 def test_to_response_structured_splits_downgraded_and_location_name():
     sd = {
         "category_secondary": "焼肉",
+        "participants_includes_owner": False,
         "soft_constraints": [
             {"text": "軽く飲みたい", "downgraded_from_ng": False},
             {"text": "会社関係の人は避けたい", "downgraded_from_ng": True},
@@ -294,6 +315,13 @@ def test_to_response_structured_splits_downgraded_and_location_name():
     assert out["visibility"] == "summary_only"
     assert out["budget"] == {"max": 5000, "currency": "JPY"}
     assert out["participants"] == {"min": 2, "max": 4}
+    assert out["participants_includes_owner"] is False  # D-04保存値
+
+
+def test_to_response_structured_old_row_without_owner_key_defaults_true():
+    """D-01B前の既存行(キーなし)はtrueとして応答(既定値の読取補完)。"""
+    out = to_response_structured(_row(structured_data={}))
+    assert out["participants_includes_owner"] is True
 
 
 def test_to_response_structured_partial_draft_row():

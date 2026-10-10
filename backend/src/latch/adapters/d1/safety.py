@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+import json
+
 from latch.adapters.d1.database import LocalD1Database
 from latch.domain.time import from_micros
+
+
+def _loads(text: str | None, default):
+    if text is None:
+        return default
+    return json.loads(text)
 
 
 class D1SafetyReader:
@@ -44,14 +52,18 @@ class D1SafetyReader:
         return {"items": items, "next_cursor": None}
 
     async def chat_sendable(self, latch_id: str, sender_id: str) -> bool:
-        """matched latch参加者・非block状態の判定(chat 409分岐用)。"""
+        """matched latch参加者・非block・参加取り消し未済の判定(chat 409分岐用)。"""
         row = (
-            await self.db.prepare("SELECT intent_ids, status FROM latches WHERE id = ?")
+            await self.db.prepare(
+                "SELECT intent_ids, status, left_user_ids FROM latches WHERE id = ?"
+            )
             .bind(latch_id)
             .first()
         )
         if row is None or row["status"] != "matched":
             return False
+        if sender_id in _loads(row["left_user_ids"], []):
+            return False  # 参加取り消し済み(05 §5 leave・D-08)
         owner = (
             await self.db.prepare(
                 "SELECT user_id FROM intents WHERE id IN ("

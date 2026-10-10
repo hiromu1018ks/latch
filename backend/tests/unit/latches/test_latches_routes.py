@@ -53,6 +53,16 @@ class StubService:
             status="partial_accept", my_response="yes", remaining_responses=1
         )
 
+    async def undo_response(self, **kwargs):
+        self.calls.append(("undo_response", kwargs))
+        return _summary(status="proposed", my_response=None, remaining_responses=2)
+
+    async def leave(self, **kwargs):
+        self.calls.append(("leave", kwargs))
+        from latch.latches.schemas import LeaveLatchOut
+
+        return LeaveLatchOut(id=LATCH_ID, status="matched", left=True)
+
     async def list(self, **kwargs):
         self.calls.append(("list", kwargs))
         return ([_summary()], "next-token")
@@ -167,3 +177,70 @@ async def test_unauthenticated_401(stub):
         resp = await client.get("/v1/latches")
     assert resp.status_code == 401
     assert stub.calls == []
+
+
+async def test_response_with_reasons_passes_through(stub):
+    """defer+reasonsはreasonsとしてserviceへ流れる(D-07・05 §2)。"""
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(stub)), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            f"/v1/latches/{LATCH_ID}/response",
+            json={"response": "defer", "reasons": ["time", "mood"]},
+        )
+    assert resp.status_code == 200, resp.text
+    assert stub.calls[0][1]["reasons"] == ["time", "mood"]
+
+
+async def test_response_reasons_with_yes_is_422(stub):
+    """reasonsはdefer時のみ受理(yes/noとの同時指定は422・05 §5)。"""
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(stub)), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            f"/v1/latches/{LATCH_ID}/response",
+            json={"response": "yes", "reasons": ["time"]},
+        )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+async def test_response_bad_reason_value_is_422(stub):
+    """reasonsの値域外(time/place/size/mood以外)は422(05 §2)。"""
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(stub)), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            f"/v1/latches/{LATCH_ID}/response",
+            json={"response": "defer", "reasons": ["weather"]},
+        )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+async def test_undo_endpoint_returns_latch_envelope(stub):
+    """POST /response/undo は {"latch": {...}}(D-06・05 §5)。"""
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(stub)), base_url="http://test"
+    ) as client:
+        resp = await client.post(f"/v1/latches/{LATCH_ID}/response/undo")
+    assert resp.status_code == 200, resp.text
+    latch = resp.json()["latch"]
+    assert latch["status"] == "proposed"
+    assert latch["my_response"] is None
+    assert stub.calls[0][0] == "undo_response"
+
+
+async def test_leave_endpoint_returns_left_envelope(stub):
+    """POST /leave は {"latch": {"status": "matched", "left": true}}(D-08・05 §5)。"""
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(stub)), base_url="http://test"
+    ) as client:
+        resp = await client.post(f"/v1/latches/{LATCH_ID}/leave")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["latch"] == {
+        "id": LATCH_ID,
+        "status": "matched",
+        "left": True,
+    }
+    assert stub.calls[0][0] == "leave"

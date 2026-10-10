@@ -18,10 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from latch.core.clock import JST, Clock
 from latch.domain.latch_status import (  # noqa: F401 — 再export(T2分離)
     compute_new_status,
+    status_after_undo,
 )
 from latch.latches import calibration, store
 from latch.latches.errors import (
     AlreadyAnsweredError,
+    AlreadyLeftError,
     AttendanceAlreadySubmittedError,
     AttendanceWindowClosedError,
     ChatReadonlyError,
@@ -32,11 +34,13 @@ from latch.latches.errors import (
     LatchExpiredError,
     LatchNotFoundError,
     LatchValidationError,
+    UnansweredError,
 )
 from latch.latches.schemas import (
     AttendanceResponse,
     LatchDetailOut,
     LatchSummaryOut,
+    LeaveLatchOut,
     ParticipantOut,
 )
 from latch.notifications.sender import PushSender
@@ -82,6 +86,7 @@ class LatchesService:
         auth_subject: str,
         latch_id: uuid.UUID,
         response: str,
+        reasons: list[str] | None = None,
     ) -> LatchSummaryOut:
         matched_user_ids: list[uuid.UUID] = []
         try:
@@ -109,6 +114,9 @@ class LatchesService:
                     "response": response,
                     "answered_at": now.isoformat(),
                 }
+                # 見送り理由(05 §2・D-07)。defer時のみ受理はPydanticで検証済み
+                if response == "defer" and reasons:
+                    item["reason_codes"] = list(reasons)
                 after = [*row.responses, item]
                 new_status = compute_new_status(response, after, len(row.intent_ids))
                 updated = await store.update_response(
@@ -159,6 +167,142 @@ class LatchesService:
             if matched_user_ids:
                 await self._send_matched_pushes(row.id, matched_user_ids)
             return out
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
+    # -- 回答取り消し(05 §5 undo・D-06) --
+
+    async def undo_response(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+    ) -> LatchSummaryOut:
+        """自分の回答を取り消して未回答へ戻す(04のjoined/declinedのundo)。
+
+        回答APIと同一の直列化(FOR UPDATE+条件付きUPDATE・06 §6)。reason_codes
+        が紐づく回答は取り消しで一緒に破棄する。残った他者のno/deferがある
+        場合は状態がrejectedに戻れないため409 LATCH_CLOSED。
+        """
+        try:
+            async with self._engine.begin() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch_for_update(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                now = self._clock.now()  # FOR UPDATE取得後に採取
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    # 05 §5 undo: 参加者以外は404(回答APIの403と扱いを分ける)
+                    raise LatchNotFoundError("not a participant")
+                mine = next(
+                    (r for r in row.responses if r.get("user_id") == str(user_id)),
+                    None,
+                )
+                if mine is None:
+                    raise UnansweredError("not answered")
+                if row.response_deadline <= now or row.expires_at <= now:
+                    raise LatchExpiredError("response deadline passed")
+                remaining = [r for r in row.responses if r is not mine]
+                new_status = status_after_undo(remaining)
+                if row.status not in ("proposed", "partial_accept", "rejected") or (
+                    new_status is None
+                ):
+                    raise LatchClosedError("latch closed")
+                updated = await store.update_response_undo(
+                    conn,
+                    latch_id=row.id,
+                    before=row.responses,
+                    responses=remaining,
+                    new_status=new_status,
+                    now=now,
+                )
+                if updated is None:  # 事前検査と同一条件のため通常起きない防御
+                    raise LatchClosedError("latch closed")
+                await store.insert_latch_event(
+                    conn,
+                    row.id,
+                    from_status=row.status,
+                    to_status=new_status,
+                    user_id=user_id,
+                    now=now,
+                )
+                if row.status == "rejected":
+                    # rejected確定時に作られたcalibrationは取り消しで破棄
+                    # (回答確定時に作成の規則を維持し、再確定のUNIQUE衝突を防ぐ)
+                    await store.delete_calibration(conn, row.id)
+                return _summary(
+                    row=row,
+                    status=new_status,
+                    my_response=None,
+                    after=remaining,
+                )
+        except LatchesError:
+            raise
+        except Exception as exc:
+            raise _wrap_unexpected(exc) from exc
+
+    # -- 参加取り消し(05 §5 leave・D-08) --
+
+    async def leave(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id: uuid.UUID,
+    ) -> LeaveLatchOut:
+        """matchedのLATCHで自分の参加のみを取り消す(05の取消dialog)。
+
+        ①システム行(sender_id=NULL)挿入②left_user_ids追記(以後の書込は
+        409 CHAT_READONLY)③calibration.cancelled_after=trueを一つのtxで
+        確定する。latches.statusはmatchedのまま(解散しない・headcount再判定
+        なし)。参加Intentも待機に戻さない。
+        """
+        try:
+            async with self._engine.begin() as conn:
+                user_id = await store.fetch_user_id(conn, auth_provider, auth_subject)
+                if user_id is None:
+                    raise LatchNotFoundError("user not found")
+                row = await store.select_latch_for_update(conn, latch_id)
+                if row is None:
+                    raise LatchNotFoundError("latch not found")
+                if (
+                    await store.select_participant_intent(conn, row.intent_ids, user_id)
+                    is None
+                ):
+                    # 05 §5 leave: 参加者以外は404
+                    raise LatchNotFoundError("not a participant")
+                now = self._clock.now()  # FOR UPDATE取得後に採取
+                if row.status != "matched":
+                    raise LatchClosedError("latch closed")
+                if user_id in row.left_user_ids:
+                    raise AlreadyLeftError("already left")
+                updated = await store.leave_latch(
+                    conn, latch_id=row.id, user_id=user_id
+                )
+                if updated is None:  # 事前検査と同一条件のため通常起きない防御
+                    raise AlreadyLeftError("already left")
+                display_name = await store.fetch_display_name(conn, user_id)
+                await store.insert_system_message(
+                    conn,
+                    latch_id=row.id,
+                    body=f"{display_name or '参加者'}が参加を取り消しました",
+                    now=now,
+                )
+                if not await store.mark_calibration_cancelled_after(
+                    conn, latch_id=row.id, now=now
+                ):
+                    logger.warning(
+                        "latches.leave.calibration_missing latch_id=%s", row.id
+                    )
+                return LeaveLatchOut(id=row.id, status="matched", left=True)
         except LatchesError:
             raise
         except Exception as exc:
@@ -276,6 +420,9 @@ class LatchesService:
                     raise ForbiddenError("not a participant")
                 now = self._clock.now()  # FOR UPDATE取得後に採取
                 if row.status != "matched":
+                    raise ChatReadonlyError("chat readonly")
+                if user_id in row.left_user_ids:
+                    # 参加取り消し済み(05 §5 leave・D-08)。残メンバーの会話は継続
                     raise ChatReadonlyError("chat readonly")
                 user_ids = await store.fetch_participant_user_ids(conn, row.intent_ids)
                 others = [u for u in user_ids if u != user_id]

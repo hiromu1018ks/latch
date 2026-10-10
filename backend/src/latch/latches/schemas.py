@@ -6,15 +6,27 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 ResponseValue = Literal["yes", "no", "defer"]
+ReasonCode = Literal["time", "place", "size", "mood"]
 
 
 class ResponseRequest(BaseModel):
-    """POST /v1/latches/{id}/response のbody(05 §5)。値域外は422(引用#1)。"""
+    """POST /v1/latches/{id}/response のbody(05 §5)。値域外は422(引用#1)。
+
+    reasonsは見送り理由(05 §2・D-07・time/place/size/mood・複数可)で
+    defer回答時のみ受理する(yes/noとの同時指定は422)。
+    """
 
     response: ResponseValue
+    reasons: list[ReasonCode] | None = None
+
+    @model_validator(mode="after")
+    def _reasons_only_with_defer(self) -> ResponseRequest:
+        if self.reasons is not None and self.response != "defer":
+            raise ValueError("reasons is only accepted with response=defer")
+        return self
 
 
 class LatchSummaryOut(BaseModel):
@@ -41,9 +53,23 @@ class LatchSummaryOut(BaseModel):
 
 
 class LatchEnvelope(BaseModel):
-    """POST /v1/latches/{id}/response の200応答(05 §5の {"latch": {...}})。"""
+    """POST /v1/latches/{id}/response ・undo の200応答(05 §5の {"latch": {...}})。"""
 
     latch: LatchSummaryOut
+
+
+class LeaveLatchOut(BaseModel):
+    """POST /v1/latches/{id}/leave の200応答のlatch要素(05 §5・D-08)。"""
+
+    id: uuid.UUID
+    status: str
+    left: bool
+
+
+class LeaveEnvelope(BaseModel):
+    """POST /v1/latches/{id}/leave の200応答({"latch": {..., "left": true}}・05 §5)。"""
+
+    latch: LeaveLatchOut
 
 
 class ParticipantOut(BaseModel):
@@ -99,13 +125,14 @@ class MessageOut(BaseModel):
     """messages応答の1件(design §2.1手順7)。表示名は含めない
 
     (matched/completedのLATCH詳細participantsで解決・design §2.1)。
+    sender_idはシステム行(参加取り消しの告知行・05 §5 leave・D-08)のみnull。
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     latch_id: uuid.UUID
-    sender_id: uuid.UUID
+    sender_id: uuid.UUID | None
     body: str
     created_at: datetime
 

@@ -20,6 +20,7 @@ from latch.latches.schemas import (
     LatchDetailEnvelope,
     LatchEnvelope,
     LatchListResponse,
+    LeaveEnvelope,
     MessageEnvelope,
     MessageListResponse,
     MessageRequest,
@@ -88,9 +89,42 @@ async def respond_to_latch(
         auth_subject=claims.auth_subject,
         latch_id=latch_id,
         response=body.response,
+        reasons=body.reasons,
     )
     logger.info("latches.response ok status=%s", summary.status)
     return LatchEnvelope(latch=summary)
+
+
+@latches_router.post("/{latch_id}/response/undo", response_model=LatchEnvelope)
+async def undo_response(
+    latch_id: uuid.UUID,
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[LatchesService, Depends(get_latches_service)],
+) -> LatchEnvelope:
+    """POST /v1/latches/{id}/response/undo(05 §5・D-06。回答済み→未回答へ)。"""
+    summary = await svc.undo_response(
+        auth_provider=claims.auth_provider,
+        auth_subject=claims.auth_subject,
+        latch_id=latch_id,
+    )
+    logger.info("latches.response.undo ok status=%s", summary.status)
+    return LatchEnvelope(latch=summary)
+
+
+@latches_router.post("/{latch_id}/leave", response_model=LeaveEnvelope)
+async def leave_latch(
+    latch_id: uuid.UUID,
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[LatchesService, Depends(get_latches_service)],
+) -> LeaveEnvelope:
+    """POST /v1/latches/{id}/leave(05 §5・D-08。自分の参加のみ取り消す)。"""
+    out = await svc.leave(
+        auth_provider=claims.auth_provider,
+        auth_subject=claims.auth_subject,
+        latch_id=latch_id,
+    )
+    logger.info("latches.leave ok status=%s", out.status)
+    return LeaveEnvelope(latch=out)
 
 
 @latches_router.post(

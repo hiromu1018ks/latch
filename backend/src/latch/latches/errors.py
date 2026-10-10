@@ -50,6 +50,20 @@ class AlreadyAnsweredError(LatchesError):
     code = "ALREADY_ANSWERED"
 
 
+class UnansweredError(LatchesError):
+    """未回答での回答取り消し(05 §5 undo・D-06)。"""
+
+    http_status = 409
+    code = "UNANSWERED"
+
+
+class AlreadyLeftError(LatchesError):
+    """参加取り消し済みでの再取り消し(05 §5 leave・D-08)。"""
+
+    http_status = 409
+    code = "ALREADY_LEFT"
+
+
 class LatchClosedError(LatchesError):
     """終端済み・未提示candidate・参加Intent変化によるクローズ(引用#1・01 §8)。"""
 
@@ -68,7 +82,8 @@ class ChatReadonlyError(LatchesError):
     """チャット読取専用状態への送信(05 §2・08 D-23・design §2.1案A)。
 
     matched以外の全状態(completed/cancelled後の送信閉止を含む)と
-    blocks適用中の両方に使う単一コード(03 §6・08 §2.5の統一・承認事項②)。
+    blocks適用中・参加取り消し済み(05 §5 leave・D-08)に使う単一コード
+    (03 §6・08 §2.5の統一・承認事項②)。
     """
 
     http_status = 409

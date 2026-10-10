@@ -97,9 +97,30 @@ class Default(_Entry):
     async def queue(self, batch, env, ctx) -> None:
         env = getattr(self, "env", None) or env  # WorkerEntrypointはself.env
         from latch_worker.pipeline import build_pipeline, handle_queue_message
+        from latch_worker.probes import QUEUE_MESSAGES
 
         services = build_pipeline(env)
         for message in batch.messages:
+            # 受信記録(probe用・本文のIDのみ。処理結果は含めない)
+            try:
+                payload = json.loads(str(message.body))
+            except Exception:  # noqa: BLE001
+                payload = {"raw": str(message.body)[:200]}
+            QUEUE_MESSAGES.append(
+                {"id": message.id, "payload": payload, "seen_at": time.time()}
+            )
+            try:
+                await env.DB.batch([
+                    env.DB.prepare(
+                        "INSERT INTO probe_events (kind, payload, created_at)"
+                        " VALUES ('queue_message', ?, ?)"
+                    ).bind(
+                        json.dumps({"id": message.id}, ensure_ascii=False),
+                        int(time.time() * 1e6),
+                    ),
+                ])
+            except Exception as exc:  # noqa: BLE001 — 記録失敗は配送に影響させない
+                print(f"queue record failed: {type(exc).__name__}: {exc}")
             try:
                 await handle_queue_message(services, str(message.body))
                 message.ack()

@@ -16,7 +16,7 @@ import os
 import sys
 import time
 import uuid as uuid_mod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -31,7 +31,9 @@ from contracts.cloudflare_harness import WranglerD1  # noqa: E402
 pytestmark = pytest.mark.integration
 
 REMOTE = os.environ.get("LATCH_CF_REMOTE") == "1"
-BASE_URL = os.environ.get("LATCH_CF_API_URL", "https://latch-api.hiromu1018ks.workers.dev")
+BASE_URL = os.environ.get(
+    "LATCH_CF_API_URL", "https://latch-api.hiromu1018ks.workers.dev"
+)
 RESULTS_DIR = Path(__file__).resolve().parents[3] / "docs" / "testassets" / "results"
 
 PROPOSAL_TIMEOUT_S = 420  # queue即時+cron(*/5)フォールバックの余裕
@@ -55,7 +57,7 @@ async def test_remote_pipeline_end_to_end(wrangler):
     from latch.auth.tools import issue_idp_token
 
     record: dict = {
-        "date": datetime.now(timezone.utc).isoformat(),
+        "date": datetime.now(UTC).isoformat(),
         "base_url": BASE_URL,
         "actors": {},
         "timings_s": {},
@@ -93,7 +95,7 @@ async def test_remote_pipeline_end_to_end(wrangler):
             record["actors"][name] = {"subject": subject, "user_id": user_id}
 
         # -- matching意図2件(同時間帯・同地域) --------------------------------
-        start = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
+        start = (datetime.now(UTC) + timedelta(hours=6)).isoformat()
         intent_ids: dict[str, str] = {}
         for name in ("alpha", "beta"):
             resp = await client.post(
@@ -119,9 +121,7 @@ async def test_remote_pipeline_end_to_end(wrangler):
         latch_id = None
         deadline = time.monotonic() + PROPOSAL_TIMEOUT_S
         while time.monotonic() < deadline:
-            resp = await client.get(
-                "/v1/latches", headers=actors["alpha"]["headers"]
-            )
+            resp = await client.get("/v1/latches", headers=actors["alpha"]["headers"])
             assert resp.status_code == 200, resp.text
             items = resp.json().get("items", [])
             if items:
@@ -190,8 +190,7 @@ async def test_remote_pipeline_end_to_end(wrangler):
         ),
         "match_candidates_evaluated": _d1_scalar(
             wrangler,
-            "SELECT COUNT(*) AS c FROM match_candidates WHERE jev_result"
-            " IS NOT NULL",
+            "SELECT COUNT(*) AS c FROM match_candidates WHERE jev_result IS NOT NULL",
         ),
         "llm_attempts_jev": _d1_scalar(
             wrangler, "SELECT COUNT(*) AS c FROM llm_attempts WHERE system = 'jev'"
@@ -203,7 +202,7 @@ async def test_remote_pipeline_end_to_end(wrangler):
 
     out = RESULTS_DIR / (
         "cloudflare-pipeline-e2e-"
-        + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        + datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         + ".yaml"
     )
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)

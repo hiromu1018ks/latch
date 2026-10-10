@@ -10,8 +10,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 SRC = Path(__file__).resolve().parents[2] / "src"
 
 FORBIDDEN_ROOTS = {
@@ -247,7 +245,7 @@ def test_domain_types_contract():
         category_primary="meal",
         category_secondary=None,
         alcohol_involved=False,
-        time_start=dt.datetime(2026, 10, 8, 19, 0, tzinfo=dt.timezone.utc),
+        time_start=dt.datetime(2026, 10, 8, 19, 0, tzinfo=dt.UTC),
         time_end=None,
         flexibility_minutes=None,
         geo_lon=130.55,
@@ -263,7 +261,7 @@ def test_domain_types_contract():
         intent_id="i-1",
         requested_revision=2,
         reason="updated",
-        due_at=dt.datetime(2026, 10, 8, 12, 0, tzinfo=dt.timezone.utc),
+        due_at=dt.datetime(2026, 10, 8, 12, 0, tzinfo=dt.UTC),
     )
     assert req.reason == "updated"
 

@@ -13,6 +13,7 @@ import pytest
 from latch.core.clock import JST, FakeClock
 from latch.latches.errors import (
     AlreadyAnsweredError,
+    AlreadyLeftError,
     DependencyUnavailableError,
     ForbiddenError,
     LatchClosedError,
@@ -20,10 +21,12 @@ from latch.latches.errors import (
     LatchExpiredError,
     LatchNotFoundError,
     LatchValidationError,
+    UnansweredError,
 )
 from latch.latches.schemas import (
     LatchDetailOut,
     LatchSummaryOut,
+    LeaveLatchOut,
     ParticipantOut,
     ResponseRequest,
 )
@@ -111,6 +114,7 @@ def _latch_row(**overrides) -> object:
         group_candidate_id=None,
         created_at=NOW - timedelta(hours=1),
         completed_at=None,
+        left_user_ids=(),
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -825,3 +829,243 @@ async def test_respond_matched_push_none_is_noop(monkeypatch):
         auth_provider="google", auth_subject="s", latch_id=row.id, response="yes"
     )
     assert out.status == "matched"
+
+
+# -- undo_response(05 §5 undo・D-06) --
+
+
+async def test_undo_returns_to_proposed_and_records_event(monkeypatch):
+    """自分の回答のみある状態→取り消しでproposedへ戻る(05 §5)。"""
+    from latch.latches import store as store_mod
+
+    row = _latch_row(
+        status="partial_accept",
+        responses=[
+            {
+                "user_id": str(ME),
+                "intent_id": str(I1),
+                "response": "yes",
+                "answered_at": NOW.isoformat(),
+            }
+        ],
+    )
+    events: list[tuple] = []
+    undo_calls: list[dict] = []
+
+    async def _undo(conn, *, latch_id, before, responses, new_status, now):
+        undo_calls.append({"before": before, "responses": responses})
+        return (latch_id, new_status)
+
+    async def _event(conn, latch_id, from_status, to_status, user_id, now):
+        events.append((from_status, to_status, user_id))
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    monkeypatch.setattr(store_mod, "update_response_undo", _undo)
+    monkeypatch.setattr(store_mod, "insert_latch_event", _event)
+    out = await _svc(ScriptedEngine([])).undo_response(
+        auth_provider="google", auth_subject="s", latch_id=row.id
+    )
+    assert out.status == "proposed"
+    assert out.my_response is None
+    assert undo_calls[0]["responses"] == []  # 自分の回答(理由込み)は破棄
+    assert events == [("partial_accept", "proposed", ME)]
+
+
+async def test_undo_keeps_partial_accept_when_other_yes_remains(monkeypatch):
+    """他者のyesが残る場合はpartial_acceptへ戻る(05 §5)。"""
+    from latch.latches import store as store_mod
+
+    row = _latch_row(
+        status="rejected",
+        responses=[
+            {"user_id": str(PEER), "response": "yes", "answered_at": "..."},
+            {"user_id": str(ME), "response": "defer", "answered_at": "..."},
+        ],
+    )
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    monkeypatch.setattr(
+        store_mod, "update_response_undo", _ret((row.id, "partial_accept"))
+    )
+    monkeypatch.setattr(store_mod, "insert_latch_event", _ret(None))
+    out = await _svc(ScriptedEngine([])).undo_response(
+        auth_provider="google", auth_subject="s", latch_id=row.id
+    )
+    assert out.status == "partial_accept"
+    assert out.remaining_responses == 1
+
+
+async def test_undo_classification_matrix(monkeypatch):
+    """未回答409・参加者以外404・期限切れ409・matched/他者reject残り409(05 §5)。"""
+    from latch.latches import store as store_mod
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+
+    # 未回答 → 409 UNANSWERED
+    row = _latch_row()
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    with pytest.raises(UnansweredError):
+        await _svc(ScriptedEngine([])).undo_response(
+            auth_provider="google", auth_subject="s", latch_id=row.id
+        )
+
+    # 参加者以外 → 404(05 §5 undo: 回答APIの403と扱いを分ける)
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(None))
+    answered = _latch_row(
+        responses=[{"user_id": str(ME), "response": "yes", "answered_at": "..."}]
+    )
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(answered))
+    with pytest.raises(LatchNotFoundError):
+        await _svc(ScriptedEngine([])).undo_response(
+            auth_provider="google", auth_subject="s", latch_id=answered.id
+        )
+
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+
+    # 回答期限経過 → 409 LATCH_EXPIRED
+    expired = _latch_row(
+        response_deadline=NOW - timedelta(minutes=1),
+        responses=[{"user_id": str(ME), "response": "yes", "answered_at": "..."}],
+    )
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(expired))
+    with pytest.raises(LatchExpiredError):
+        await _svc(ScriptedEngine([])).undo_response(
+            auth_provider="google", auth_subject="s", latch_id=expired.id
+        )
+
+    # matched → 409 LATCH_CLOSED
+    matched = _latch_row(
+        status="matched",
+        responses=[{"user_id": str(ME), "response": "yes", "answered_at": "..."}],
+    )
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(matched))
+    with pytest.raises(LatchClosedError):
+        await _svc(ScriptedEngine([])).undo_response(
+            auth_provider="google", auth_subject="s", latch_id=matched.id
+        )
+
+    # 他者のnoが残るrejected → 戻れないため409 LATCH_CLOSED
+    peer_no = _latch_row(
+        status="rejected",
+        responses=[
+            {"user_id": str(PEER), "response": "no", "answered_at": "..."},
+            {"user_id": str(ME), "response": "yes", "answered_at": "..."},
+        ],
+    )
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(peer_no))
+    with pytest.raises(LatchClosedError):
+        await _svc(ScriptedEngine([])).undo_response(
+            auth_provider="google", auth_subject="s", latch_id=peer_no.id
+        )
+
+
+def test_status_after_undo_matrix():
+    """純計算: yes残り→partial・空→proposed・no/defer残り→None(rejected維持)。"""
+    from latch.domain.latch_status import status_after_undo
+
+    assert status_after_undo([]) == "proposed"
+    assert status_after_undo([{"response": "yes"}]) == "partial_accept"
+    assert status_after_undo([{"response": "no"}]) is None
+    assert status_after_undo([{"response": "defer"}, {"response": "yes"}]) is None
+
+
+# -- leave(05 §5 leave・D-08) --
+
+
+async def test_leave_effects_in_one_transaction(monkeypatch):
+    """matchedでleave: left追記+システム行+cancelled_after・statusはmatchedのまま。"""
+    from latch.latches import store as store_mod
+
+    row = _latch_row(status="matched")
+    seen: dict[str, object] = {}
+
+    async def _leave(conn, *, latch_id, user_id):
+        seen["leave"] = (latch_id, user_id)
+        return True
+
+    async def _sysmsg(conn, *, latch_id, body, now):
+        seen["body"] = body
+        from latch.latches.store import MessageRow
+
+        return MessageRow(
+            id=uuid.uuid4(),
+            latch_id=latch_id,
+            sender_id=None,
+            body=body,
+            created_at=now,
+        )
+
+    async def _cancel(conn, *, latch_id, now):
+        seen["cancelled_after"] = True
+        return True
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    monkeypatch.setattr(store_mod, "leave_latch", _leave)
+    monkeypatch.setattr(store_mod, "fetch_display_name", _ret("らて子"))
+    monkeypatch.setattr(store_mod, "insert_system_message", _sysmsg)
+    monkeypatch.setattr(store_mod, "mark_calibration_cancelled_after", _cancel)
+    out = await _svc(ScriptedEngine([])).leave(
+        auth_provider="google", auth_subject="s", latch_id=row.id
+    )
+    assert out == LeaveLatchOut(id=row.id, status="matched", left=True)
+    assert seen["leave"] == (row.id, ME)
+    assert seen["body"] == "らて子が参加を取り消しました"
+    assert seen["cancelled_after"] is True
+
+
+async def test_leave_classification_matrix(monkeypatch):
+    """参加者以外404・非matched409・取り消し済み409(05 §5)。"""
+    from latch.latches import store as store_mod
+
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+
+    # 参加者以外 → 404
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(None))
+    monkeypatch.setattr(
+        store_mod, "select_latch_for_update", _ret(_latch_row(status="matched"))
+    )
+    with pytest.raises(LatchNotFoundError):
+        await _svc(ScriptedEngine([])).leave(
+            auth_provider="google", auth_subject="s", latch_id=uuid.uuid4()
+        )
+
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+
+    # matched以外(completed含む) → 409 LATCH_CLOSED
+    for status in ("proposed", "partial_accept", "completed", "cancelled", "rejected"):
+        monkeypatch.setattr(
+            store_mod, "select_latch_for_update", _ret(_latch_row(status=status))
+        )
+        with pytest.raises(LatchClosedError):
+            await _svc(ScriptedEngine([])).leave(
+                auth_provider="google", auth_subject="s", latch_id=uuid.uuid4()
+            )
+
+    # 取り消し済み → 409 ALREADY_LEFT
+    monkeypatch.setattr(
+        store_mod,
+        "select_latch_for_update",
+        _ret(_latch_row(status="matched", left_user_ids=(ME,))),
+    )
+    with pytest.raises(AlreadyLeftError):
+        await _svc(ScriptedEngine([])).leave(
+            auth_provider="google", auth_subject="s", latch_id=uuid.uuid4()
+        )
+
+
+def test_leave_error_codes_and_statuses():
+    """P1B新規例外はhttp_status+code固定(05 §5エラー形式)。"""
+    cases = [
+        (UnansweredError, 409, "UNANSWERED"),
+        (AlreadyLeftError, 409, "ALREADY_LEFT"),
+    ]
+    for exc_cls, status, code in cases:
+        assert exc_cls.http_status == status, exc_cls
+        assert exc_cls.code == code, exc_cls
+        assert issubclass(exc_cls, LatchesError)

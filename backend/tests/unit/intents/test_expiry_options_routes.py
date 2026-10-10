@@ -17,7 +17,7 @@ from latch.main import create_app
 
 NOW = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)  # JST 2026-09-27 21:00
 
-LABELS = ["今夜 23:30", "明日 12:00", "明日 23:30", "3日後まで"]
+LABELS = ["今日 22:00", "今日 23:59", "明日 5:00"]
 
 
 def _claims() -> AccessTokenClaims:
@@ -38,46 +38,45 @@ def _client(clock: datetime | None = None) -> AsyncClient:
 
 
 async def test_1_options_without_time_start():
-    """time_startなし: 4選択肢・ラベル順・全selectable・default_index=None。"""
+    """time_startなし: 3選択肢・ラベル順・全selectable・default_index=None。"""
     async with _client() as client:
         resp = await client.get("/v1/intents/expiry-options")
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert [o["label"] for o in body["options"]] == LABELS
-    # JST 21:00 実行相当: 今夜23:30はまだ未来
-    assert [o["selectable"] for o in body["options"]] == [True, True, True, True]
+    # JST 21:00 実行相当: 今日22:00はまだ未来
+    assert [o["selectable"] for o in body["options"]] == [True, True, True]
     assert body["default_index"] is None
     expires = [o["expires_at"] for o in body["options"]]
-    assert expires[0] == "2026-09-27T23:30:00+09:00"
-    assert expires[1] == "2026-09-28T12:00:00+09:00"
-    assert expires[2] == "2026-09-28T23:30:00+09:00"
-    assert expires[3] == "2026-09-30T21:00:00+09:00"  # now+72h(JST)
+    assert expires[0] == "2026-09-27T22:00:00+09:00"
+    assert expires[1] == "2026-09-27T23:59:00+09:00"
+    assert expires[2] == "2026-09-28T05:00:00+09:00"
 
 
 async def test_2_default_index_with_time_start():
-    """time_start=JST 23:00 → target=+3h=翌02:00 → 最近は今夜23:30(index=0)。"""
+    """time_start=JST 23:00 → target=翌02:00 → 最近は今日23:59(index=1)。"""
     async with _client() as client:
         resp = await client.get(
             "/v1/intents/expiry-options",
             params={"time_start": "2026-09-27T23:00:00+09:00"},
         )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["default_index"] == 0
+    assert resp.json()["default_index"] == 1
 
 
 async def test_3_passed_option_disabled_and_default_shifts():
-    """JST 23:31以降: 今夜23:30はselectable=false・既定は未来のみから選ぶ。"""
-    late = datetime(2026, 9, 27, 14, 31, 0, tzinfo=UTC)  # JST 23:31
+    """JST 22:01以降: 今日22:00はselectable=false・既定は未来のみから選ぶ。"""
+    late = datetime(2026, 9, 27, 13, 1, 0, tzinfo=UTC)  # JST 22:01
     async with _client(clock=late) as client:
         resp = await client.get(
             "/v1/intents/expiry-options",
-            params={"time_start": "2026-09-28T01:00:00+09:00"},
+            params={"time_start": "2026-09-27T21:00:00+09:00"},
         )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["options"][0]["selectable"] is False  # 今夜23:30は過ぎた
-    assert body["default_index"] == 1  # target=04:00 → 明日12:00が最近の未来
-    # 選択肢が全滅しない(3日後=now+72hは常に未来 — Review Focus 3)
+    assert body["options"][0]["selectable"] is False  # 今日22:00は過ぎた
+    assert body["default_index"] == 1  # target=翌00:00 → 最近の未来は今日23:59
+    # 選択肢が全滅しない(明日5:00は常に未来側の選択肢 — Review Focus 3)
     assert any(o["selectable"] for o in body["options"])
 
 

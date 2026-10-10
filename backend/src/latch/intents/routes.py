@@ -111,7 +111,7 @@ class ExpiryOptionsResponse(BaseModel):
     default_index: int | None = None  # time_start未指定はnull
 
 
-EXPIRY_LABELS = ("今夜 23:30", "明日 12:00", "明日 23:30", "3日後まで")
+EXPIRY_LABELS = ("今日 22:00", "今日 23:59", "明日 5:00")
 
 TimeStartParam = Annotated[
     datetime | None,
@@ -191,6 +191,7 @@ class StructuredIntentOut(BaseModel):
     location: LocationOut
     budget: BudgetOut
     participants: ParticipantsOut
+    participants_includes_owner: bool = True  # 05 §2・D-04(既定true)
     visibility: str
     notification_level: str
     expires_at: datetime | None = None

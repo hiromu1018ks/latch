@@ -51,6 +51,7 @@ class LatchRow:
     group_candidate_id: uuid.UUID | None
     created_at: datetime
     completed_at: datetime | None = None
+    left_user_ids: tuple[uuid.UUID, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -112,7 +113,8 @@ class PageRow:
 
 _SELECT_LATCH_FOR_UPDATE = text("""
     SELECT id, status, intent_ids, responses, response_deadline, expires_at,
-           score, proposal, group_candidate_id, created_at, completed_at
+           score, proposal, group_candidate_id, created_at, completed_at,
+           left_user_ids
     FROM latches WHERE id = CAST(:latch_id AS uuid)
     FOR UPDATE
 """)
@@ -136,6 +138,34 @@ _UPDATE_RESPONSE = text("""
           WHERE i.id = ANY(latches.intent_ids)
             AND i.status NOT IN ('active', 'paused'))
     RETURNING id, status
+""")
+
+# 回答取り消し(05 §5 undo・D-06)。回答APIと同一の直列化条件+応答全体の
+# 置換(自分の回答を除去した残り・reason_codesも一緒に破棄される)
+_UPDATE_RESPONSE_UNDO = text("""
+    UPDATE latches
+    SET responses = CAST(:responses AS jsonb),
+        status = :new_status
+    WHERE id = CAST(:latch_id AS uuid)
+      AND status IN ('proposed', 'partial_accept', 'rejected')
+      AND responses = CAST(:before AS jsonb)
+      AND response_deadline > CAST(:now AS timestamptz)
+      AND expires_at > CAST(:now AS timestamptz)
+      AND NOT EXISTS (
+          SELECT 1 FROM intents i
+          WHERE i.id = ANY(latches.intent_ids)
+            AND i.status NOT IN ('active', 'paused'))
+    RETURNING id, status
+""")
+
+# 参加取り消し(05 §5 leave・D-08)。statusはmatchedのまま・left_user_idsへ追記
+_LEAVE_LATCH = text("""
+    UPDATE latches
+    SET left_user_ids = array_append(left_user_ids, CAST(:me AS uuid))
+    WHERE id = CAST(:latch_id AS uuid)
+      AND status = 'matched'
+      AND NOT CAST(:me AS uuid) = ANY(left_user_ids)
+    RETURNING id
 """)
 
 # Intent matched化(active+paused=承認事項3・design §2.3)
@@ -246,7 +276,8 @@ _SELECT_LATCHES_PAGE = text("""
 
 _SELECT_LATCH = text("""
     SELECT id, status, intent_ids, responses, response_deadline, expires_at,
-           score, proposal, group_candidate_id, created_at, completed_at
+           score, proposal, group_candidate_id, created_at, completed_at,
+           left_user_ids
     FROM latches WHERE id = CAST(:latch_id AS uuid)
 """)
 
@@ -304,6 +335,34 @@ _SELECT_BLOCK_BETWEEN = text("""
     )
 """)
 
+# -- 参加取り消し(05 §5 leave・D-08) --
+
+# システム行(sender_idはNULL・05 §2 messages)
+_INSERT_SYSTEM_MESSAGE = text("""
+    INSERT INTO messages (latch_id, sender_id, body, created_at)
+    VALUES (CAST(:latch_id AS uuid), NULL, :body, CAST(:now AS timestamptz))
+    RETURNING id, latch_id, sender_id, body, created_at
+""")
+
+_SELECT_DISPLAY_NAME = text("""
+    SELECT display_name FROM users WHERE id = CAST(:me AS uuid)
+""")
+
+# 成立後キャンセル記録(05 §2 calibration_records・行なしは0行で正常)
+_UPDATE_CALIBRATION_CANCELLED_AFTER = text("""
+    UPDATE calibration_records
+    SET cancelled_after = true, updated_at = CAST(:now AS timestamptz)
+    WHERE latch_id = CAST(:latch_id AS uuid)
+      AND cancelled_after IS NULL
+    RETURNING id
+""")
+
+# 回答取り消し: rejected確定時に作られた記録の破棄(05 §2「レコードは回答
+# 確定時に作成」— 取り消した確定は無かったものとし、再確定のUNIQUE衝突を防ぐ)
+_DELETE_CALIBRATION = text("""
+    DELETE FROM calibration_records WHERE latch_id = CAST(:latch_id AS uuid)
+""")
+
 # -- 実施自己申告(M3 ws-4 design §2.3) --
 
 _SELECT_CALIBRATION_ATTENDANCE = text("""
@@ -345,6 +404,7 @@ def _latch_row(mapping) -> LatchRow:
         ),
         created_at=mapping["created_at"],
         completed_at=mapping["completed_at"],
+        left_user_ids=tuple(_coerce_uuid(x) for x in (mapping["left_user_ids"] or [])),
     )
 
 
@@ -410,6 +470,96 @@ async def update_response(
     if row is None:
         return None
     return _coerce_uuid(row[0]), row[1]
+
+
+async def update_response_undo(
+    conn: AsyncConnection,
+    *,
+    latch_id: uuid.UUID,
+    before: list[dict],
+    responses: list[dict],
+    new_status: str,
+    now: datetime,
+) -> tuple[uuid.UUID, str] | None:
+    """回答取り消しの条件付きUPDATE(05 §5 undo)。
+
+    before(取り消し前の応答全体)との一致を条件に置換する — FOR UPDATE
+    取得以降に並行書き込みが無いことを保証し、影響0は呼び出し側の分類へ。
+    """
+    res = await conn.execute(
+        _UPDATE_RESPONSE_UNDO,
+        {
+            "latch_id": latch_id,
+            "before": json.dumps(before, ensure_ascii=False),
+            "responses": json.dumps(responses, ensure_ascii=False),
+            "new_status": new_status,
+            "now": now,
+        },
+    )
+    row = res.first()
+    if row is None:
+        return None
+    return _coerce_uuid(row[0]), row[1]
+
+
+async def leave_latch(
+    conn: AsyncConnection, *, latch_id: uuid.UUID, user_id: uuid.UUID
+) -> bool:
+    """参加取り消しの本体(left_user_ids追記・05 §5 leave)。
+
+    False=影響0(呼び出し側はALREADY_LEFT/LATCH_CLOSEDへ分類)。
+    """
+    res = await conn.execute(_LEAVE_LATCH, {"latch_id": latch_id, "me": user_id})
+    return res.first() is not None
+
+
+async def insert_system_message(
+    conn: AsyncConnection,
+    *,
+    latch_id: uuid.UUID,
+    body: str,
+    now: datetime,
+) -> MessageRow:
+    """参加取り消しのシステム行挿入(sender_id=NULL・05 §5 leave)。"""
+    res = await conn.execute(
+        _INSERT_SYSTEM_MESSAGE,
+        {"latch_id": latch_id, "body": body, "now": now},
+    )
+    row = res.mappings().first()
+    assert row is not None
+    return MessageRow(
+        id=_coerce_uuid(row["id"]),
+        latch_id=_coerce_uuid(row["latch_id"]),
+        sender_id=None,
+        body=row["body"],
+        created_at=row["created_at"],
+    )
+
+
+async def fetch_display_name(conn: AsyncConnection, user_id: uuid.UUID) -> str | None:
+    """システム行本文用の表示名(05 §5 leave「{表示名}が参加を取り消しました」)。"""
+    res = await conn.execute(_SELECT_DISPLAY_NAME, {"me": user_id})
+    row = res.first()
+    return row[0] if row is not None else None
+
+
+async def mark_calibration_cancelled_after(
+    conn: AsyncConnection, *, latch_id: uuid.UUID, now: datetime
+) -> bool:
+    """calibration_records.cancelled_after=true(05 §5 leave)。
+
+    行なし(calibration未作成)はFalse — leave自体は成立を落とさない
+    (_create_calibrationと同じ裁定・design §2.5)。
+    """
+    res = await conn.execute(
+        _UPDATE_CALIBRATION_CANCELLED_AFTER, {"latch_id": latch_id, "now": now}
+    )
+    return res.first() is not None
+
+
+async def delete_calibration(conn: AsyncConnection, latch_id: uuid.UUID) -> None:
+    """回答取り消し時のrejected記録 破棄(undo・D-06)。行なしは0行で正常。"""
+    await conn.execute(_DELETE_CALIBRATION, {"latch_id": latch_id})
 
 
 async def match_intents(
@@ -645,11 +795,15 @@ async def select_latches_page(
 
 
 def _message_row(mapping) -> MessageRow:
-    """messages行→MessageRow(UUID復元)。"""
+    """messages行→MessageRow(UUID復元。sender_id=Noneはシステム行・05 §5 leave)。"""
     return MessageRow(
         id=_coerce_uuid(mapping["id"]),
         latch_id=_coerce_uuid(mapping["latch_id"]),
-        sender_id=_coerce_uuid(mapping["sender_id"]),
+        sender_id=(
+            _coerce_uuid(mapping["sender_id"])
+            if mapping["sender_id"] is not None
+            else None
+        ),
         body=mapping["body"],
         created_at=mapping["created_at"],
     )

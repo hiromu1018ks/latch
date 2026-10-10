@@ -80,7 +80,10 @@ async def _actor(client: httpx.AsyncClient, name: str) -> dict:
     subject = f"pipe-{name}-{uuid_mod.uuid4().hex[:8]}"
     resp = await client.post(
         "/v1/auth/token",
-        json={"provider": "google", "idp_token": issue_idp_token(provider="google", subject=subject)},
+        json={
+            "provider": "google",
+            "idp_token": issue_idp_token(provider="google", subject=subject),
+        },
     )
     assert resp.status_code == 200, resp.text
     access = resp.json()["access_token"]
@@ -138,8 +141,8 @@ async def test_pipeline_end_to_end_flow(stack):
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
         u1 = await _actor(client, "a")
         u2 = await _actor(client, "b")
-        i1 = await _create_intent(client, u1)
-        i2 = await _create_intent(client, u2)
+        await _create_intent(client, u1)
+        await _create_intent(client, u2)
 
     # -- hook: outbox(pending→post-commit配送でsent)・schedule(due) ----------
     assert await _count(db, "SELECT COUNT(*) AS c FROM outbox") == 2
@@ -184,39 +187,58 @@ async def test_pipeline_end_to_end_flow(stack):
         .first()
     )
     assert latch["status"] == "proposed"
-    assert float(latch["score"]) == pytest.approx(0.9), "stub jev決定論: 1.0×min(0.9,0.9)"
+    assert float(latch["score"]) == pytest.approx(0.9), (
+        "stub jev決定論: 1.0×min(0.9,0.9)"
+    )
     assert latch["response_deadline"] is not None, "D-05回答期限式で期限設定"
-    assert await _count(
-        db,
-        "SELECT COUNT(*) AS c FROM match_candidates WHERE jev_result IS NOT NULL"
-        " AND latch_score IS NOT NULL AND status = 'evaluated'",
-    ) == 1
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM latches WHERE status = 'proposed'"
-    ) == 1
+    assert (
+        await _count(
+            db,
+            "SELECT COUNT(*) AS c FROM match_candidates WHERE jev_result IS NOT NULL"
+            " AND latch_score IS NOT NULL AND status = 'evaluated'",
+        )
+        == 1
+    )
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM latches WHERE status = 'proposed'")
+        == 1
+    )
     # 提案と通知job・通知行の同時保存(atomic.apply_proposal)
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM jobs WHERE kind = 'notify' AND status = 'pending'"
-    ) == 1
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM notifications WHERE type = 'proposal'"
-    ) == 2, "参加者2人へ提案通知"
+    assert (
+        await _count(
+            db,
+            "SELECT COUNT(*) AS c FROM jobs"
+            " WHERE kind = 'notify' AND status = 'pending'",
+        )
+        == 1
+    )
+    assert (
+        await _count(
+            db, "SELECT COUNT(*) AS c FROM notifications WHERE type = 'proposal'"
+        )
+        == 2
+    ), "参加者2人へ提案通知"
     # llm_attempts: 送信前prepared→応答後finish(stub・usage確定)
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM llm_attempts WHERE system = 'jev'"
-        " AND status = 'succeeded'"
-    ) == 1
+    assert (
+        await _count(
+            db,
+            "SELECT COUNT(*) AS c FROM llm_attempts WHERE system = 'jev'"
+            " AND status = 'succeeded'",
+        )
+        == 1
+    )
 
     # -- cron #1: schedule評価(冪等・再提案なし)・notify配送・retention -----
     summary1 = await _cron(services, jobs)
     assert summary1["schedule"]["completed"] >= 1
     assert summary1["jobs"]["notify"] == 1, "提案通知jobの配送(in_app到達)"
+    assert await _count(db, "SELECT COUNT(*) AS c FROM notification_deliveries") == 2, (
+        "通知行2件の配送記録(安定ID冪等)"
+    )
     assert (
-        await _count(db, "SELECT COUNT(*) AS c FROM notification_deliveries") == 2
-    ), "通知行2件の配送記録(安定ID冪等)"
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM latches WHERE status = 'proposed'"
-    ) == 1, "再評価で提案は重複しない(open latch UNIQUE+対象外)"
+        await _count(db, "SELECT COUNT(*) AS c FROM latches WHERE status = 'proposed'")
+        == 1
+    ), "再評価で提案は重複しない(open latch UNIQUE+対象外)"
     assert "retention" in summary1, "retention段も実行(snapshotはTTL 2分後掃除)"
 
     # -- 回答 → matched ------------------------------------------------------
@@ -236,12 +258,16 @@ async def test_pipeline_end_to_end_flow(stack):
         assert resp.status_code == 200, resp.text
         assert resp.json()["latch"]["status"] == "matched"
 
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM intents WHERE status = 'matched'"
-    ) == 2, "全Intent成立"
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM notifications WHERE type = 'latch_matched'"
-    ) == 2, "成立通知の先行書き込み(参加者全員)"
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM intents WHERE status = 'matched'")
+        == 2
+    ), "全Intent成立"
+    assert (
+        await _count(
+            db, "SELECT COUNT(*) AS c FROM notifications WHERE type = 'latch_matched'"
+        )
+        == 2
+    ), "成立通知の先行書き込み(参加者全員)"
     matched_notify_pending = await _count(
         db,
         "SELECT COUNT(*) AS c FROM jobs WHERE kind = 'notify' AND status = 'pending'",
@@ -251,9 +277,9 @@ async def test_pipeline_end_to_end_flow(stack):
     # -- cron #2: 成立通知配送・job収束 --------------------------------------
     summary2 = await _cron(services, jobs)
     assert summary2["jobs"]["notify"] == 1
-    assert (
-        await _count(db, "SELECT COUNT(*) AS c FROM notification_deliveries") == 4
-    ), "提案2+成立2の配送記録"
+    assert await _count(db, "SELECT COUNT(*) AS c FROM notification_deliveries") == 4, (
+        "提案2+成立2の配送記録"
+    )
     assert (
         await _count(
             db,
@@ -261,15 +287,19 @@ async def test_pipeline_end_to_end_flow(stack):
         )
         == 0
     ), "全job収束"
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM outbox WHERE status != 'sent'"
-    ) == 0
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status != 'sent'") == 0
+    )
 
     # -- 評価済みIntentはscheduleでpaused化(以降の評価機会から外れる) ----------
-    assert await _count(
-        db,
-        "SELECT COUNT(*) AS c FROM intent_evaluation_schedule WHERE status = 'paused'",
-    ) == 2
+    assert (
+        await _count(
+            db,
+            "SELECT COUNT(*) AS c FROM intent_evaluation_schedule"
+            " WHERE status = 'paused'",
+        )
+        == 2
+    )
 
 
 async def _drain(services, jobs) -> dict:
@@ -297,11 +327,12 @@ async def test_outbox_sweep_resends_pending_at_least_once(stack):
         await _create_intent(client, u1)
 
     # post-commit配送を失敗させた状況を再現(outboxをpendingへ戻す)
-    await db.prepare(
-        "UPDATE outbox SET status = 'pending', sent_at = NULL"
-    ).run()
+    await db.prepare("UPDATE outbox SET status = 'pending', sent_at = NULL").run()
     jobs.sent.clear()
-    assert await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status = 'pending'") == 1
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status = 'pending'")
+        == 1
+    )
 
     jobs.fail_next = True
     summary = await _cron(services, jobs)
@@ -310,11 +341,16 @@ async def test_outbox_sweep_resends_pending_at_least_once(stack):
         "sent": 0,
         "send_failed": 1,
     }, "送信失敗でも行はpendingのまま"
-    assert await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status = 'pending'") == 1
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status = 'pending'")
+        == 1
+    )
 
     summary = await _cron(services, jobs)
     assert summary["outbox"]["sent"] == 1, "次周期で再送"
-    assert await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status != 'sent'") == 0
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status != 'sent'") == 0
+    )
 
 
 async def test_redelivery_and_cron_do_not_duplicate_latch(stack):
@@ -335,12 +371,13 @@ async def test_redelivery_and_cron_do_not_duplicate_latch(stack):
     await _cron(services, jobs)
 
     assert await _count(db, "SELECT COUNT(*) AS c FROM latches") == 1
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM llm_attempts WHERE system = 'jev'"
-    ) == 1, "I1 claim: 同一評価キーの再実行は外部呼出し0回"
-    assert await _count(
-        db, "SELECT COUNT(*) AS c FROM match_candidates"
-    ) == 1, "候補行はUNIQUE(a,b,va,vb)で1行"
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM llm_attempts WHERE system = 'jev'")
+        == 1
+    ), "I1 claim: 同一評価キーの再実行は外部呼出し0回"
+    assert await _count(db, "SELECT COUNT(*) AS c FROM match_candidates") == 1, (
+        "候補行はUNIQUE(a,b,va,vb)で1行"
+    )
 
 
 async def test_cron_alone_proposes_without_queue_dispatch(stack):
@@ -363,7 +400,10 @@ async def test_cron_alone_proposes_without_queue_dispatch(stack):
         await _create_intent(client, u1)
         await _create_intent(client, u2)
 
-    assert await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status = 'pending'") == 2
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM outbox WHERE status = 'pending'")
+        == 2
+    )
 
     # cron only: outbox掃き→(fake producerで受信)→schedule評価で提案まで
     drain_producer = FakeJobs()
@@ -373,7 +413,10 @@ async def test_cron_alone_proposes_without_queue_dispatch(stack):
 
     for body in drain_producer.sent:
         await handle_queue_message(services, body)
-    assert await _count(db, "SELECT COUNT(*) AS c FROM latches WHERE status = 'proposed'") == 1
+    assert (
+        await _count(db, "SELECT COUNT(*) AS c FROM latches WHERE status = 'proposed'")
+        == 1
+    )
     # さらにcronを回しても重複しない
     await _cron(services, drain_producer)
     assert await _count(db, "SELECT COUNT(*) AS c FROM latches") == 1

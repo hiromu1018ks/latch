@@ -96,8 +96,8 @@ def test_extra_keys_are_ignored():
             id="participants-min-0",
         ),
         pytest.param(
-            lambda d: d["structured_intent"]["participants"].update(max=5),
-            id="participants-max-5",
+            lambda d: d["structured_intent"]["participants"].update(max=6),
+            id="participants-max-6",
         ),
         pytest.param(
             lambda d: d["structured_intent"]["budget"].update(max=-1),

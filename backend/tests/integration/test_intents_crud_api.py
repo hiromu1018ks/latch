@@ -668,3 +668,45 @@ async def test_9_cursor_pagination_and_status_filter(api_client, db_engine):
         assert [i["id"] for i in filtered.json()["items"]] == [draft_id]
     finally:
         await _cleanup(db_engine, user_id, subject)
+
+
+# --- UI v2 Phase 1B: participants_includes_owner(D-04) ---
+
+
+async def test_24_participants_includes_owner_persisted(api_client, db_engine):
+    """「あなたを含むか」はstructured_dataへ格納・GET応答で復元(D-04・05 §2)。
+
+    「含まない」の場合もクライアントが+1したparticipants実効値と共に保存される
+    (マッチング判定はparticipants列の送信値が正)。
+    """
+    subject = f"m1ws3-p1b-{uuid_mod.uuid4().hex[:12]}"
+    headers, user_id = await _register(api_client, subject)
+    try:
+        # (a) 未指定は既定true
+        created = await api_client.post(
+            "/v1/intents", headers=headers, json=_active_payload()
+        )
+        assert created.status_code == 201, created.text
+        intent_id = created.json()["intent"]["id"]
+        got = await api_client.get(f"/v1/intents/{intent_id}", headers=headers)
+        assert got.status_code == 200, got.text
+        intent = got.json()["intent"]
+        assert intent["structured_intent"]["participants_includes_owner"] is True
+        assert intent["structured_data"]["participants_includes_owner"] is True
+
+        # (b) 「含まない」はfalseを保存( participantsは+1換算後の実効値を送る)
+        structured = _structured()
+        structured["participants"] = {"min": 3, "max": 5}
+        structured["participants_includes_owner"] = False
+        created2 = await api_client.post(
+            "/v1/intents", headers=headers, json=_active_payload(structured)
+        )
+        assert created2.status_code == 201, created2.text
+        intent2_id = created2.json()["intent"]["id"]
+        got2 = await api_client.get(f"/v1/intents/{intent2_id}", headers=headers)
+        body2 = got2.json()["intent"]
+        assert body2["structured_data"]["participants_includes_owner"] is False
+        assert body2["structured_intent"]["participants_includes_owner"] is False
+        assert body2["structured_intent"]["participants"] == {"min": 3, "max": 5}
+    finally:
+        await _cleanup(db_engine, user_id, subject)

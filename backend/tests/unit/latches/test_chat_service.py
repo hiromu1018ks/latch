@@ -167,6 +167,7 @@ def _row(**overrides) -> SimpleNamespace:
         status="matched",
         intent_ids=[I1, uuid.uuid4()],
         completed_at=None,
+        left_user_ids=(),
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -465,3 +466,34 @@ async def test_send_message_block_cache_paths(monkeypatch):
     )
     assert got2 is out_msg
     assert db_calls == [(ME, (PEER,))]
+
+
+async def test_send_message_left_member_409(monkeypatch):
+    """参加取り消し済み(left_user_ids内)は409 CHAT_READONLY(05 §5 leave・D-08)。
+
+    残りのメンバー(PEER)は従来どおり書込可 — 判定は自分の脱退事実のみ。
+    """
+    from latch.latches import store as store_mod
+
+    row = _row(status="matched", left_user_ids=(ME,))
+    monkeypatch.setattr(store_mod, "fetch_user_id", _ret(ME))
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row))
+    monkeypatch.setattr(store_mod, "select_participant_intent", _ret(I1))
+    with pytest.raises(ChatReadonlyError):
+        await LatchesService(clock=FakeClock(NOW), engine=_NoopEngine()).send_message(
+            auth_provider="google", auth_subject="s", latch_id=row.id, body="x"
+        )
+    # 他人の脱退では自分は書ける(left_user_idsにMEが無い)
+    row_other_left = _row(status="matched", left_user_ids=(PEER,))
+    out_msg = _msg(row_other_left, body="残ってます")
+    monkeypatch.setattr(store_mod, "select_latch_for_update", _ret(row_other_left))
+    monkeypatch.setattr(store_mod, "fetch_participant_user_ids", _ret([ME, PEER]))
+    monkeypatch.setattr(store_mod, "select_block_between", _ret(False))
+    monkeypatch.setattr(store_mod, "insert_message", _ret(out_msg))
+    got = await LatchesService(clock=FakeClock(NOW), engine=_NoopEngine()).send_message(
+        auth_provider="google",
+        auth_subject="s",
+        latch_id=row_other_left.id,
+        body="残ってます",
+    )
+    assert got is out_msg

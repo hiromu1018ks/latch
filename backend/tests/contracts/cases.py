@@ -974,6 +974,247 @@ CASES: list[ContractCase] = [
         seed=("group_latch", {"size": 3}),
         source_test="test_latches_api.test_9_group",
     ),
+    # ================= UI v2 Phase 1B(undo・reasons・leave) =================
+    C(
+        "latch_defer_reasons_ok",
+        "latches",
+        "defer+reasonsは200 rejected(reasonsはresponses.reason_codesへ・D-07)",
+        R(
+            "POST",
+            "/v1/latches/{latch_id}/response",
+            json={"response": "defer", "reasons": ["time", "place"]},
+            actor="u1",
+        ),
+        E(200, json_equals={"latch": {"status": "rejected"}}),
+        seed=("pair_latch", {}),
+        effects="responses[0].reason_codes=[time,place]",
+        source_test="test_latches_api.test_18",
+    ),
+    C(
+        "latch_reasons_with_yes_422",
+        "latches",
+        "reasonsはdefer時のみ受理(yes同時指定は422・D-07)",
+        R(
+            "POST",
+            "/v1/latches/{latch_id}/response",
+            json={"response": "yes", "reasons": ["time"]},
+            actor="u1",
+        ),
+        E(422, error_code="VALIDATION_ERROR"),
+        seed=("pair_latch", {}),
+        source_test="test_latches_api.test_19",
+    ),
+    C(
+        "latch_reasons_bad_value_422",
+        "latches",
+        "reasons値域外は422(time/place/size/mood・D-07)",
+        R(
+            "POST",
+            "/v1/latches/{latch_id}/response",
+            json={"response": "defer", "reasons": ["weather"]},
+            actor="u1",
+        ),
+        E(422, error_code="VALIDATION_ERROR"),
+        seed=("pair_latch", {}),
+        source_test="test_latches_api.test_19",
+    ),
+    C(
+        "latch_undo_returns_proposed",
+        "latches",
+        "回答取り消しでproposedへ戻る(D-06・05 §5)",
+        R("POST", "/v1/latches/{latch_id}/response/undo", actor="u1"),
+        E(
+            200,
+            json_equals={
+                "latch": {
+                    "status": "proposed",
+                    "my_response": None,
+                    "remaining_responses": 2,
+                }
+            },
+        ),
+        setup=(
+            (
+                "yes1",
+                R(
+                    "POST",
+                    "/v1/latches/{latch_id}/response",
+                    json={"response": "yes"},
+                    actor="u1",
+                ),
+                E(200),
+            ),
+        ),
+        seed=("pair_latch", {}),
+        effects="responses=[]・latch_status_events(partial_accept→proposed)",
+        source_test="test_latches_api.test_20",
+    ),
+    C(
+        "latch_undo_unanswered_409",
+        "latches",
+        "未回答での取り消しは409 UNANSWERED(D-06)",
+        R("POST", "/v1/latches/{latch_id}/response/undo", actor="u1"),
+        E(409, error_code="UNANSWERED"),
+        seed=("pair_latch", {}),
+        source_test="test_latches_api.test_21",
+    ),
+    C(
+        "latch_undo_matched_409",
+        "latches",
+        "matched後の取り消しは409 LATCH_CLOSED(D-06)",
+        R("POST", "/v1/latches/{latch_id}/response/undo", actor="u1"),
+        E(409, error_code="LATCH_CLOSED"),
+        setup=(
+            (
+                "yes1",
+                R(
+                    "POST",
+                    "/v1/latches/{latch_id}/response",
+                    json={"response": "yes"},
+                    actor="u1",
+                ),
+                E(200),
+            ),
+            (
+                "yes2",
+                R(
+                    "POST",
+                    "/v1/latches/{latch_id}/response",
+                    json={"response": "yes"},
+                    actor="u2",
+                ),
+                E(200),
+            ),
+        ),
+        seed=("pair_latch", {}),
+        source_test="test_latches_api.test_21",
+    ),
+    C(
+        "latch_undo_outsider_404",
+        "latches",
+        "非参加者の取り消しは404(回答APIの403と扱いを分ける・D-06)",
+        R("POST", "/v1/latches/{latch_id}/response/undo", actor="outsider"),
+        E(404, error_code="NOT_FOUND"),
+        setup=(
+            (
+                "yes1",
+                R(
+                    "POST",
+                    "/v1/latches/{latch_id}/response",
+                    json={"response": "yes"},
+                    actor="u1",
+                ),
+                E(200),
+            ),
+        ),
+        seed=("pair_latch", {}),
+        source_test="test_latches_api.test_21",
+    ),
+    C(
+        "latch_leave_ok",
+        "latches",
+        "参加取り消しは200・statusはmatchedのまま(D-08・05 §5)",
+        R("POST", "/v1/latches/{latch_id}/leave", actor="u1"),
+        E(
+            200,
+            json_equals={"latch": {"status": "matched", "left": True}},
+            json_contains=("latch.id",),
+        ),
+        seed=("pair_latch", {"status": "matched"}),
+        effects="システム行挿入(sender_id=NULL)・cancelled_after=true・status不変",
+        source_test="test_latches_api.test_22",
+    ),
+    C(
+        "latch_leave_already_left_409",
+        "latches",
+        "再取り消しは409 ALREADY_LEFT(D-08)",
+        R("POST", "/v1/latches/{latch_id}/leave", actor="u1"),
+        E(409, error_code="ALREADY_LEFT"),
+        setup=(
+            ("leave1", R("POST", "/v1/latches/{latch_id}/leave", actor="u1"), E(200)),
+        ),
+        seed=("pair_latch", {"status": "matched"}),
+        source_test="test_latches_api.test_22",
+    ),
+    C(
+        "latch_leave_not_matched_409",
+        "latches",
+        "matched以外の取り消しは409 LATCH_CLOSED(D-08)",
+        R("POST", "/v1/latches/{latch_id}/leave", actor="u1"),
+        E(409, error_code="LATCH_CLOSED"),
+        seed=("pair_latch", {}),
+        source_test="test_latches_api.test_23",
+    ),
+    C(
+        "latch_leave_outsider_404",
+        "latches",
+        "非参加者の取り消しは404(D-08)",
+        R("POST", "/v1/latches/{latch_id}/leave", actor="outsider"),
+        E(404, error_code="NOT_FOUND"),
+        seed=("pair_latch", {"status": "matched"}),
+        source_test="test_latches_api.test_23",
+    ),
+    C(
+        "chat_after_leave_409",
+        "chat",
+        "参加取り消し後の自分の送信は409 CHAT_READONLY(D-08)",
+        R(
+            "POST",
+            "/v1/latches/{latch_id}/messages",
+            json={"body": "書けない"},
+            actor="u1",
+        ),
+        E(409, error_code="CHAT_READONLY"),
+        setup=(
+            ("leave", R("POST", "/v1/latches/{latch_id}/leave", actor="u1"), E(200)),
+        ),
+        seed=("pair_latch", {"status": "matched"}),
+        source_test="test_latches_api.test_22",
+    ),
+    C(
+        "chat_after_leave_system_row",
+        "chat",
+        "参加取り消しはシステム行(sender_id=null)を残す(D-08)",
+        R("GET", "/v1/latches/{latch_id}/messages", actor="u2"),
+        E(
+            200,
+            json_equals={"items.0.sender_id": None},
+            json_contains=("items.0.body",),
+        ),
+        setup=(
+            ("leave", R("POST", "/v1/latches/{latch_id}/leave", actor="u1"), E(200)),
+        ),
+        seed=("pair_latch", {"status": "matched"}),
+        source_test="test_latches_api.test_22",
+    ),
+    C(
+        "intent_participants_includes_owner",
+        "intents.crud",
+        "「あなたを含むか」falseはstructured_dataへ保存(D-04)",
+        R(
+            "POST",
+            "/v1/intents",
+            json=_intent_body(
+                structured_intent={
+                    "participants": {"min": 3, "max": 5},
+                    "participants_includes_owner": False,
+                }
+            ),
+            actor="u1",
+        ),
+        E(
+            201,
+            json_equals={
+                "intent": {
+                    "structured_intent": {
+                        "participants_includes_owner": False,
+                        "participants": {"min": 3, "max": 5},
+                    }
+                }
+            },
+        ),
+        source_test="test_intents_crud_api.test_24",
+    ),
     C(
         "latch_list_shape",
         "latches",

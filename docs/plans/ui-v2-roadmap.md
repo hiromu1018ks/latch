@@ -176,6 +176,12 @@ LATCH UI v2移行 Phase 1(デザイン基盤と新シェル)を実施する。
 
 ## Phase 1B — (オプション・Phase 1と並行)決定分のAPI拡張をbackendへ通す
 
+**実施済み(2026-10-10)。** 5件(D-01・D-04・D-06・D-07・D-08)を実装し、
+backend全套(`make test`1579・`make test-ci`2160)+契約試験(参照実装132・
+D1/Workers 130・P1B追加13ケース込み)+miniflare probe緑。既存破損(lint残留・
+probe試験ドリフト・cutover変換の追随)も回収した。実施内容と試験証拠は
+[phase1b-report.md](ui-v2/phase1b-report.md)。
+
 **スコープ**: P0で「API追加」と決まった5件のみ — D-01有効期限3択(expiry-options・
 completion.pyの選択肢更新と既存契約試験の追随)、D-04人数確認の保存
 (structured_data.participants_includes_owner)、D-06回答取り消し(response/undo)、
@@ -398,8 +404,8 @@ LATCH UI v2移行 Phase 5(横断機能の載せ替え)を実施する。
 
 **スコープ**: フロント全試験の緑化(残欠落・スキップの回収)・実機E2E
 (実環境: 書く→読み解く→預ける→待機→候補→回答→成立→チャットの往復)・
-契約116(P1B変更分の追随)・Workers Assets配信検証(フォント読み込み・
-オリジン)・docs最終確認(00・03・12・STATUSの状態が実装と一致)・
+契約130ケース(P1B追加13件込み・local/miniflare両実装)・Workers Assets配信検証
+(フォント読み込み・オリジン)・docs最終確認(00・03・12・STATUSの状態が実装と一致)・
 ゲート承認の依頼。
 
 **完了条件**: 全自動試験緑・実機E2E合格・docs/STATUS整合・ユーザー承認記録。
@@ -418,7 +424,7 @@ LATCH UI v2移行 Phase 6(統合試験と切替完了)を実施する。
 2. 実機E2Eを実施する(実環境・miniflare。フロー: 01入力→02確認→預ける→
    03待機(取り下げ/修正)→04候補(回答4状態)→05成立(チャット・通報/ブロック)。
    証拠はコマンド出力で残す)
-3. 契約試験(116+P1B追加分)が緑であることを確認する
+3. 契約試験(130ケース・P1B追加13件込み・参照/D1両実装)が緑であることを確認する
 4. Workers Assets配信を検証する(フォントの読み込み・CSP・オリジン)
 5. docs/00・03・12・STATUS.mdが実装と一致しているか確認し、ズレを直す
 6. docs/plans/ui-v2/phase6-report.md に全体の証拠をまとめ、

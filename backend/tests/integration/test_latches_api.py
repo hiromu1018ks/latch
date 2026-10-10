@@ -35,6 +35,15 @@ async def field(db_engine):
     async with db_engine.begin() as conn:
         await conn.execute(
             text(
+                "DELETE FROM messages WHERE latch_id IN"
+                " (SELECT id FROM latches WHERE intent_ids && ARRAY("
+                "  SELECT id FROM intents WHERE user_id IN"
+                "  (SELECT id FROM users WHERE auth_subject LIKE :p)))"
+            ),
+            p,
+        )
+        await conn.execute(
+            text(
                 "DELETE FROM latch_status_events WHERE latch_id IN"
                 " (SELECT id FROM latches WHERE intent_ids && ARRAY("
                 "  SELECT id FROM intents WHERE user_id IN"
@@ -889,3 +898,276 @@ async def test_17_deletion_closes_and_restores(api_client, db_engine, field):
             )
         ).scalar_one()
     assert restored2 == "expired"  # 経過済み復帰(引用#9・#20)
+
+
+# -- 試験18〜24: UI v2 Phase 1B(D-06 undo・D-07 reasons・D-08 leave) --
+
+
+async def _undo(api_client, headers, latch_id: str):
+    return await api_client.post(
+        f"/v1/latches/{latch_id}/response/undo", headers=headers
+    )
+
+
+async def _leave(api_client, headers, latch_id: str):
+    return await api_client.post(f"/v1/latches/{latch_id}/leave", headers=headers)
+
+
+async def _messages(api_client, headers, latch_id: str):
+    resp = await api_client.get(f"/v1/latches/{latch_id}/messages", headers=headers)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["items"]
+
+
+async def test_18_defer_reasons_stored_and_calibrated(api_client, db_engine, field):
+    """defer+reasonsはresponses.reason_codesへ保存・calibrationへ同形反映(D-07)。"""
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    i1 = await _intent(api_client, h1)
+    i2 = await _intent(api_client, h2)
+    await _pair_eval(db_engine, i1["id"], i2["id"], wa=0.8, wb=0.8)
+    latch = await _latch(db_engine, [i1["id"], i2["id"]])
+    r = await api_client.post(
+        f"/v1/latches/{latch}/response",
+        headers=h1,
+        json={"response": "defer", "reasons": ["time", "place"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["latch"]["status"] == "rejected"
+    row = await _latch_row(db_engine, latch)
+    assert row["responses"][0]["reason_codes"] == ["time", "place"]
+    cal = await _calibration(db_engine, latch)
+    assert cal is not None
+    assert cal["actual_responses"][0]["reason_codes"] == ["time", "place"]
+
+
+async def test_19_reasons_validation(api_client, db_engine, field):
+    """reasonsはdefer時のみ・値域はtime/place/size/mood(D-07・05 §5)。"""
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    i1 = await _intent(api_client, h1)
+    i2 = await _intent(api_client, h2)
+    latch = await _latch(db_engine, [i1["id"], i2["id"]])
+    r_yes = await api_client.post(
+        f"/v1/latches/{latch}/response",
+        headers=h1,
+        json={"response": "yes", "reasons": ["time"]},
+    )
+    assert r_yes.status_code == 422
+    assert r_yes.json()["error"]["code"] == "VALIDATION_ERROR"
+    r_bad = await api_client.post(
+        f"/v1/latches/{latch}/response",
+        headers=h1,
+        json={"response": "defer", "reasons": ["weather"]},
+    )
+    assert r_bad.status_code == 422
+    row = await _latch_row(db_engine, latch)
+    assert row["responses"] == []  # どちらも保存されない
+    r_plain = await api_client.post(
+        f"/v1/latches/{latch}/response",
+        headers=h1,
+        json={"response": "defer"},
+    )
+    assert r_plain.status_code == 200
+    row = await _latch_row(db_engine, latch)
+    assert "reason_codes" not in row["responses"][0]  # 無指定はキーなし
+
+
+async def test_20_undo_returns_to_unanswered(api_client, db_engine, field):
+    """回答取り消しで未回答へ戻る・再回答可・遷移記録(D-06・05 §5)。"""
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    i1 = await _intent(api_client, h1)
+    i2 = await _intent(api_client, h2)
+    latch = await _latch(db_engine, [i1["id"], i2["id"]])
+    assert (await _respond(api_client, h1, latch, "yes")).status_code == 200
+    r = await _undo(api_client, h1, latch)
+    assert r.status_code == 200, r.text
+    body = r.json()["latch"]
+    assert body["status"] == "proposed"
+    assert body["my_response"] is None
+    assert body["remaining_responses"] == 2
+    row = await _latch_row(db_engine, latch)
+    assert row["responses"] == []
+    assert row["status"] == "proposed"
+    assert ("partial_accept", "proposed") in [
+        (a, b) for a, b, _ in await _events(db_engine, latch)
+    ]
+    # 取り消し後は再回答できる(誤回答救済の本体)
+    r2 = await _respond(api_client, h1, latch, "defer")
+    assert r2.status_code == 200
+
+
+async def test_21_undo_discards_reasons_and_classification(
+    api_client, db_engine, field
+):
+    """defer理由はundoで破棄・未回答409・matched409・非参加者404・期限切れ409。"""
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    i1 = await _intent(api_client, h1)
+    i2 = await _intent(api_client, h2)
+    await _pair_eval(db_engine, i1["id"], i2["id"], wa=0.8, wb=0.8)
+    latch = await _latch(db_engine, [i1["id"], i2["id"]])
+    # (a) defer+reasons → undo → proposed・reason_codes破棄
+    await api_client.post(
+        f"/v1/latches/{latch}/response",
+        headers=h1,
+        json={"response": "defer", "reasons": ["mood"]},
+    )
+    r = await _undo(api_client, h1, latch)
+    assert r.status_code == 200
+    row = await _latch_row(db_engine, latch)
+    assert row["responses"] == []
+    # (b) 未回答でのundoは409 UNANSWERED
+    r2 = await _undo(api_client, h1, latch)
+    assert r2.status_code == 409
+    assert r2.json()["error"]["code"] == "UNANSWERED"
+    # (c) matched後は409 LATCH_CLOSED(undo→再回答で本物のmatchedへ)
+    await _respond(api_client, h1, latch, "yes")
+    await _respond(api_client, h2, latch, "yes")  # matched
+    r3 = await _undo(api_client, h1, latch)
+    assert r3.status_code == 409
+    assert r3.json()["error"]["code"] == "LATCH_CLOSED"
+    # (d) 非参加者は404(回答APIの403と扱いを分ける・05 §5)
+    h3 = await _user(api_client, field)
+    r4 = await _undo(api_client, h3, latch)
+    assert r4.status_code == 404
+    assert r4.json()["error"]["code"] == "NOT_FOUND"
+    # (e) 回答期限経過後は409 LATCH_EXPIRED(§9-2のDB値操作)
+    i3 = await _intent(api_client, h1, start=_future(BASE_HOURS + 24))
+    i4 = await _intent(api_client, h2, start=_future(BASE_HOURS + 24))
+    latch_e = await _latch(db_engine, [i3["id"], i4["id"]])
+    await _respond(api_client, h1, latch_e, "yes")
+    async with db_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "UPDATE latches SET response_deadline = CAST(:d AS timestamptz)"
+                " WHERE id = CAST(:l AS uuid)"
+            ),
+            {"d": SystemClock().now() - timedelta(hours=1), "l": latch_e},
+        )
+    r5 = await _undo(api_client, h1, latch_e)
+    assert r5.status_code == 409
+    assert r5.json()["error"]["code"] == "LATCH_EXPIRED"
+
+
+async def test_22_leave_full_effects(api_client, db_engine, field):
+    """参加取り消し: システム行・書込拒否・残メンバー継続・cancelled_after(D-08)。"""
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    i1 = await _intent(api_client, h1)
+    i2 = await _intent(api_client, h2)
+    await _pair_eval(db_engine, i1["id"], i2["id"], wa=0.8, wb=0.8)
+    latch = await _latch(db_engine, [i1["id"], i2["id"]])
+    await _respond(api_client, h1, latch, "yes")
+    await _respond(api_client, h2, latch, "yes")  # matched(calibration作成)
+
+    r = await _leave(api_client, h1, latch)
+    assert r.status_code == 200, r.text
+    assert r.json()["latch"] == {"id": latch, "status": "matched", "left": True}
+
+    # ① システム行(sender_id=NULL・表示名本文)・② 自分は書込不可・残メンバーは継続
+    items = await _messages(api_client, h2, latch)
+    system = [m for m in items if m["sender_id"] is None]
+    assert len(system) == 1
+    assert system[0]["body"].endswith("が参加を取り消しました")
+    r_mine = await api_client.post(
+        f"/v1/latches/{latch}/messages", headers=h1, json={"body": "書けない"}
+    )
+    assert r_mine.status_code == 409
+    assert r_mine.json()["error"]["code"] == "CHAT_READONLY"
+    r_peer = await api_client.post(
+        f"/v1/latches/{latch}/messages", headers=h2, json={"body": "残ってる"}
+    )
+    assert r_peer.status_code == 201
+
+    # ③ calibration_records.cancelled_after=true・statusはmatchedのまま
+    cal = await _calibration(db_engine, latch)
+    assert cal is not None
+    row = await _latch_row(db_engine, latch)
+    assert row["status"] == "matched"
+    async with db_engine.connect() as conn:
+        cancelled = (
+            await conn.execute(
+                text(
+                    "SELECT cancelled_after FROM calibration_records"
+                    " WHERE latch_id = CAST(:l AS uuid)"
+                ),
+                {"l": latch},
+            )
+        ).scalar_one()
+    assert cancelled is True
+
+    # 2回目のleaveは409 ALREADY_LEFT
+    r2 = await _leave(api_client, h1, latch)
+    assert r2.status_code == 409
+    assert r2.json()["error"]["code"] == "ALREADY_LEFT"
+
+
+async def test_23_leave_classification(api_client, db_engine, field):
+    """leaveはmatched以外409・非参加者404(D-08・05 §5)。"""
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    i1 = await _intent(api_client, h1)
+    i2 = await _intent(api_client, h2)
+    latch_p = await _latch(db_engine, [i1["id"], i2["id"]])  # proposed
+    r_proposed = await _leave(api_client, h1, latch_p)
+    assert r_proposed.status_code == 409
+    assert r_proposed.json()["error"]["code"] == "LATCH_CLOSED"
+
+    i3 = await _intent(api_client, h1, start=_future(BASE_HOURS + 12))
+    i4 = await _intent(api_client, h2, start=_future(BASE_HOURS + 12))
+    latch_m = await _latch(db_engine, [i3["id"], i4["id"]], status="matched")
+    h3 = await _user(api_client, field)
+    r_outsider = await _leave(api_client, h3, latch_m)
+    assert r_outsider.status_code == 404
+    assert r_outsider.json()["error"]["code"] == "NOT_FOUND"
+    r_missing = await _leave(api_client, h1, str(uuid_mod.uuid4()))
+    assert r_missing.status_code == 404
+
+
+async def test_24_leave_system_message_display_name(api_client, db_engine, field):
+    """システム行本文は表示名入り(「{表示名}が参加を取り消しました」)。"""
+    h1 = await _user(api_client, field)
+    h2 = await _user(api_client, field)
+    i1 = await _intent(api_client, h1)
+    i2 = await _intent(api_client, h2)
+    latch = await _latch(db_engine, [i1["id"], i2["id"]], status="matched")
+    # seed直接のためcalibration行を対で入れる(cancelled_after確認用)
+    now = SystemClock().now()
+    async with db_engine.begin() as conn:
+        await conn.execute(
+            text("""
+                INSERT INTO calibration_records
+                    (latch_id, intent_ids, prediction, proposal_snapshot,
+                     actual_responses, matched, created_at, updated_at)
+                VALUES (CAST(:l AS uuid), CAST(:ids AS uuid[]),
+                        CAST(:pred AS jsonb), CAST(:prop AS jsonb),
+                        CAST(:resp AS jsonb), true,
+                        CAST(:now AS timestamptz), CAST(:now AS timestamptz))
+            """),
+            {
+                "l": latch,
+                "ids": [uuid_mod.UUID(i1["id"]), uuid_mod.UUID(i2["id"])],
+                "pred": json.dumps({"placeholder": True}),
+                "prop": json.dumps({"headcount": 2}),
+                "resp": json.dumps([]),
+                "now": now,
+            },
+        )
+    r = await _leave(api_client, h1, latch)
+    assert r.status_code == 200, r.text
+    items = await _messages(api_client, h2, latch)
+    assert items[0]["sender_id"] is None
+    async with db_engine.connect() as conn:
+        name = (
+            await conn.execute(
+                text("""
+                    SELECT u.display_name FROM users u
+                    JOIN intents i ON i.user_id = u.id
+                    WHERE i.id = CAST(:i AS uuid)
+                """),
+                {"i": i1["id"]},
+            )
+        ).scalar_one()
+    assert items[0]["body"] == f"{name}が参加を取り消しました"

@@ -25,11 +25,11 @@ from pathlib import Path
 from typing import Any
 
 import jwt as pyjwt
+
+from contracts.reference_harness import ACTOR_SPEC, INTENT_BODY, SUBJECT_PREFIX
 from latch.auth.tools import issue_idp_token
 from latch.core.clock import SystemClock
 from latch.domain.time import micros
-
-from contracts.reference_harness import ACTOR_SPEC, INTENT_BODY, SUBJECT_PREFIX
 
 REPO = Path(__file__).resolve().parents[3]
 WRANGLER_DIR = REPO / "cloudflare" / "api"
@@ -66,9 +66,7 @@ class WranglerD1:
                 conn.close()
             return ""
         env = dict(os.environ)
-        env.setdefault(
-            "XDG_CONFIG_HOME", str(REPO / ".xdg-config")
-        )
+        env.setdefault("XDG_CONFIG_HOME", str(REPO / ".xdg-config"))
         env.setdefault("UV_CACHE_DIR", str(REPO / ".uv-cache"))
         env.setdefault("UV_PYTHON_INSTALL_DIR", str(REPO / ".uv-python"))
         env.setdefault("npm_config_cache", str(REPO / ".npm-cache"))
@@ -93,9 +91,7 @@ class WranglerD1:
             check=False,
         )
         if proc.returncode != 0:
-            raise RuntimeError(
-                f"wrangler d1 execute failed: {proc.stderr[-2000:]}"
-            )
+            raise RuntimeError(f"wrangler d1 execute failed: {proc.stderr[-2000:]}")
         _raise_on_d1_error(proc.stdout)
         return proc.stdout
 
@@ -123,7 +119,9 @@ class WranglerD1:
             check=False,
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"wrangler d1 execute --file failed: {proc.stderr[-2000:]}")
+            raise RuntimeError(
+                f"wrangler d1 execute --file failed: {proc.stderr[-2000:]}"
+            )
         _raise_on_d1_error(proc.stdout)
         return proc.stdout
 
@@ -142,7 +140,9 @@ def _raise_on_d1_error(stdout: str) -> None:
     for item in items:
         if isinstance(item, dict) and "error" in item:
             err = item["error"]
-            notes = [n.get("text", "") for n in err.get("notes", []) if isinstance(n, dict)]
+            notes = [
+                n.get("text", "") for n in err.get("notes", []) if isinstance(n, dict)
+            ]
             raise RuntimeError(
                 f"D1 error: {err.get('text')} {'; '.join(notes)}".strip()
             )
@@ -168,9 +168,7 @@ class CloudflareHarness:
 
     async def _d1_batch(self, statements: list[str]) -> None:
         if self._db is not None:
-            await self._db.batch(
-                [self._db.prepare(sql) for sql in statements]
-            )
+            await self._db.batch([self._db.prepare(sql) for sql in statements])
         else:
             assert self._wr is not None
             self._wr.exec("; ".join(statements))
@@ -414,22 +412,31 @@ class CloudflareHarness:
                 # FK参照元から先に消く(journal→commands・ownership→intents/latches)
                 "DELETE FROM journal WHERE command_id IN (SELECT id FROM commands"
                 " WHERE target_id IN " + intents + " OR target_id IN " + u + ")",
-                "DELETE FROM commands WHERE target_id IN " + intents
-                + " OR target_id IN " + u,
+                "DELETE FROM commands WHERE target_id IN "
+                + intents
+                + " OR target_id IN "
+                + u,
                 f"DELETE FROM messages WHERE latch_id IN {latches}",
                 f"DELETE FROM latch_status_events WHERE latch_id IN {latches}",
                 f"DELETE FROM calibration_records WHERE latch_id IN {latches}",
                 f"DELETE FROM notifications WHERE user_id IN {u}",
-                "DELETE FROM reports WHERE reporter_id IN " + u
-                + " OR reportee_id IN " + u,
+                "DELETE FROM reports WHERE reporter_id IN "
+                + u
+                + " OR reportee_id IN "
+                + u,
                 f"DELETE FROM intent_match_ownership WHERE intent_id IN {intents}",
                 f"DELETE FROM latches WHERE id IN {latches}",
-                "DELETE FROM match_candidates WHERE intent_a_id IN " + intents
-                + " OR intent_b_id IN " + intents,
+                "DELETE FROM match_candidates WHERE intent_a_id IN "
+                + intents
+                + " OR intent_b_id IN "
+                + intents,
                 "DELETE FROM group_candidates WHERE EXISTS (SELECT 1 FROM json_each("
                 "group_candidates.intent_ids) je WHERE je.value IN " + intents + ")",
                 f"DELETE FROM match_events WHERE source_intent_id IN {intents}",
-                "DELETE FROM blocks WHERE blocker_id IN " + u + " OR blocked_id IN " + u,
+                "DELETE FROM blocks WHERE blocker_id IN "
+                + u
+                + " OR blocked_id IN "
+                + u,
                 f"DELETE FROM deletion_tombstones WHERE target_id IN {intents}"
                 f" OR target_id IN {u}",
                 "DELETE FROM refresh_tokens WHERE sid IN (SELECT sid FROM"

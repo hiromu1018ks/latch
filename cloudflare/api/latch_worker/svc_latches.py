@@ -31,11 +31,14 @@ _RESPONSE_ACCEPTING = ("proposed", "partial_accept")
 
 @dataclass(frozen=True)
 class MessageRow:
-    """messages行(messages応答の1件 — latches/store.MessageRow相当)。"""
+    """messages行(messages応答の1件 — latches/store.MessageRow相当)。
+
+    sender_idはシステム行(参加取り消しの告知行・05 §5 leave・D-08)のみNone。
+    """
 
     id: uuid_mod.UUID
     latch_id: uuid_mod.UUID
-    sender_id: uuid_mod.UUID
+    sender_id: uuid_mod.UUID | None
     body: str
     created_at: datetime
 
@@ -112,6 +115,7 @@ class _LatchRow:
     group_candidate_id: str | None
     created_at: datetime
     completed_at: datetime | None
+    left_user_ids: tuple[str, ...] = ()
 
 
 class D1LatchesService:
@@ -141,7 +145,7 @@ class D1LatchesService:
             await self._d1.prepare(
                 "SELECT id, status, intent_ids, responses, response_deadline,"
                 " expires_at, score, proposal, group_candidate_id, created_at,"
-                " completed_at FROM latches WHERE id = ?"
+                " completed_at, left_user_ids FROM latches WHERE id = ?"
             )
             .bind(str(latch_id))
             .first()
@@ -160,6 +164,7 @@ class D1LatchesService:
             group_candidate_id=row["group_candidate_id"],
             created_at=from_micros(row["created_at"]),
             completed_at=from_micros(row["completed_at"]) if row["completed_at"] else None,
+            left_user_ids=tuple(loads_json(row["left_user_ids"], [])),
         )
 
     async def _participant_intent_id(self, intent_ids_json: str, user_id) -> str | None:
@@ -182,6 +187,7 @@ class D1LatchesService:
         auth_subject: str,
         latch_id,
         response: str,
+        reasons: list[str] | None = None,
     ) -> LatchSummaryOut:
         from latch.latches.errors import (
             AlreadyAnsweredError,
@@ -205,6 +211,7 @@ class D1LatchesService:
                     "latch_id": str(latch_id),
                     "user_id": str(user_id),
                     "value": response,
+                    "reasons": reasons,
                 },
                 now,
             )
@@ -239,6 +246,132 @@ class D1LatchesService:
                 is_group=row.group_candidate_id is not None,
                 my_response=response,
                 remaining_responses=remaining,
+            )
+        except LatchesError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise DependencyUnavailableError(
+                "latches dependency unavailable"
+            ) from exc
+
+    # -- 回答取り消し(05 §5 undo・D-06) --
+
+    async def undo_response(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id,
+    ) -> LatchSummaryOut:
+        from latch.latches.errors import (
+            DependencyUnavailableError,
+            LatchClosedError,
+            LatchExpiredError,
+            LatchNotFoundError,
+            LatchesError,
+            UnansweredError,
+        )
+
+        try:
+            user_id = await self._fetch_user_id(auth_provider, auth_subject)
+            if user_id is None:
+                raise LatchNotFoundError("user not found")
+            now = self._clock.now()
+            result = await self._atomic.apply_response_undo(
+                str(uuid_mod.uuid4()),
+                None,
+                {"latch_id": str(latch_id), "user_id": str(user_id)},
+                now,
+            )
+            if result.status == CommandStatus.REJECTED:
+                mapping = {
+                    "NOT_FOUND": LatchNotFoundError,
+                    "UNANSWERED": UnansweredError,
+                    "LATCH_EXPIRED": LatchExpiredError,
+                    "LATCH_CLOSED": LatchClosedError,
+                }
+                exc_cls = mapping.get(result.error_code or "", LatchNotFoundError)
+                raise exc_cls(result.error_code or "undo rejected")  # type: ignore[call-arg]
+            if result.status == CommandStatus.CONFLICT:
+                raise LatchClosedError("latch closed")
+            row = await self._select_latch(latch_id)
+            if row is None:  # 通常起きない防御
+                raise DependencyUnavailableError("latch state unreadable")
+            total = len(row.intent_ids)
+            remaining = total - _yes_count(row.responses)
+            return LatchSummaryOut(
+                id=row.id,
+                status=row.status,
+                response_deadline=row.response_deadline,
+                expires_at=row.expires_at,
+                created_at=row.created_at,
+                completed_at=row.completed_at,
+                proposal=row.proposal,
+                is_group=row.group_candidate_id is not None,
+                my_response=None,
+                remaining_responses=remaining,
+            )
+        except LatchesError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise DependencyUnavailableError(
+                "latches dependency unavailable"
+            ) from exc
+
+    # -- 参加取り消し(05 §5 leave・D-08) --
+
+    async def leave(
+        self,
+        *,
+        auth_provider: str,
+        auth_subject: str,
+        latch_id,
+    ):
+        from latch.latches.errors import (
+            AlreadyLeftError,
+            DependencyUnavailableError,
+            LatchClosedError,
+            LatchNotFoundError,
+            LatchesError,
+        )
+        from latch.latches.schemas import LeaveLatchOut
+
+        try:
+            user_id = await self._fetch_user_id(auth_provider, auth_subject)
+            if user_id is None:
+                raise LatchNotFoundError("user not found")
+            display_name = (
+                await self._d1.prepare(
+                    "SELECT display_name FROM users WHERE id = ?"
+                )
+                .bind(str(user_id))
+                .first()
+            )
+            now = self._clock.now()
+            result = await self._atomic.apply_leave(
+                str(uuid_mod.uuid4()),
+                None,
+                {
+                    "latch_id": str(latch_id),
+                    "user_id": str(user_id),
+                    "display_name": (
+                        display_name["display_name"] if display_name else None
+                    ),
+                },
+                now,
+            )
+            if result.status == CommandStatus.REJECTED:
+                mapping = {
+                    "NOT_FOUND": LatchNotFoundError,
+                    "LATCH_CLOSED": LatchClosedError,
+                    "ALREADY_LEFT": AlreadyLeftError,
+                }
+                exc_cls = mapping.get(result.error_code or "", LatchNotFoundError)
+                raise exc_cls(result.error_code or "leave rejected")  # type: ignore[call-arg]
+            if result.status == CommandStatus.CONFLICT:
+                raise LatchClosedError("latch closed")
+            return LeaveLatchOut(
+                id=uuid_mod.UUID(str(latch_id)), status="matched", left=True
             )
         except LatchesError:
             raise
@@ -492,6 +625,9 @@ class D1LatchesService:
             now = self._clock.now()
             if row.status != "matched":
                 raise ChatReadonlyError("chat readonly")
+            if str(user_id) in row.left_user_ids:
+                # 参加取り消し済み(05 §5 leave・D-08)。残メンバーの会話は継続
+                raise ChatReadonlyError("chat readonly")
             # blocks双方向判定(自分以外の参加者)
             blocked = (
                 await self._d1.prepare(
@@ -596,7 +732,11 @@ class D1LatchesService:
                 MessageRow(
                     id=uuid_mod.UUID(str(r["id"])),
                     latch_id=uuid_mod.UUID(str(r["latch_id"])),
-                    sender_id=uuid_mod.UUID(str(r["sender_id"])),
+                    sender_id=(
+                        uuid_mod.UUID(str(r["sender_id"]))
+                        if r["sender_id"]
+                        else None
+                    ),
                     body=r["body"],
                     created_at=from_micros(r["created_at"]),
                 )

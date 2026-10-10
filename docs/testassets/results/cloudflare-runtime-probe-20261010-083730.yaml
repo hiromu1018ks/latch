@@ -1,0 +1,110 @@
+adopted_path: A
+adoption: 'blocked by: [''google.genai'', ''yaml'']'
+blockers:
+- google.genai
+- yaml
+notes:
+- cryptography/pyjwt/anthropic/google-genai/typesafe-sdk は pywrangler(pyodide 3.14.2)でimport可能
+  — 2026-10-06調査書の「cryptography wheel不在」は新toolchainで解消済み
+- RS256検証は従来経路(pyjwt+cryptography)がそのまま動く。純Python fallback(検証のみ)も実証済み
+- JWKS取得は asyncio.to_thread 不可のため async fetch へ交換(self-fetch mockで実証)
+- D1 batch()は準備済みSQL群の原子的実行・0行UPDATEはSQLエラーなし
+- Queuesは producer/consumer 同一workerで送受+ack実証(payloadはJSON文字列で送る規律をT5で確定)
+- scheduled handlerは /cdn-cgi/local/scheduled で起動実証
+- 本実測はローカル(pywrangler dev)。実配備での性能・制限は別承認後
+probes:
+  concurrent_state_isolation:
+    isolated: true
+    parallel_requests: 20
+  cpu_reference:
+    duration_ms: 92.0
+    iterations: 1000000
+    total: 333332833333500000
+  d1:
+    batch_row:
+      n: 42
+      value: hello
+    meta_changes: 0
+    select_first:
+      v: 2
+    zero_row_update_ok: true
+  datetime:
+    add_day_over_month_end: '2026-11-01T01:00:00+09:00'
+    fixed_jst: '2026-10-09T00:30:00+09:00'
+    jst_offset: 32400.0
+    jst_weekday: 4
+    parse_roundtrip: '2026-10-08T10:00:00+00:00'
+  decimal:
+    negative_zero: '-0.0'
+    quantize: '1.00'
+    sum: '0.3'
+    sum_eq_float: true
+  env:
+    db_binding: true
+    jobs_binding: true
+    latch_env: api
+    probe_text_var: probe-value
+    secret_probe_present: false
+  import_checks:
+    anthropic: ok
+    asyncio: ok
+    cryptography: ok
+    decimal: ok
+    google.genai: fail:ModuleNotFoundError
+    hashlib: ok
+    hmac: ok
+    jwt: ok
+    sqlite3: ok
+    typesafe_sdk: ok
+    uuid: ok
+    yaml: fail:ModuleNotFoundError
+  jwks_async_fetch:
+    content_type: application/json
+    status: 200
+    thread_free: true
+  jwt_hs256_pure_python:
+    expired_rejected: true
+    tampered_rejected: true
+    verified_sub: probe-user
+  jwt_rs256_pure_python:
+    tampered_rejected: true
+    verified_sub: probe-rs-user
+  jwt_rs256_pyjwt_cryptography:
+    error: null
+    ok: true
+    verified_sub: probe-rs-user
+  memory_32mb:
+    allocated_mb: 32
+    ok: true
+  queue_consumer:
+    delivered: true
+    messages:
+    - id: b255e20f29a1f1076e5fcc44f2ed86e7
+      payload:
+        event_id: probe-1
+        payload_schema_version: 1
+        reason: t1_probe
+      seen_at: 1791621265.549
+    - id: 6770cfb1ddc36b3f07c075433494c450
+      payload:
+        event_id: probe-1
+        payload_schema_version: 1
+        reason: t1_probe
+      seen_at: 1791621270.106
+    - id: 349a3aa99a7c60c7d31de6d35605927d
+      payload:
+        event_id: probe-1
+        payload_schema_version: 1
+        reason: t1_probe
+      seen_at: 1791621450.4899998
+  scheduled:
+    outcome: ok
+    runs_recorded: 2
+  schema_validation:
+    tz_naive_rejected: true
+    validated: true
+runtime:
+  fastapi: 0.143.0
+  implementation: cpython
+  pydantic: 2.14.0
+  python: 3.14.2

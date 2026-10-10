@@ -28,19 +28,18 @@ def _at_jst(day: date, hour: int, minute: int) -> datetime:
 
 
 def expires_at_candidates(now: datetime) -> list[datetime]:
-    """有効期限4選択肢(03 §3 FR-13)。UIの選択肢順で返す。
+    """有効期限3選択肢(03 §3・UI v2 D-01で4値から3値へ変更)。UIの選択肢順で返す。
 
-    今夜23:30=当日JST 23:30 / 明日12:00・明日23:30=翌日JST / 3日後まで=now+72h。
+    今日22:00・今日23:59=当日JST / 明日5:00=翌日JST(プロトタイプv2固定3択)。
     now は tz-aware(Clock.now() と同じ UTC 契約)。過ぎた候補の除外は
     nearest_expires_at 側で行う(一覧表示にも候補全値が要るため)。
     """
     jst_today = now.astimezone(JST).date()
     tomorrow = jst_today + timedelta(days=1)
     return [
-        _at_jst(jst_today, 23, 30),
-        _at_jst(tomorrow, 12, 0),
-        _at_jst(tomorrow, 23, 30),
-        now + timedelta(hours=72),
+        _at_jst(jst_today, 22, 0),
+        _at_jst(jst_today, 23, 59),
+        _at_jst(tomorrow, 5, 0),
     ]
 
 

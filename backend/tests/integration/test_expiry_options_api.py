@@ -51,15 +51,14 @@ async def test_2_options_shape_without_time_start(api_client):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert [o["label"] for o in body["options"]] == [
-        "今夜 23:30",
-        "明日 12:00",
-        "明日 23:30",
-        "3日後まで",
+        "今日 22:00",
+        "今日 23:59",
+        "明日 5:00",
     ]
     assert body["default_index"] is None
     for option in body["options"]:
         assert set(option) == {"label", "expires_at", "selectable"}
-    # 選択肢が全滅しない(3日後=now+72hは常に未来)
+    # 選択肢が全滅しない(明日5:00はJST暦日付の翌日扱いで常に未来側)
     assert any(o["selectable"] for o in body["options"])
 
 
@@ -74,7 +73,7 @@ async def test_3_default_index_is_nearest_to_start_plus_3h(api_client):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     idx = body["default_index"]
-    assert isinstance(idx, int) and 0 <= idx < 4
+    assert isinstance(idx, int) and 0 <= idx < 3
     assert body["options"][idx]["selectable"] is True
     target = datetime.fromisoformat(time_start) + timedelta(hours=3)
     distances = [

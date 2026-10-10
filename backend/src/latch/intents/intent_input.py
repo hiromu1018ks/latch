@@ -50,8 +50,14 @@ class BudgetInput(_IgnoreExtraModel):
 
 
 class ParticipantsInput(_IgnoreExtraModel):
-    min: int | None = Field(default=None, ge=1, le=4)
-    max: int | None = Field(default=None, ge=1, le=4)
+    """人数(提案者自身を含む・05 §2)。上限5=D-04の「含まない」+1換算
+
+    (あなた+2〜4人=合計3〜5人を送信するため。LATCHサイズ上限4は
+    latches.intent_ids側のCHECKが担い、ここでは希望人数の保存を受け付ける)。
+    """
+
+    min: int | None = Field(default=None, ge=1, le=5)
+    max: int | None = Field(default=None, ge=1, le=5)
 
 
 class StructuredIntentInput(_IgnoreExtraModel):
@@ -63,6 +69,7 @@ class StructuredIntentInput(_IgnoreExtraModel):
     location: LocationInput | None = None
     budget: BudgetInput | None = None
     participants: ParticipantsInput | None = None
+    participants_includes_owner: bool | None = None  # 「あなたを含むか」(05 §2・D-04)
     visibility: Literal["hidden_until_match", "summary_only"] | None = None
     notification_level: Literal["proposals_only", "nearby_also", "muted"] | None = None
     expires_at: datetime | None = None

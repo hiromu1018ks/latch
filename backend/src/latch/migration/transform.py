@@ -238,7 +238,8 @@ _JSON_COLUMNS = {
     "match_events": ("payload",),
 }
 _ARRAY_COLUMNS = {
-    "latches": ("intent_ids",),
+    # left_user_idsはD-08(v0.6)追加のuuid[](D1ではJSON配列TEXT)
+    "latches": ("intent_ids", "left_user_ids"),
     "group_candidates": ("intent_ids",),
     "calibration_records": ("intent_ids",),
 }

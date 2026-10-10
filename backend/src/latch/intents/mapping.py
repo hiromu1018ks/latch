@@ -2,7 +2,7 @@
 
 alcohol確定(07規則7)・補完規則の消費(completion.py)・draft正規化を
 1箇所に集約する。検証(必須3・時刻・年齢)はserviceが先行する前提の純変換。
-structured_dataは05 §2の5キー+location_name(design §6-1)。
+structured_dataは05 §2のキー+location_name(design §6-1)。
 """
 
 from __future__ import annotations
@@ -61,11 +61,21 @@ def _soft_constraints(inp: StructuredIntentInput) -> list[dict]:
 
 
 def _structured_data(inp: StructuredIntentInput) -> dict:
-    """05 §2の5キー+location_name(design §6-1)。negative_constraintsは常に空配列。"""
+    """05 §2のキー+location_name(design §6-1)。negative_constraintsは常に空配列。
+
+    participants_includes_ownerは既定true(05 §2・D-04。「含まない」の場合は
+    クライアントがparticipants実効値を+1して送るため、マッチング判定は
+    participants列の送信値が正)。
+    """
     secondary = inp.category.secondary if inp.category else None
     location_name = inp.location.name if inp.location else None
     return {
         "category_secondary": secondary,
+        "participants_includes_owner": (
+            inp.participants_includes_owner
+            if inp.participants_includes_owner is not None
+            else True
+        ),
         "soft_constraints": _soft_constraints(inp),
         "negative_constraints": [],  # FR-42(常に空配列が正常系)
         "time_flexibility_minutes": None,  # MVP固定扱い(03 D-19)
@@ -204,6 +214,7 @@ def to_response_structured(row: IntentRow) -> dict:
         },
         "budget": {"max": row.budget_max, "currency": "JPY"},
         "participants": {"min": row.participants_min, "max": row.participants_max},
+        "participants_includes_owner": sd.get("participants_includes_owner", True),
         "visibility": row.visibility,
         "notification_level": row.notification_level,
         "expires_at": row.expires_at,

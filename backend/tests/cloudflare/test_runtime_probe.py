@@ -206,8 +206,12 @@ async def test_runtime_probe_and_report(cf_worker_url, tmp_path):
         assert rs2["ok"] is True
 
         # -- JWKS async fetch(thread非依存・self-fetch mock) --
+        # probe側は本文取得を意図的に行わない(ストリーミング応答境界の回避・
+        # probes.pyのdocstring)。status/header/thread_freeのみを検証する
         jwks = await _get(client, "/probe/jwks_fetch")
-        assert jwks["status"] == 200 and "probe-rsa-1" in jwks["kids"]
+        assert jwks["status"] == 200
+        assert jwks["content_type"] == "application/json"
+        assert jwks["thread_free"] is True
         report["probes"]["jwks_async_fetch"] = jwks
 
         # -- D1: prepare/first/batch/0行UPDATE --
@@ -220,7 +224,8 @@ async def test_runtime_probe_and_report(cf_worker_url, tmp_path):
         # -- env / bindings / queue producer+consumer --
         env = await _get(client, "/probe/env")
         assert env["db_binding"] and env["jobs_binding"]
-        assert env["latch_env"] == "local-probe"
+        # LATCH_ENVはwrangler.jsoncのvars値(devもdeployも同一構成から読む)
+        assert env["latch_env"] == "api"
         report["probes"]["env"] = env
 
         await _get(client, "/probe/queue")

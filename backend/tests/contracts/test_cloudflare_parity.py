@@ -51,9 +51,10 @@ def local_stack():
         yield None
         return
     sys.path.insert(0, _WORKER_DIR)
-    from latch.adapters.d1.database import LocalD1Database
     from latch_worker.app import create_workers_app
     from latch_worker.state import build_state
+
+    from latch.adapters.d1.database import LocalD1Database
 
     db = LocalD1Database()
     db.migrate()

@@ -16,3 +16,16 @@ def compute_new_status(response: str, responses: list[dict], total: int) -> str:
         return "rejected"
     yes = sum(1 for r in responses if r.get("response") == RESPONSE_YES)
     return "matched" if yes == total else "partial_accept"
+
+
+def status_after_undo(responses: list[dict]) -> str | None:
+    """回答取り消し後のlatch状態(05 §5 undo・D-06)。
+
+    残ったresponsesから状態を再計算する: yesが残る=partial_accept・
+    無し=proposed。他者のno/deferが残る場合は取り消してもrejectedの
+    まま戻れないためNone(呼び出し側は409 LATCH_CLOSED)。
+    """
+    if any(r.get("response") != RESPONSE_YES for r in responses):
+        return None
+    yes = sum(1 for r in responses if r.get("response") == RESPONSE_YES)
+    return "partial_accept" if yes else "proposed"
