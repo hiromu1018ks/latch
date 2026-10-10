@@ -141,6 +141,17 @@ export const depositedAgoText = (createdIso, nowIso) => {
   return `${Math.floor(hours / 24)}日前に預けた`;
 };
 
+// 03下書き行の「12分前に保存」(D-13・預けたではないため別書式)
+export const draftAgoText = (createdIso, nowIso) => {
+  const ms = new Date(nowIso).getTime() - new Date(createdIso).getTime();
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return "たった今保存";
+  if (minutes < 60) return `${minutes}分前に保存`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}時間前に保存`;
+  return `${Math.floor(hours / 24)}日前に保存`;
+};
+
 // ---------------------------------------------------------------------------
 // 02の行編集(テキスト1行input・プロトタイプ02) — 表示文言を構造値へ書き戻す
 // 純関数。書式はformatTime等の出力を往復できる範囲で受理し、値がなければ
@@ -249,8 +260,10 @@ export const buildCreateRequest = (state, opts) => ({
 });
 
 // PATCH /v1/intents/{id}(03の「条件を直す」)。status未指定=現状維持(05 §5)・
-// raw_text+structured_intentの全置換
+// raw_text+structured_intentの全置換。opts.status="active"は下書きのactive化
+// (D-13・draft→active遷移は同一PATCHで行う・05 §5の遷移表)
 export const buildPatchRequest = (state, opts) => ({
   raw_text: state.rawText.trim(),
+  ...(opts.status ? { status: opts.status } : {}),
   structured_intent: buildStructuredIntent(state, opts),
 });

@@ -34,6 +34,7 @@ export const initConfirmScreen = ({ client, chrome, state }) => {
   let extrasPicked = [];
   let busy = false;
   let editingIntentId = null; // 03「条件を直す」のPATCH先(null=新規保存)
+  let editingStatus = null; // 編集対象の現在status(下書きならCTA保存でactive化・D-13)
 
   // --- あなたの言葉(原文ハイライト・D-03) ------------------------------------
   const renderWords = () => {
@@ -154,6 +155,8 @@ export const initConfirmScreen = ({ client, chrome, state }) => {
     client,
     getState: () => state,
     getIntentId: () => editingIntentId,
+    getIntentStatus: () =>
+      editingIntentId != null && editingStatus === "draft" ? "active" : null,
     getOptions: () => ({
       visibility: DEFAULT_VISIBILITY, // D-02: 既定値で確定送信
       notificationLevel: DEFAULT_NOTIFICATION_LEVEL,
@@ -191,6 +194,7 @@ export const initConfirmScreen = ({ client, chrome, state }) => {
       return;
     }
     editingIntentId = null;
+    editingStatus = null;
     errorEl.hidden = true;
     renderWords();
     rerenderRows();
@@ -200,12 +204,14 @@ export const initConfirmScreen = ({ client, chrome, state }) => {
 
   const enterEdit = async (intentId) => {
     editingIntentId = intentId;
+    editingStatus = null;
     errorEl.hidden = true;
     let currentExpiry = null;
     try {
       const data = await client.call("GET", `/v1/intents/${intentId}`);
       Object.assign(state, applyIntentSnapshot(state, data.intent));
       currentExpiry = data.intent?.expires_at ?? null;
+      editingStatus = data.intent?.status ?? null; // 下書き編集はCTAでactive化(D-13)
     } catch {
       // 消済み・他者Intentは待機中へ戻す(状態の文言を出さない)
       location.hash = "#/standby";

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createStandby,
+  draftRowHtml,
   mainCardHtml,
   othersRowHtml,
   orbHtml,
@@ -53,6 +54,10 @@ const mountStandby = (callImpl) => {
       <article class="sb-main" data-sb-main hidden></article>
       <div class="sb-orb" data-sb-orb hidden></div>
       <ul class="sb-others" data-sb-others></ul>
+      <section class="sb-others-sec" data-sb-drafts-section hidden>
+        <h2>下書き</h2>
+        <ul class="sb-others" data-sb-drafts></ul>
+      </section>
     </div>`;
   const root = document.getElementById("standbyScreen");
   const client = { call: vi.fn(callImpl) };
@@ -134,6 +139,28 @@ describe("orbHtml(オーブ・条件チップ浮遊)", () => {
     expect(html).toContain(">天文館<");
     expect(html).toContain(">2〜4人<");
     expect(html).toContain(">〜¥5,000<");
+  });
+});
+
+describe("draftRowHtml(下書き行・D-13)", () => {
+  it("原文・meta(種別 · 相対時間)・下書きpill・直して預ける・取り下げる", () => {
+    const html = draftRowHtml(
+      intent({
+        status: "draft",
+        expires_at: null,
+        raw_text: "この車が190万円以上なら売ってもいい",
+      }),
+      NOW,
+      { first: false },
+    );
+    expect(html).toContain("「この車が190万円以上なら売ってもいい」");
+    expect(html).toContain("飲み · 12分前に保存");
+    expect(html).not.toContain("まで有効"); // 下書きに期限行は出さない
+    expect(html).toContain(">下書き<");
+    expect(html).toContain(`href="#/confirm?intent=${INTENT_ID}"`);
+    expect(html).toContain("直して預ける");
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain("data-border");
   });
 });
 
@@ -273,6 +300,63 @@ describe("createStandby(03の配線)", () => {
     // 再訪しても同じlatchで2回は出さない(セッション内1回)
     await standby.show();
     expect(chrome.showToast).toHaveBeenCalledTimes(1);
+    standby.stop();
+  });
+
+  it("下書き(D-13): GET status=draftの1件を行に描き・0件はセクションごと隠す", async () => {
+    const draft = intent({
+      status: "draft",
+      expires_at: null,
+      raw_text: "この車が190万円以上なら売ってもいい",
+    });
+    const { root, standby } = mountStandby(async (method, path) => {
+      if (path === "/v1/intents?status=active") return { items: [intent()], next_cursor: null };
+      if (path === "/v1/intents?status=draft") return { items: [draft], next_cursor: null };
+      return { items: [], next_cursor: null };
+    });
+    await standby.show();
+    const section = root.querySelector("[data-sb-drafts-section]");
+    expect(section.hidden).toBe(false);
+    expect(root.querySelectorAll("[data-sb-drafts] .sb-row").length).toBe(1);
+    expect(root.querySelector("[data-sb-drafts]").textContent).toContain("直して預ける");
+    expect(root.querySelector("[data-sb-drafts] .sb-pill").textContent).toBe("下書き");
+    standby.stop();
+
+    // 0件はセクションごと隠す(空状態の規定なし)
+    const empty = mountStandby(async (method, path) => {
+      if (path === "/v1/intents?status=active") return { items: [intent()], next_cursor: null };
+      if (path === "/v1/intents?status=draft") return { items: [], next_cursor: null };
+      return { items: [], next_cursor: null };
+    });
+    await empty.standby.show();
+    expect(empty.root.querySelector("[data-sb-drafts-section]").hidden).toBe(true);
+    empty.standby.stop();
+  });
+
+  it("下書きの取り下げ: DELETEで行が消え・active一覧は影響されない", async () => {
+    const draftId = "dddddddd-4444-4444-8444-444444444444";
+    const draft = intent({
+      id: draftId,
+      status: "draft",
+      expires_at: null,
+      raw_text: "この車が190万円以上なら売ってもいい",
+    });
+    let dialogActions = [];
+    const { root, standby, chrome } = mountStandby(async (method, path) => {
+      if (method === "DELETE") return null;
+      if (path === "/v1/intents?status=active") return { items: [intent()], next_cursor: null };
+      if (path === "/v1/intents?status=draft") return { items: [draft], next_cursor: null };
+      return { items: [], next_cursor: null };
+    });
+    chrome.openAppDialog.mockImplementation(({ actions }) => {
+      dialogActions = actions;
+    });
+    await standby.show();
+    root.querySelector(`[data-sb-drop="${draftId}"]`).click();
+    await dialogActions[1].onClick();
+    expect(root.querySelector("[data-sb-drafts-section]").hidden).toBe(true);
+    // メインカードは取り下げ済みにならない(下書きはgoneMainに入らない)
+    expect(root.querySelector("[data-sb-main]").textContent).not.toContain("取り下げ済み");
     standby.stop();
   });
 });

@@ -40,6 +40,7 @@ export const createSaveFlow = ({
   getState,
   getOptions,
   getIntentId = () => null, // 03「条件を直す」の02編集モード(PATCH先)
+  getIntentStatus = () => null, // 編集モードの下書きactive化(D-13: draft→"active")
   onBusy,
   onActiveSaved,
   onDraftSaved,
@@ -61,9 +62,14 @@ export const createSaveFlow = ({
     onBusy?.(true);
     try {
       if (intentId != null) {
-        // PATCH /v1/intents/{id}(全置換・status省略=現状維持・05 §5)
+        // PATCH /v1/intents/{id}(全置換・status省略=現状維持・05 §5)。
+        // 編集対象が下書きのときはstatus=activeを添えて預ける(D-13。
+        // 検証不通は422でサーバがdraftのまま据え置く)
         await client.call("PATCH", `/v1/intents/${intentId}`, {
-          body: buildPatchRequest(state, { status: null, ...getOptions() }),
+          body: buildPatchRequest(state, {
+            status: getIntentStatus(),
+            ...getOptions(),
+          }),
         });
       } else {
         const body = buildCreateRequest(state, { status, ...getOptions() });

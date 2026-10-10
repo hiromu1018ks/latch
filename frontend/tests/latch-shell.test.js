@@ -107,3 +107,36 @@ describe("画面構成(UI v2 Phase 2・01ホーム+02読み解き確認)", () =>
     }
   });
 });
+
+describe("a11y総点検(UI v2 Phase 5)", () => {
+  it("skip linkと視覚隠し・reduced-motion・focus-visibleの規定がstyles.cssにある", () => {
+    expect(css()).toContain('.skip:focus{top:12px}');
+    expect(css()).toContain(".vh{");
+    expect(css()).toContain("prefers-reduced-motion");
+    expect(css()).toContain(":focus-visible{outline:2px solid var(--acc);outline-offset:3px}");
+    expect(html()).toContain('<a class="skip" href="#main">本文へスキップ</a>');
+  });
+
+  it("popoverボタンはaria-expanded+aria-controls+aria-haspopupを持つ", () => {
+    expect(html()).toContain('id="noticeButton" aria-label="お知らせ" aria-haspopup="true" aria-expanded="false" aria-controls="noticePopover"');
+    expect(html()).toContain('id="accountButton" aria-label="アカウント" aria-haspopup="true" aria-expanded="false" aria-controls="accountPopover"');
+    // dialogを開くボタンはaria-haspopup="dialog"(解除・取り下げ・通報/取り消し)
+    expect(html()).toContain('id="unblockDialog" aria-labelledby="unblockTitle"');
+    expect(mainJs()).toContain('from "./latch/standby.js"'); // 取り下げボタンは動的描画
+    const standbyJs = readFileSync(resolve(process.cwd(), "src/latch/standby.js"), "utf8");
+    expect(standbyJs).toContain('aria-haspopup="dialog"');
+    const detailJs = readFileSync(resolve(process.cwd(), "src/latch/detail.js"), "utf8");
+    expect(detailJs).toContain('aria-haspopup="dialog"');
+  });
+
+  it("chrome.jsはEscでpopoverを閉じてボタンへフォーカスを戻す", () => {
+    expect(chromeJs()).toContain('event.key !== "Escape"');
+    expect(chromeJs()).toContain("button.focus()");
+  });
+
+  it("role=timer(03)・role=log(チャット)・aria-live(toast・読み取り)・role=status(お知らせ)がある", () => {
+    expect(html()).toMatch(/role="status" aria-live="polite"/); // toast・noticePopover
+    // 03・チャットのroleはstandby.js/chat.jsの試験で担保(動的に組むため)
+    expect(css()).toContain(".toast-pos");
+  });
+});

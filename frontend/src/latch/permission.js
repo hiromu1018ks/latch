@@ -11,6 +11,7 @@ import {
   PERMISSION_UNSUPPORTED_TEXT,
 } from "./texts.js";
 import { escapeHtml } from "./view.js";
+import { iconHtml } from "../ui/icons.js";
 
 export const permissionText = (permission) =>
   permission === "granted"
@@ -25,15 +26,19 @@ export const createPermissionControl = ({ notificationApi, mount }) => {
   let permission = notificationApi?.permission; // 初期スナップショット
 
   const render = () => {
-    // granted・denied・API不在は操作なし(再要求が効くのはdefaultのみ)
+    // granted・denied・API不在は操作なし(再要求が効くのはdefaultのみ)。
+    // v2部品(02のprivacy-icアイコン枠+ghost pill)で構成(UI v2 Phase 5)
     const buttonHtml =
       permission === "default"
-        ? `<button type="button" class="permission-request" data-role="permission-request">${PERMISSION_REQUEST_LABEL}</button>`
+        ? `<button type="button" class="ghost permission-request" data-role="permission-request">${PERMISSION_REQUEST_LABEL}</button>`
         : "";
     mount.innerHTML = `
-      <p class="permission-status" data-role="permission-status">${escapeHtml(
-        permissionText(permission),
-      )}</p>
+      <div class="permission-row">
+        <span class="privacy-ic" aria-hidden="true">${iconHtml("bell", 19)}</span>
+        <p class="permission-status" data-role="permission-status">${escapeHtml(
+          permissionText(permission),
+        )}</p>
+      </div>
       ${buttonHtml}
       <p class="permission-note">${escapeHtml(PERMISSION_NOTE_TEXT)}</p>
     `;

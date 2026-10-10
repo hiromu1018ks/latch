@@ -39,16 +39,19 @@ export const createConsent = ({ client, chrome, el }) => {
 
   const renderInto = (mount, { interactive }) => {
     const agreed = state.consented_at != null;
+    // v2部品(card+cta)で構成(UI v2 Phase 5)。文言は2026-10-03承認済みのまま
     mount.innerHTML = `
-      <p class="consent-title">${escapeHtml(CONSENT_TITLE)}</p>
-      ${buildBody()}
-      <p class="consent-state" data-role="consent-state">${escapeHtml(stateLine(state.consented_at))}</p>
-      ${
-        agreed || !interactive
-          ? ""
-          : `<label class="consent-check"><input type="checkbox" data-role="consent-check" /> ${escapeHtml(CONSENT_CHECK_LABEL)}</label>
-             <button type="button" class="submit-button" data-role="consent-agree" disabled>${escapeHtml(CONSENT_AGREE_LABEL)}</button>`
-      }`;
+      <section class="card consent-card">
+        <p class="consent-title">${escapeHtml(CONSENT_TITLE)}</p>
+        ${buildBody()}
+        <p class="consent-state"${agreed ? ' data-agreed="true"' : ""} data-role="consent-state">${escapeHtml(stateLine(state.consented_at))}</p>
+        ${
+          agreed || !interactive
+            ? ""
+            : `<label class="consent-check"><input type="checkbox" data-role="consent-check" /> ${escapeHtml(CONSENT_CHECK_LABEL)}</label>
+               <button type="button" class="cta consent-agree" data-role="consent-agree" disabled>${escapeHtml(CONSENT_AGREE_LABEL)}</button>`
+        }
+      </section>`;
     if (agreed || !interactive) return;
     const check = mount.querySelector("[data-role=consent-check]");
     const button = mount.querySelector("[data-role=consent-agree]");

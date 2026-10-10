@@ -149,6 +149,8 @@ export const initChrome = ({ popovers = [], toast, appDialog }) => {
   });
 
   // --- popover(お知らせ・アカウント) -----------------------------------------
+  // Escで閉じてボタンへフォーカスを戻す(a11y・UI v2 Phase 5)。外側クリックは
+  // ボタンへのフォーカス返しをしない(次のクリック先が自然に焦点を持つため)
   const closePopovers = (except = null) => {
     for (const { button, panel } of popovers) {
       if (panel !== except) {
@@ -168,6 +170,16 @@ export const initChrome = ({ popovers = [], toast, appDialog }) => {
     panel.addEventListener("click", (event) => event.stopPropagation());
   }
   document.addEventListener("click", () => closePopovers());
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    for (const { button, panel } of popovers) {
+      if (!panel.hidden) {
+        closePopovers();
+        button.focus();
+        return;
+      }
+    }
+  });
 
   return {
     showToast,

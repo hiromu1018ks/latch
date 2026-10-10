@@ -53,6 +53,19 @@ afterEach(() => {
 });
 
 describe("オンボーディング画面(design §2.4)", () => {
+  it("v2部品: card+ctaで構成する(UI v2 Phase 5・文言は承認済み定数のまま)", async () => {
+    const { consent, onboarding } = await mountConsent({ consented_at: null });
+    await consent.show();
+    expect(onboarding.querySelector(".card.consent-card")).not.toBeNull();
+    const button = onboarding.querySelector("[data-role=consent-agree]");
+    expect(button.className).toContain("cta"); // 同意する=v2のcta(58px系pill)
+    // チェックを入れるとctaが有効化される(acc色はCSS側・disabledはロジック側)
+    const check = onboarding.querySelector("[data-role=consent-check]");
+    check.checked = true;
+    check.dispatchEvent(new Event("change"));
+    expect(button.disabled).toBe(false);
+  });
+
   it("文言表示: 承認済み文言の全定数が載る", async () => {
     const { consent, onboarding } = await mountConsent();
     await consent.show();
@@ -126,6 +139,13 @@ describe("設定画面第3セクション(design §2.4・D-14「設定画面か�
     expect(settings.textContent).toContain(CONSENT_TITLE);
     expect(settings.textContent).toContain("同意済み");
     expect(settings.querySelector("button")).toBeNull();
+  });
+
+  it("v2部品: card構成+状態線にdata-agreed(UI v2 Phase 5)", async () => {
+    const { consent, settings } = await mountConsent({ consented_at: NOW_ISO });
+    await consent.load();
+    expect(settings.querySelector(".card.consent-card")).not.toBeNull();
+    expect(settings.querySelector("[data-role=consent-state]").dataset.agreed).toBe("true");
   });
 });
 

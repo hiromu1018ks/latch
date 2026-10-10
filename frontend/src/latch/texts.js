@@ -184,6 +184,20 @@ export const CHAT_LEFT_PLACEHOLDER_TEXT = "取り消したため、書き込め�
 export const CHAT_SEND_ERROR_TEXT = "送信できませんでした。";
 export const CHAT_EMPTY_ERROR_TEXT = "メッセージを入力してください。";
 
+// --- UI v2 Phase 5追記: 横断機能(D-13・D-14・D-11・v2部品の独自構成分) -------
+
+// 下書き(03の「ほかに待機中の意思」の下の行・D-13の最小導線)。
+// 取り下げる=WITHDRAW_BUTTON_LABEL・直す系の文言は下書きはactive化を伴うため別語
+export const DRAFT_SECTION_TITLE = "下書き";
+export const DRAFT_PILL_TEXT = "下書き";
+export const DRAFT_EDIT_LABEL = "直して預ける";
+
+// D-11簡易一覧(候補・成立タブ・phase0-decisions D-11)。見出しは通知文言の
+// 承認済み語彙(PROPOSAL_NOTICE_TITLE・MATCHED_NOTICE_TITLE)を流用し、
+// バッジと空状態は既存定数(NO_LATCH_*・NO_MATCHED_*)を使う
+export const LIST_PROPOSALS_BADGE = "LATCH候補";
+export const LIST_MATCHED_BADGE = "成立";
+
 // --- M3 ws-8追記: お知らせ・設定(design §2.8) -----------------------------
 
 // お知らせpopover(03 §2・§4の様式・design §2.3)

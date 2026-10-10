@@ -404,6 +404,7 @@ export const createDetail = ({ client, appState, chrome, root, safety }) => {
     const meInitial = Array.from(me?.display_name ?? "?")[0] ?? "?";
 
     root.className = "page-main page-main--proposal";
+    chrome.setCurrentNav?.("proposals"); // nav強調を実態(候補)に合わせる
     const section = document.createElement("section");
     section.className = "pv-detail";
     section.setAttribute("aria-labelledby", "h-proposal");
@@ -681,6 +682,7 @@ export const createDetail = ({ client, appState, chrome, root, safety }) => {
     const me = await appState.ensureMe().catch(() => null);
     const meId = me?.id ?? null;
     root.className = "page-main page-main--latched";
+    chrome.setCurrentNav?.("matched"); // nav強調を実態(成立)に合わせる
     const section = document.createElement("section");
     section.className = "lt-detail";
     section.setAttribute("aria-labelledby", "h-latched");
@@ -740,6 +742,7 @@ export const createDetail = ({ client, appState, chrome, root, safety }) => {
   // -- 不成立(自分の見送り=declined状態カード・それ以外は統一文言) --------------
   const renderClosed = (latch) => {
     stopTimers();
+    chrome.setCurrentNav?.("proposals"); // 不成立は候補の流れの終着
     root.className = "detail-view";
     const section = document.createElement("section");
     if (latch.my_response === "defer") {
@@ -752,10 +755,14 @@ export const createDetail = ({ client, appState, chrome, root, safety }) => {
       return;
     }
     section.className = "latch-detail latch-closed";
-    // 二値化はview.jsの純関数に一元化(自分の操作履歴/統一文言・03 §7)
+    // 二値化はview.jsの純関数に一元化(自分の操作履歴/統一文言・03 §7)。
+    // 終了は一文表示+ホーム導線のv2カード(UI v2 Phase 5・gap分析§5-6)
     section.innerHTML = `
-      <p class="section-kicker"><span></span>LATCH</p>
-      <p class="closed-text">${escapeHtml(closedText(latch))}</p>
+      <div class="closed-card">
+        <p class="section-kicker"><span></span>LATCH</p>
+        <p class="closed-text">${escapeHtml(closedText(latch))}</p>
+        <a class="ghost sb-again closed-home" href="#/">${HOME_LINK_TEXT}</a>
+      </div>
     `;
     root.replaceChildren(section);
   };
@@ -765,8 +772,12 @@ export const createDetail = ({ client, appState, chrome, root, safety }) => {
     root.className = "detail-view";
     const section = document.createElement("section");
     section.className = "latch-detail latch-notfound";
-    section.innerHTML = `<p class="notfound-text">${LATCH_NOT_FOUND_TEXT}</p>
-      <a class="home-link" href="#/">${HOME_LINK_TEXT}</a>`;
+    section.innerHTML = `
+      <div class="closed-card">
+        <p class="section-kicker"><span></span>LATCH</p>
+        <p class="closed-text">${LATCH_NOT_FOUND_TEXT}</p>
+        <a class="ghost sb-again closed-home" href="#/">${HOME_LINK_TEXT}</a>
+      </div>`;
     root.replaceChildren(section);
   };
 

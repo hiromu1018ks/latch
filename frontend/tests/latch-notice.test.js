@@ -172,6 +172,26 @@ describe("createNotice(design §2.1〜§2.2)", () => {
     expect(el.list.querySelectorAll(".notice-item").length).toBe(1);
   });
 
+  it("未読行はaccの点+「未読」の視覚隠し補読を持つ(UI v2 Phase 5)", async () => {
+    const { el, notice } = mountNotice(async () => ({
+      items: [
+        item("proposal", notificationLatch("proposed")), // 未読
+        item("proposal", notificationLatch("proposed"), {
+          id: "n2",
+          read_at: "2026-10-01T08:00:00+09:00", // 既読
+        }),
+      ],
+      next_cursor: null,
+    }));
+    await notice.preload();
+    const unread = el.list.querySelector(".notice-item.unread");
+    expect(unread.querySelector(".notice-dot")).not.toBeNull();
+    expect(unread.querySelector(".vh").textContent).toBe("未読");
+    const read = el.list.querySelectorAll(".notice-item")[1];
+    expect(read.querySelector(".notice-dot")).toBeNull();
+    expect(read.classList.contains("unread")).toBe(false);
+  });
+
   it("全件既読・0件ならドットは非表示のまま", async () => {
     const { el, notice } = mountNotice(async () => ({
       items: [

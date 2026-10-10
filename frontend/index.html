@@ -19,24 +19,24 @@
       <nav class="topnav" aria-label="メインメニュー">
         <a class="navlink" data-nav="deposit" href="#/" aria-current="page">預ける</a>
         <a class="navlink" data-nav="standby" href="#/standby">待機中<span class="count-pill stb" data-count="standby" hidden>0<span class="vh">件</span></span></a>
-        <!-- 候補・成立の一覧画面はPhase 3/4で新設(D-11)。それまでは暫定的にホーム(#)へ -->
-        <a class="navlink" data-nav="proposals" href="#/">候補<span class="count-pill acc" data-count="proposals" hidden>0<span class="vh">件</span></span></a>
-        <a class="navlink" data-nav="matched" href="#/">成立<span class="count-pill acc" data-count="matched" hidden>0<span class="vh">件</span></span></a>
+        <!-- 候補・成立の一覧=D-11の簡易一覧(候補→04・成立→05へ行遷移) -->
+        <a class="navlink" data-nav="proposals" href="#/proposals">候補<span class="count-pill acc" data-count="proposals" hidden>0<span class="vh">件</span></span></a>
+        <a class="navlink" data-nav="matched" href="#/matched">成立<span class="count-pill acc" data-count="matched" hidden>0<span class="vh">件</span></span></a>
       </nav>
       <div class="hdr-actions">
         <div class="popover-wrap">
-          <button type="button" class="ghost icon-round" id="noticeButton" aria-label="お知らせ" aria-expanded="false">
+          <button type="button" class="ghost icon-round" id="noticeButton" aria-label="お知らせ" aria-haspopup="true" aria-expanded="false" aria-controls="noticePopover">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
             <span class="notification-dot" id="notificationDot" hidden></span>
           </button>
           <div class="popover notification-popover" id="noticePopover" role="status" hidden>
             <p class="popover-kicker">お知らせ</p>
             <div class="notice-list" id="noticeList"></div>
-            <button class="more-button notice-more" id="noticeMoreButton" type="button" hidden>もっと見る</button>
+            <button class="ghost notice-more" id="noticeMoreButton" type="button" hidden>もっと見る</button>
           </div>
         </div>
         <div class="popover-wrap">
-          <button type="button" class="account-button" id="accountButton" aria-label="アカウント" aria-expanded="false"></button>
+          <button type="button" class="account-button" id="accountButton" aria-label="アカウント" aria-haspopup="true" aria-expanded="false" aria-controls="accountPopover"></button>
           <div class="popover account-popover" id="accountPopover" hidden>
             <button type="button" id="settingsButton">設定</button>
           </div>
@@ -263,34 +263,66 @@
           </div>
           <ul class="sb-others" data-sb-others></ul>
         </section>
+
+        <!-- 下書き(D-13・UI v2 Phase 5)。1件もないときはstandby.jsがsectionごと隠す -->
+        <section class="sb-others-sec" data-sb-drafts-section aria-labelledby="h-drafts" hidden>
+          <div class="sb-others-head">
+            <h2 id="h-drafts" class="sb-h2">下書き</h2>
+          </div>
+          <ul class="sb-others" data-sb-drafts></ul>
+        </section>
+      </div>
+
+      <!-- 候補・成立の簡易一覧(D-11・UI v2 Phase 5)。中身はlists.jsが構成する -->
+      <div class="page-main page-main--lists" id="proposalsScreen" hidden>
+        <section class="list-hero">
+          <p class="pv-badge" data-list-badge hidden><span class="pv-badge-dot" aria-hidden="true"></span><span data-list-badge-text>LATCH候補 · 0件</span></p>
+          <h1 class="list-title" data-list-title></h1>
+        </section>
+        <section class="sb-others-sec">
+          <ul class="sb-others" data-list-rows></ul>
+          <button class="ghost notice-more" data-list-more type="button" hidden>もっと見る</button>
+        </section>
+      </div>
+      <div class="page-main page-main--lists" id="matchedScreen" hidden>
+        <section class="list-hero">
+          <p class="pv-badge" data-list-badge hidden><span class="pv-badge-dot" aria-hidden="true"></span><span data-list-badge-text>成立 · 0件</span></p>
+          <h1 class="list-title" data-list-title></h1>
+        </section>
+        <section class="sb-others-sec">
+          <ul class="sb-others" data-list-rows></ul>
+          <button class="ghost notice-more" data-list-more type="button" hidden>もっと見る</button>
+        </section>
       </div>
 
       <section class="detail-view" id="detailScreen" hidden></section>
-      <section class="settings-view" id="settingsScreen" hidden>
-        <div class="settings-inner">
+      <!-- 設定(UI v2 Phase 5・v2カード3枚)。中身はpermission.js・blocks.js・consent.jsが構成する -->
+      <section class="page-main page-main--settings" id="settingsScreen" hidden>
+        <header class="settings-hero">
           <p class="section-kicker"><span></span>SETTINGS</p>
-          <h1>設定</h1>
-          <section class="settings-section" aria-labelledby="notificationSettingsTitle">
-            <div class="section-heading"><span aria-hidden="true"></span><h2 id="notificationSettingsTitle">通知</h2></div>
-            <div id="permissionControl"></div>
-          </section>
-          <section class="settings-section" aria-labelledby="blockSettingsTitle">
-            <div class="section-heading"><span aria-hidden="true"></span><h2 id="blockSettingsTitle">ブロック管理</h2></div>
-            <div class="block-list" id="blockList"></div>
-            <button class="more-button" id="blockMoreButton" type="button" hidden>もっと見る</button>
-          </section>
-          <section class="settings-section" aria-labelledby="consentSettingsTitle">
-            <div class="section-heading"><span aria-hidden="true"></span><h2 id="consentSettingsTitle">LLM送信の同意</h2></div>
-            <div id="consentControl"></div>
-          </section>
-        </div>
+          <h1 class="settings-title">設定</h1>
+        </header>
+        <section class="card settings-card" aria-labelledby="notificationSettingsTitle">
+          <h2 id="notificationSettingsTitle" class="card-title">通知</h2>
+          <div id="permissionControl"></div>
+        </section>
+        <section class="card settings-card" aria-labelledby="blockSettingsTitle">
+          <h2 id="blockSettingsTitle" class="card-title">ブロック管理</h2>
+          <div class="block-list" id="blockList"></div>
+          <button class="ghost notice-more" id="blockMoreButton" type="button" hidden>もっと見る</button>
+        </section>
+        <section class="card settings-card" aria-labelledby="consentSettingsTitle">
+          <h2 id="consentSettingsTitle" class="card-title">LLM送信の同意</h2>
+          <div id="consentControl"></div>
+        </section>
       </section>
-      <section class="onboarding-view" id="onboardingScreen" hidden>
-        <div class="settings-inner">
+      <!-- オンボーディング(文言はconsent.jsがtexts.jsの承認済み定数から描く) -->
+      <section class="page-main page-main--settings" id="onboardingScreen" hidden>
+        <header class="settings-hero">
           <p class="section-kicker"><span></span>ONBOARDING</p>
-          <h1>LLM送信の同意</h1>
-          <div id="consentOnboarding"></div>
-        </div>
+          <h1 class="settings-title">LLM送信の同意</h1>
+        </header>
+        <div id="consentOnboarding"></div>
       </section>
     </main>
 
@@ -299,15 +331,14 @@
     <dialog class="dlg" id="appDialog"></dialog>
     <!-- 通報・ブロックの統合dialog(UI v2 Phase 4・D-09)。中身はsafety.jsが構成する -->
     <dialog class="dlg" id="safetyDialog" aria-label="通報・ブロック"></dialog>
-
-    <!-- 暫定: ブロック解除の旧モーダル(設定・Phase 5で<dialog class="dlg">へ統合) -->
-    <div class="modal-backdrop" id="unblockModal" role="presentation" hidden></div>
+    <!-- ブロック解除の確認dialog(UI v2 Phase 5・旧modal-backdropから統一)。中身はblocks.jsが構成する -->
+    <dialog class="dlg" id="unblockDialog" aria-labelledby="unblockTitle"></dialog>
 
     <nav class="tabbar" aria-label="メインメニュー">
       <a class="tab" data-nav="deposit" href="#/"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8.5v7M8.5 12h7"></path></svg><span>預ける</span></a>
       <a class="tab" data-nav="standby" href="#/standby"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"></path></svg><span>待機中</span><span class="tb stb" data-count="standby" hidden>0<span class="vh">件</span></span></a>
-      <a class="tab" data-nav="proposals" href="#/"><svg width="22" height="22" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35"></path><path d="M22 5 A15 15 0 0 1 22 35"></path></svg><span>候補</span><span class="tb acc" data-count="proposals" hidden>0<span class="vh">件</span></span></a>
-      <a class="tab" data-nav="matched" href="#/"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14A1.5 1.5 0 0 1 20.5 7v8.5A1.5 1.5 0 0 1 19 17h-7l-4 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z"></path></svg><span>成立</span><span class="tb acc" data-count="matched" hidden>0<span class="vh">件</span></span></a>
+      <a class="tab" data-nav="proposals" href="#/proposals"><svg width="22" height="22" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35"></path><path d="M22 5 A15 15 0 0 1 22 35"></path></svg><span>候補</span><span class="tb acc" data-count="proposals" hidden>0<span class="vh">件</span></span></a>
+      <a class="tab" data-nav="matched" href="#/matched"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14A1.5 1.5 0 0 1 20.5 7v8.5A1.5 1.5 0 0 1 19 17h-7l-4 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z"></path></svg><span>成立</span><span class="tb acc" data-count="matched" hidden>0<span class="vh">件</span></span></a>
     </nav>
     <script type="module" src="/src/main.js"></script>
   </body>

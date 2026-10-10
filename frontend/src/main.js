@@ -14,6 +14,7 @@ import { createHome } from "./latch/home.js";
 import { createDetail } from "./latch/detail.js";
 import { createStandby } from "./latch/standby.js";
 import { createNotice } from "./latch/notice.js";
+import { createLatchList } from "./latch/lists.js"; // D-11簡易一覧(候補・成立)
 import { createPermissionControl } from "./latch/permission.js";
 import { createBlocksSection } from "./latch/blocks.js";
 import { createSettings } from "./latch/settings.js";
@@ -131,6 +132,26 @@ const standby = createStandby({
   onCounts: (partial) => chrome.setCounts(partial),
 });
 
+// 候補・成立の簡易一覧(D-11・UI v2 Phase 5): topnav/tabbarのタブに対応
+const proposalsList = createLatchList({
+  client,
+  root: $("#proposalsScreen"),
+  mode: "proposals",
+  onCounts: (partial) => chrome.setCounts(partial),
+});
+const matchedList = createLatchList({
+  client,
+  root: $("#matchedScreen"),
+  mode: "matched",
+  onCounts: (partial) => chrome.setCounts(partial),
+});
+$("#proposalsScreen [data-list-more]").addEventListener("click", () =>
+  proposalsList.loadMore().catch(() => {}),
+);
+$("#matchedScreen [data-list-more]").addEventListener("click", () =>
+  matchedList.loadMore().catch(() => {}),
+);
+
 // お知らせ(ws-8 design §2.1〜§2.2): 起動時1回のpreloadでドット判定
 const notice = createNotice({
   client,
@@ -163,7 +184,7 @@ const detail = createDetail({
   safety: safetyFlow,
 });
 
-// 設定画面(ws-8 design §2.4〜§2.6): 通知許可(DI)+ブロック管理
+// 設定画面(ws-8 design §2.4〜§2.6): 通知許可(DI)+ブロック管理(解除は<dialog>)
 const permissionControl = createPermissionControl({
   notificationApi: typeof Notification !== "undefined" ? Notification : undefined,
   mount: $("#permissionControl"),
@@ -171,7 +192,7 @@ const permissionControl = createPermissionControl({
 const blocks = createBlocksSection({
   client,
   el: { list: $("#blockList"), moreButton: $("#blockMoreButton") },
-  modal: $("#unblockModal"),
+  dialog: $("#unblockDialog"),
 });
 $("#blockMoreButton").addEventListener("click", () => blocks.loadMore().catch(() => {}));
 consent = createConsent({
@@ -187,12 +208,14 @@ $("#settingsButton").addEventListener("click", () => {
   $("#accountButton").setAttribute("aria-expanded", "false");
 });
 
-// ルート→topnav/tabbarの強調先(詳細=候補扱いは暫定・Phase 3/4で提案/成立を分岐)
+// ルート→topnav/tabbarの強調先(詳細=開いた latch の状態でdetail側が差し替える)
 const NAV_BY_ROUTE = {
   home: "deposit",
   confirm: "deposit", // 02は「預ける」流れの中(Phase 2)
   standby: "standby",
-  latch: "proposals",
+  proposals: "proposals", // D-11簡易一覧
+  matched: "matched", // D-11簡易一覧
+  latch: "proposals", // 詳細は提案姿なら候補・成立姿なら成立(detail側で更新)
 };
 
 const router = createRouter({
@@ -200,6 +223,8 @@ const router = createRouter({
     home: $("#homeScreen"),
     confirm: $("#confirmScreen"), // UI v2 02(Phase 2で実装)
     standby: $("#standbyScreen"), // UI v2 03(Phase 3で実装)
+    proposals: $("#proposalsScreen"), // D-11簡易一覧(UI v2 Phase 5)
+    matched: $("#matchedScreen"), // D-11簡易一覧(UI v2 Phase 5)
     latch: $("#detailScreen"),
     settings: $("#settingsScreen"),
     onboarding: $("#onboardingScreen"),
@@ -216,6 +241,10 @@ const router = createRouter({
       confirmScreen.enter(route.id); // idあり=03「条件を直す」の02編集モード
     } else if (route.name === "standby") {
       standby.show().catch(() => {}); // ?deposited=1は03側で読む(着地状態)
+    } else if (route.name === "proposals") {
+      proposalsList.show().catch(() => {});
+    } else if (route.name === "matched") {
+      matchedList.show().catch(() => {});
     } else if (route.name === "settings") {
       settings.show();
     } else if (route.name === "onboarding") {

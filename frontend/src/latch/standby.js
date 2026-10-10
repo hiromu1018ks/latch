@@ -11,6 +11,7 @@
 import {
   conditionTags,
   depositedAgoText,
+  draftAgoText,
   expiryLine,
   formatCategoryPrimary,
   jstParts,
@@ -19,6 +20,9 @@ import { escapeHtml, hhmmssText } from "./view.js";
 import {
   CANDIDATE_TOAST_TEXT,
   DEPOSIT_AGAIN_LABEL,
+  DRAFT_EDIT_LABEL,
+  DRAFT_PILL_TEXT,
+  DRAFT_SECTION_TITLE,
   EDIT_CONDITION_LABEL,
   NO_OTHERS_TEXT,
   STANDBY_DEPOSITED_A,
@@ -141,8 +145,35 @@ export const othersRowHtml = (intent, nowIso, { first = false } = {}) => {
     </li>`;
 };
 
+// 下書き行(D-13・03の「ほかに待機中の意思」の下に置く。直して預ける=
+// 02編集モードでCTA保存時にPATCH status=active・取り下げる=DELETE)
+export const draftRowHtml = (intent, nowIso, { first = false } = {}) => {
+  const structured = intent.structured_intent ?? {};
+  const meta = [
+    formatCategoryPrimary(structured.category),
+    draftAgoText(intent.created_at, nowIso),
+  ]
+    .map(escapeHtml)
+    .join(" · ");
+  const label = escapeHtml(intent.raw_text);
+  return `
+    <li class="sb-row"${first ? "" : ' data-border="true"'}>
+      <span class="sb-row-ic" aria-hidden="true">${iconHtml(categoryIconName(structured.category?.primary), 19)}</span>
+      <div class="sb-row-body">
+        <span class="sb-row-text">「${label}」</span>
+        <span class="sb-row-meta">${meta}</span>
+      </div>
+      <div class="sb-row-actions">
+        <span class="sb-pill gone">${DRAFT_PILL_TEXT}</span>
+        <a class="ghost sb-row-edit" href="#/confirm?intent=${encodeURIComponent(intent.id)}" aria-label="${label}を直して預ける">${DRAFT_EDIT_LABEL}</a>
+        <button type="button" class="ghost danger" data-sb-drop="${intent.id}" aria-haspopup="dialog" aria-label="${label}を取り下げる">${WITHDRAW_BUTTON_LABEL}</button>
+      </div>
+    </li>`;
+};
+
 export const createStandby = ({ client, chrome, root, onCounts }) => {
   let items = []; // active intents(created_at降順)
+  let drafts = []; // 下書き intents(D-13・created_at降順)
   let goneMain = null; // 取り下げ直後のメインカードの表示保持
   let timer = null;
   const toastShown = new Set(); // 候補トースト表示済みlatch id(セッション内1回)
@@ -223,10 +254,18 @@ export const createStandby = ({ client, chrome, root, onCounts }) => {
           .map((intent, i) => othersRowHtml(intent, nowIso, { first: i === 0 }))
           .join("")
       : `<li class="sb-row-empty">${NO_OTHERS_TEXT}</li>`;
+
+    // 下書き(D-13): 1件もなければセクションごと隠す(空状態の規定なし)
+    const draftsSec = $("[data-sb-drafts-section]", root);
+    draftsSec.hidden = drafts.length === 0;
+    $("[data-sb-drafts]", root).innerHTML = drafts
+      .map((intent, i) => draftRowHtml(intent, nowIso, { first: i === 0 }))
+      .join("");
     onCounts?.({ standby: items.length });
   };
 
-  // --- 取り下げ(<dialog class="dlg">→DELETE /v1/intents/{id}) -----------------
+  // 取り下げ(<dialog class="dlg">→DELETE /v1/intents/{id})。
+  // 対象は待機中と下書きの両方から探す(D-13) -----------------
   let dropTarget = null;
 
   const askDrop = (intent) => {
@@ -259,6 +298,7 @@ export const createStandby = ({ client, chrome, root, onCounts }) => {
     try {
       await client.call("DELETE", `/v1/intents/${intent.id}`);
       items = items.filter((item) => item.id !== intent.id);
+      drafts = drafts.filter((item) => item.id !== intent.id);
       if (wasMain) goneMain = intent; // 取り下げ済みカードを表示し続ける
       chrome.showToast(WITHDRAWN_TOAST_TEXT);
       render();
@@ -284,19 +324,25 @@ export const createStandby = ({ client, chrome, root, onCounts }) => {
   };
 
   const show = async () => {
-    const data = await client.call("GET", "/v1/intents?status=active");
-    items = data.items;
+    const [active, draftPage] = await Promise.all([
+      client.call("GET", "/v1/intents?status=active"),
+      client.call("GET", "/v1/intents?status=draft").catch(() => ({ items: [] })),
+    ]);
+    items = active.items;
+    drafts = draftPage.items;
     goneMain = null; // 画面再訪ではサーバの真実に揃える(削除済みは存在しない)
     render();
     await refreshLatches().catch(() => {}); // 失敗時はトースト・バッジ随伴なし
   };
 
-  // 取り下げボタンの委譲イベント(メイン=属性なし・ほか=intent id付き)
+  // 取り下げボタンの委譲イベント(メイン=属性なし・ほか/下書き=intent id付き)
   root.addEventListener("click", (event) => {
     const button = event.target.closest("[data-sb-drop]");
     if (!button) return;
     const id = button.dataset.sbDrop || mainIntent()?.id;
-    const target = items.find((item) => item.id === id);
+    const target =
+      items.find((item) => item.id === id) ??
+      drafts.find((item) => item.id === id);
     if (target) askDrop(target);
   });
 

@@ -30,6 +30,9 @@ export const parseHash = (hash) => {
   if (hash === "#/onboarding") {
     return { name: "onboarding", id: null, query: {} }; // M4 ws-5・厳密一致
   }
+  // D-11簡易一覧(候補・成立タブ・UI v2 Phase 5)
+  if (hash === "#/proposals") return { name: "proposals", id: null, query: {} };
+  if (hash === "#/matched") return { name: "matched", id: null, query: {} };
   const confirmMatch = CONFIRM_HASH.exec(hash ?? "");
   if (confirmMatch) {
     // UI v2 02(id=編集対象のIntent・03の「条件を直す」から)。不正なuuid値は

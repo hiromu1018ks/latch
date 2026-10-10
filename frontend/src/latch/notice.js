@@ -1,8 +1,11 @@
-// お知らせ(M3 ws-8 design §2.1〜§2.2)。topbarベルpopoverの中身。
-// popoverを開くたびGET /v1/notifications?limit=20を1回取り直し(開いた時点の
-// 最新)・表示された未読行へPOST read(開いた=見た)・起動時1回のpreload結果を
-// 初回描画に使い二重取得しない。取得失敗時は前回表示を維持・空状態も出さない
-// (再訪で再試行・detailの再取得失敗と同型)。
+// お知らせ(M3 ws-8 design §2.1〜§2.2・UI v2 Phase 5でv2部品へ再構成)。
+// ヘッダー通知ボタンのpopoverの中身。popoverを開くたび
+// GET /v1/notifications?limit=20を1回取り直し(開いた時点の最新)・表示された
+// 未読行へPOST read(開いた=見た)・起動時1回のpreload結果を初回描画に使い
+// 二重取得しない。取得失敗時は前回表示を維持・空状態も出さない(再訪で再試行・
+// detailの再取得失敗と同型)。行は未読にaccの点と「未読」の視覚隠し補読を添える。
+// 03のアプリ内トースト(候補の即時導線)とこの一覧(履歴)はD-14の判断で併存
+// (統合の判断はphase5-report.mdに記録)。
 import { NOTICE_EMPTY_NOTE, NOTICE_EMPTY_TITLE } from "./texts.js";
 import {
   escapeHtml,
@@ -18,11 +21,15 @@ const noticeRowHtml = (item, nowIso) => {
   const time = `<span class="notice-time">${escapeHtml(
     noticeTimeText(item.created_at),
   )}</span>`;
-  const cls = `notice-item${item.read_at == null ? " unread" : ""}`;
+  const unread = item.read_at == null;
+  const dot = unread
+    ? `<span class="notice-dot" aria-hidden="true"></span><span class="vh">未読</span>`
+    : "";
+  const cls = `notice-item${unread ? " unread" : ""}`;
   const href = notificationHref(item);
   return href
-    ? `<a class="${cls}" href="${href}">${lines}${time}</a>`
-    : `<div class="${cls}">${lines}${time}</div>`; // タップ先なし(nearby等)
+    ? `<a class="${cls}" href="${href}">${dot}<span class="notice-body">${lines}</span>${time}</a>`
+    : `<div class="${cls}">${dot}<span class="notice-body">${lines}</span>${time}</div>`; // タップ先なし(nearby等)
 };
 
 export const createNotice = ({ client, el }) => {

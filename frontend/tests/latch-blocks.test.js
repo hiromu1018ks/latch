@@ -25,13 +25,13 @@ const mountBlocks = (callImpl) => {
     moreButton: document.createElement("button"),
   };
   el.moreButton.hidden = true;
-  const modal = document.createElement("div");
-  modal.hidden = true;
-  const blocks = createBlocksSection({ client, el, modal });
-  return { client, el, modal, blocks };
+  // UI v2 Phase 5: 解除確認は旧modal-backdropから<dialog class="dlg">へ
+  const dialog = document.createElement("dialog");
+  const blocks = createBlocksSection({ client, el, dialog });
+  return { client, el, dialog, blocks };
 };
 
-describe("ブロック管理(design §2.6)", () => {
+describe("ブロック管理(design §2.6・UI v2 Phase 5で<dialog>へ)", () => {
   it("loadはGET /v1/users/me/blocks?limit=20・行=表示名+ブロック日+解除ボタン(表示名はエスケープ)", async () => {
     const { client, el, blocks } = mountBlocks(async () => ({
       items: [block(PEER, '<script>alert(1)</script>')],
@@ -44,9 +44,11 @@ describe("ブロック管理(design §2.6)", () => {
       .not.toContain("<script>");
     expect(el.list.querySelector(".block-name").textContent)
       .toBe('<script>alert(1)</script>');
-    expect(el.list.querySelector(".block-date").textContent).toBe("10月1日 09:00");
+    expect(el.list.textContent).toContain("10月1日 09:00 にブロック");
     expect(el.list.querySelector("[data-role=unblock-entry]").textContent)
       .toBe(BLOCK_UNBLOCK_LABEL);
+    expect(el.list.querySelector("[data-role=unblock-entry]").getAttribute("aria-haspopup"))
+      .toBe("dialog"); // 解除はdialogを開く(prototype/v2の規約)
   });
 
   it("0件は空状態文言", async () => {
@@ -72,42 +74,43 @@ describe("ブロック管理(design §2.6)", () => {
     expect(el.moreButton.hidden).toBe(true);
   });
 
-  it("解除は確認モーダル(表示名入り文言)を挟み[解除する]でDELETE→204で行除去", async () => {
-    const { client, el, modal, blocks } = mountBlocks(async (method) => {
+  it("解除は確認dialog(表示名入り文言)を挟み[解除する]でDELETE→204で行除去", async () => {
+    const { client, el, dialog, blocks } = mountBlocks(async (method) => {
       if (method === "DELETE") return null; // 204
       return { items: [block(PEER, "相手")], next_cursor: null };
     });
     await blocks.load();
     el.list.querySelector("[data-role=unblock-entry]").click();
-    expect(modal.hidden).toBe(false);
-    expect(modal.textContent).toContain(`相手${BLOCK_CONFIRM_SUFFIX}`);
-    modal.querySelector("[data-role=unblock-submit]").click();
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelector("h2").textContent).toBe("ブロックの解除");
+    expect(dialog.textContent).toContain(`相手${BLOCK_CONFIRM_SUFFIX}`);
+    dialog.querySelector("[data-role=unblock-submit]").click();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     expect(client.call).toHaveBeenCalledWith("DELETE", `/v1/users/${PEER}/block`);
-    expect(modal.hidden).toBe(true);
+    expect(dialog.open).toBe(false);
     expect(el.list.querySelectorAll(".block-row").length).toBe(0); // 行除去
     expect(el.list.textContent).toContain(BLOCKS_EMPTY_TEXT);
   });
 
-  it("確認モーダルの[やめる]ではDELETEしない", async () => {
-    const { client, el, modal, blocks } = mountBlocks(async () => ({
+  it("確認dialogの[やめる]ではDELETEしない", async () => {
+    const { client, el, dialog, blocks } = mountBlocks(async () => ({
       items: [block(PEER, "相手")],
       next_cursor: null,
     }));
     await blocks.load();
     el.list.querySelector("[data-role=unblock-entry]").click();
-    modal.querySelector("[data-role=unblock-cancel]").click();
+    dialog.querySelector("[data-role=unblock-cancel]").click();
     expect(client.call).toHaveBeenCalledTimes(1); // GET のみ
-    expect(modal.hidden).toBe(true);
+    expect(dialog.open).toBe(false);
   });
 
   it("404(既に解除済み)は通信エラー扱いにせず一覧を取り直して収束", async () => {
     let failDelete = false;
     let listCalls = 0;
-    const { el, modal, blocks } = mountBlocks(async (method) => {
+    const { el, dialog, blocks } = mountBlocks(async (method) => {
       if (method === "DELETE") {
         if (failDelete) throw apiError(404, "NOT_FOUND");
         return null;
@@ -120,7 +123,7 @@ describe("ブロック管理(design §2.6)", () => {
     await blocks.load();
     failDelete = true;
     el.list.querySelector("[data-role=unblock-entry]").click();
-    modal.querySelector("[data-role=unblock-submit]").click();
+    dialog.querySelector("[data-role=unblock-submit]").click();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -130,21 +133,21 @@ describe("ブロック管理(design §2.6)", () => {
     expect(el.list.textContent).toContain(BLOCKS_EMPTY_TEXT);
   });
 
-  it("429は既存RATE_LIMIT_TEXT・モーダルは閉じない", async () => {
-    const { client, el, modal, blocks } = mountBlocks(async (method) => {
+  it("429は既存RATE_LIMIT_TEXT・dialogは開いたまま", async () => {
+    const { client, el, dialog, blocks } = mountBlocks(async (method) => {
       if (method === "DELETE") throw apiError(429, "RATE_LIMITED");
       return { items: [block(PEER, "相手")], next_cursor: null };
     });
     await blocks.load();
     el.list.querySelector("[data-role=unblock-entry]").click();
-    modal.querySelector("[data-role=unblock-submit]").click();
+    dialog.querySelector("[data-role=unblock-submit]").click();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     expect(client.call).toHaveBeenCalledTimes(2); // GET + DELETE
-    expect(modal.hidden).toBe(false);
-    expect(modal.textContent).toContain(RATE_LIMIT_TEXT);
-    expect(modal.textContent).toContain(BLOCK_CANCEL_LABEL);
+    expect(dialog.open).toBe(true);
+    expect(dialog.textContent).toContain(RATE_LIMIT_TEXT);
+    expect(dialog.textContent).toContain(BLOCK_CANCEL_LABEL);
   });
 });

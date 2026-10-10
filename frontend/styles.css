@@ -235,10 +235,6 @@ h2{font-family:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif}
   color:var(--t3);font-size:12px;font-weight:700;letter-spacing:0.12em;
 }
 .section-kicker > span{width:7px;height:7px;flex:0 0 auto;border-radius:999px;background:var(--stb)}
-.section-heading{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-.section-heading h2{margin:0;font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2)}
-.section-heading h2 b{font-weight:700}
-.centered{justify-content:center;margin-bottom:8px}
 
 /* --- 入力部品(field・02のselect/input値・プロトタイプ02) ------------------- */
 .field, .token-panel textarea {
@@ -603,26 +599,16 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
 .slots-card .cta-help{margin:14px 0 0;font-size:13.5px;line-height:1.7}
 .form-error{margin:10px 0 0;font-size:13px;color:var(--dng)}
 
-/* --- バッジ・空状態・もっと見る・同意ボタン(暫定表示で使用) ----------------- */
-.badge{
-  padding:5px 10px;border-radius:8px;background:var(--s2);color:var(--t1);
-  font-size:13px;font-weight:500;
-}
-.submit-button{
-  min-height:54px;padding:0 28px;display:inline-flex;align-items:center;justify-content:center;gap:10px;
-  border:none;border-radius:999px;
-  background:var(--acc);color:var(--on-acc);font-weight:700;font-size:16px;cursor:pointer;
-  box-shadow:0 12px 40px -10px var(--acc-glow);
-}
-.submit-button:disabled{background:var(--s3);color:var(--t2);box-shadow:none;cursor:not-allowed}
+/* --- 空状態・「もっと見る」(v2共通・UI v2 Phase 5) -------------------------- */
 .latch-empty{
   display:grid;gap:6px;padding:28px 22px;border:1px dashed var(--line);border-radius:22px;
   color:var(--t2);background:var(--s1);
 }
-.more-button{
+.latch-empty strong{font-size:15px;font-weight:700;color:var(--t1)}
+.notice-more{
   align-self:start;min-height:44px;padding:0 18px;border-radius:999px;
   border:1px solid var(--line-strong);background:transparent;color:var(--t2);
-  font-size:14px;cursor:pointer;
+  font-family:inherit;font-size:14px;cursor:pointer;
 }
 
 /* --- DEVトークンパネル ------------------------------------------------------ */
@@ -642,28 +628,6 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
 /* --- 詳細画面(04の提案姿=pv-・05の成立姿=lt-。本体は各章) -------------------- */
 .detail-view{max-width:720px;width:100%;margin:0 auto;display:block}
 .latch-detail{display:grid;gap:20px}
-.latch-summary{margin:0;font-size:17px;line-height:1.8}
-.latch-summary-hidden{color:var(--t2)}
-.latch-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.latch-deadline{font-size:14px;font-weight:700;color:var(--dng)}
-.respond-actions{display:grid;gap:10px}
-.respond-button{
-  min-height:52px;padding:0 24px;border-radius:999px;
-  border:1px solid var(--line-strong);background:transparent;color:var(--t1);
-  font-size:15px;cursor:pointer;
-}
-.respond-button[data-value="yes"]{
-  border:none;background:var(--acc);color:var(--on-acc);font-weight:700;
-  box-shadow:0 12px 40px -10px var(--acc-glow);
-}
-.respond-button:disabled{opacity:0.5;cursor:not-allowed}
-.answered-text,.closed-text,.notfound-text{
-  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
-  font-size:22px;font-weight:700;line-height:1.5;
-}
-.group-note{margin:0;color:var(--t2);font-size:14px}
-.latch-heading{margin:0;font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2)}
-.home-link{color:var(--acc);font-weight:700}
 .detail-error{color:var(--dng);font-weight:700}
 
 /* --- 参加確認・通報・ブロック(暫定モーダル・Phase 4/5で<dialog>へ統合) -------- */
@@ -684,51 +648,24 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   background:transparent;color:var(--t1);font-family:inherit;font-size:14px;cursor:pointer;
 }
 .attendance-note{color:var(--t2);font-weight:700}
+/* --- 提案詳細の通報導線(危険文字ボタン・05のlt-cancelと同系) ---------------- */
 .report-entry{
-  justify-self:start;min-height:44px;padding:0 4px;font-size:14px;
-  border:none;background:none;color:var(--t2);
-  text-decoration:underline;text-underline-offset:4px;cursor:pointer;
+  justify-self:start;min-height:44px;padding:0 16px;border-radius:999px;
+  border:1px solid transparent;background:transparent;color:var(--dng);
+  font-family:inherit;font-size:14px;text-decoration:underline;text-underline-offset:4px;
+  cursor:pointer;transition:background-color .2s ease, border-color .2s ease;
 }
-.modal-backdrop{
-  position:fixed;inset:0;z-index:var(--z-toast);display:grid;place-items:center;padding:20px;
-  background:rgba(5,6,10,.72);
-}
-.confirmation{
-  position:relative;width:min(440px,100%);box-sizing:border-box;padding:28px;
-  border-radius:24px;border:1px solid var(--line-strong);
-  background:var(--s1);color:var(--t1);
-}
-.modal-close{
-  position:absolute;top:12px;right:12px;width:44px;height:44px;padding:0;
-  display:grid;place-items:center;border:1px solid transparent;border-radius:12px;
-  color:var(--t2);background:transparent;cursor:pointer;
-}
-.confirmation h2{
-  margin:0 0 14px;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
-  font-size:22px;font-weight:700;
-}
-.confirmation > p:not(.section-kicker){margin:0 auto;max-width:380px;color:var(--t2);font-size:14px;line-height:1.8}
-.block-dialog{display:grid;gap:16px;text-align:left}
-.block-confirm{font-size:14.5px}
-.block-error{color:var(--dng);font-weight:700}
-.block-submit{
-  min-height:48px;padding:0 20px;border:none;border-radius:999px;
-  background:var(--dng);color:#1A0A08;font-weight:700;cursor:pointer;
-}
-.block-actions{display:flex;gap:10px;justify-content:flex-end}
-.block-cancel,.dlg-cancel{
-  min-height:48px;padding:0 18px;border-radius:999px;border:1px solid var(--line-strong);
-  background:transparent;color:var(--t1);font-size:15px;cursor:pointer;
-}
+.report-entry:hover,.report-entry:focus-visible{border-color:var(--dng-line);background:var(--dng-soft)}
 
-/* --- お知らせ・アカウントpopover(暫定・Phase 5で再デザイン) ------------------ */
+/* --- お知らせ・アカウントpopover(UI v2 Phase 5・D-14の判断でv2部品で構成) --- */
 .popover-wrap{position:relative}
 .popover{
-  position:absolute;top:calc(100% + 14px);right:0;width:min(320px,calc(100vw - 32px));
+  position:absolute;top:calc(100% + 14px);right:0;width:min(360px,calc(100vw - 32px));
   padding:16px;z-index:calc(var(--z-header) + 1);
   border:1px solid var(--line-strong);border-radius:18px;
   background:var(--s1);color:var(--t1);
   box-shadow:0 24px 60px -20px rgba(0,0,0,.7);
+  animation:toastIn .3s cubic-bezier(.2,.8,.2,1) both;
 }
 .popover-kicker{margin:0 0 10px;color:var(--t3);font-size:12px;font-weight:700;letter-spacing:0.12em}
 .account-popover{width:180px;padding:10px;display:grid;gap:4px}
@@ -737,53 +674,105 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   color:var(--t1);background:transparent;text-align:left;font-size:14px;cursor:pointer;
 }
 .account-popover button:hover{background:var(--s2)}
-.notice-list{display:grid;gap:10px;max-height:420px;overflow-y:auto}
+.notice-list{display:grid;gap:8px;max-height:420px;overflow-y:auto}
 .notice-item{
-  display:grid;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;
+  position:relative;display:flex;flex-direction:column;gap:4px;padding:12px 14px;
+  border:1px solid var(--line);border-radius:12px;
   background:var(--s2);text-decoration:none;color:var(--t1);
+  transition:border-color .2s ease, background-color .2s ease;
 }
+a.notice-item:hover{border-color:var(--line-strong);background:var(--s3)}
 .notice-item.unread{border-color:var(--acc-line)}
-.notice-line{font-size:14px}
+.notice-dot{
+  position:absolute;top:16px;right:14px;width:8px;height:8px;border-radius:999px;
+  background:var(--acc);box-shadow:0 0 8px var(--acc-glow);
+}
+.notice-body{display:flex;flex-direction:column;gap:2px;padding-right:16px}
+.notice-line{font-size:14px;line-height:1.6}
 .notice-item.unread .notice-line:first-child{font-weight:700}
 .notice-time{font-size:12px;color:var(--t3)}
 .notice-empty{
   display:grid;gap:6px;padding:20px 16px;border:1px dashed var(--line);border-radius:12px;color:var(--t2);
 }
-.notice-more{margin-top:8px;align-self:start}
+.notice-empty strong{color:var(--t1);font-size:14px}
+.notice-more{margin-top:10px}
 
-/* --- 設定・同意 ------------------------------------------------------------ */
-.settings-view,.onboarding-view{max-width:720px;width:100%;margin:0 auto;display:block}
-.settings-inner{display:grid;gap:24px}
-.settings-inner h1{font-size:clamp(26px, 3vw, 30px)}
-.settings-section{
-  display:grid;gap:14px;padding:24px;border:1px solid var(--line);
-  border-radius:22px;background:var(--s1);
+/* --- 設定・オンボーディング(UI v2 Phase 5・v2カードで独自構成) ---------------- */
+.page-main--settings{max-width:720px;gap:20px;padding-top:clamp(32px, 5vw, 72px)}
+.settings-hero{display:flex;flex-direction:column;gap:14px}
+.settings-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(28px, 3.4vw, 40px);line-height:1.25;letter-spacing:0.02em;
 }
-.permission-status{font-weight:700}
+.settings-card{padding:26px 28px 28px;gap:18px}
+
+/* 通知許可(02のprivacy-icアイコン枠+ghost pillを踏襲) */
+.permission-row{display:flex;align-items:center;gap:14px}
+.permission-status{margin:0;font-size:15.5px;font-weight:700}
 .permission-note{margin:0;font-size:13px;color:var(--t2)}
 .permission-request{
-  justify-self:start;min-height:44px;padding:0 20px;border:none;border-radius:999px;
-  background:var(--acc);color:var(--on-acc);font-weight:700;cursor:pointer;
+  align-self:flex-start;display:inline-flex;align-items:center;min-height:44px;padding:0 18px;
+  box-sizing:border-box;border-radius:999px;border:1px solid var(--line-strong);
+  background:transparent;color:var(--t1);font-family:inherit;font-size:14px;cursor:pointer;
 }
-.permission-request:disabled{background:var(--s3);color:var(--t2);cursor:not-allowed}
-.block-list{display:grid;gap:10px}
+.permission-request:disabled{opacity:.5;cursor:not-allowed}
+
+/* ブロック管理(行は03のsb-row系・解除は<dialog class="dlg">) */
+.block-list{display:grid}
+.block-rows{
+  list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+  border-radius:14px;border:1px solid var(--line);overflow:hidden;
+}
 .block-row{
-  display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 16px;
-  border:1px solid var(--line);border-radius:12px;background:var(--s2);
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 20px;
+  padding:14px 16px;background:#10121A;
 }
-.block-name{font-weight:700}
-.block-date{font-size:12px;color:var(--t3);margin-right:auto}
-.block-unblock{
-  min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line-strong);
-  background:transparent;color:var(--t2);font-weight:700;cursor:pointer;
+.block-row + .block-row{border-top:1px solid var(--line)}
+.block-name{font-size:15px;font-weight:700}
+.block-row .block-unblock{
+  min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--dng-line);
+  background:transparent;color:var(--dng);font-family:inherit;font-size:14px;cursor:pointer;
 }
+
+/* LLM送信の同意(文言は承認済み定数のまま・構成のみv2部品) */
+.consent-card{padding:26px 28px 28px;gap:16px}
+.consent-title{margin:0;font-size:16px;font-weight:700}
 .consent-lead{margin:0;font-size:15px;line-height:1.9;color:var(--t2)}
-.consent-points{margin:0;padding:0 0 0 20px;display:grid;gap:8px;font-size:14.5px;line-height:1.8;color:var(--t1)}
-.consent-condition{margin:14px 0 0;padding:14px 16px;border-radius:14px;background:var(--s2);font-size:14px;line-height:1.8;color:var(--t2)}
-.consent-title{margin:0 0 12px;font-size:16px;font-weight:700}
-.consent-state{margin:0 0 12px;font-size:14px;color:var(--t2)}
-.consent-check{display:flex;align-items:center;gap:8px;font-size:14.5px;min-height:44px}
-.consent-check input{accent-color:#5FD4AE}
+.consent-points{
+  margin:0;padding:0;display:grid;gap:10px;list-style:none;
+  font-size:14.5px;line-height:1.8;color:var(--t1);
+}
+.consent-points li{
+  display:flex;align-items:flex-start;gap:10px;padding:12px 14px;
+  border-radius:12px;background:var(--s2);border:1px solid var(--line);
+}
+.consent-points li::before{
+  content:"";flex:none;width:6px;height:6px;margin-top:9px;border-radius:999px;background:var(--acc);
+}
+.consent-condition{
+  margin:2px 0 0;padding:14px 16px;border-radius:14px;background:#0F1119;
+  border:1px solid var(--line);font-size:14px;line-height:1.8;color:var(--t2);
+}
+.consent-state{
+  margin:4px 0 0;display:flex;align-items:center;gap:8px;font-size:14px;color:var(--t2);
+}
+.consent-state::before{
+  content:"";width:6px;height:6px;border-radius:999px;background:var(--t3);
+}
+.consent-state[data-agreed="true"]::before{background:var(--stb)}
+.consent-state[data-agreed="true"]{color:var(--t1)}
+.consent-check{display:flex;align-items:center;gap:10px;font-size:14.5px;min-height:44px;margin-top:2px}
+.consent-check input{width:18px;height:18px;margin:0;accent-color:#5FD4AE;cursor:pointer}
+.consent-agree{
+  align-self:stretch;min-height:54px;margin-top:4px;padding:0 28px;
+  display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:999px;
+  background:var(--s3);color:var(--t2);font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;
+}
+.consent-agree:not(:disabled){
+  background:var(--acc);color:var(--on-acc);
+  box-shadow:0 16px 48px -14px var(--acc-glow);
+}
+.consent-agree:disabled{cursor:not-allowed}
 
 /* --- プレースホルダ(#/confirm・#/standby) ---------------------------------- */
 .placeholder-view{display:grid;gap:12px}
@@ -1401,3 +1390,42 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   .lt-hero-tags{display:none !important}
   .lt-msg{max-width:92%}
 }
+
+/* ===========================================================================
+   横断機能(UI v2 Phase 5・プロトタイプに原文がないためv2共通部品で独自構成)
+   - D-11簡易一覧(候補・成立)=03のsb-rowリスト部品の踏襲
+   - 終了状態・未発見=v2カード+s3/lineの静的な一文表示
+   - 下書き=03のリスト部品にgone様式のpillを添える
+   =========================================================================== */
+
+/* --- D-11簡易一覧(候補・成立タブ) ------------------------------------------ */
+.page-main--lists{max-width:880px;padding-top:clamp(32px, 5vw, 72px);gap:36px}
+.list-hero{display:flex;flex-direction:column;gap:18px}
+.list-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(26px, 3.2vw, 40px);line-height:1.25;letter-spacing:0.02em;
+}
+.sb-pill.acc{background:var(--acc);color:var(--on-acc)}
+.sb-row-link{color:inherit;text-decoration:none;transition:opacity .2s ease}
+.sb-row-link:hover .sb-row-text{text-decoration:underline;text-underline-offset:4px}
+.list-empty{margin:0}
+
+/* --- 終了状態(他者不成立・期限切れ)・未発見 --------------------------------- */
+.closed-card{
+  display:flex;flex-direction:column;align-items:flex-start;gap:18px;
+  padding:clamp(28px, 4vw, 44px);border-radius:24px;background:var(--s1);
+  border:1px solid var(--line);
+}
+.closed-text{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-size:clamp(22px, 2.6vw, 30px);font-weight:700;line-height:1.6;
+}
+.closed-home{margin-top:4px}
+
+/* --- <dialog>の本文部品(blocks解除dialog・共通化) --------------------------- */
+.dlg-col{display:flex;flex-direction:column;gap:16px}
+.dlg-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-size:22px;font-weight:700;
+}
+.dlg-desc strong{color:var(--t1)}

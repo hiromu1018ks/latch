@@ -31,6 +31,17 @@ describe("permissionText(状態→文言写像・design §2.5)", () => {
 });
 
 describe("createPermissionControl(design §2.5・D-18)", () => {
+  it("v2部品: アイコン枠(permission-row)+ghost pillで構成する(UI v2 Phase 5)", () => {
+    const { mount, control } = mountPermission({
+      permission: "default",
+      requestPermission: vi.fn(async () => "granted"),
+    });
+    control.render();
+    expect(mount.querySelector(".permission-row .privacy-ic")).not.toBeNull();
+    expect(mount.querySelector("[data-role=permission-request]").className)
+      .toContain("ghost");
+  });
+
   it("granted: 状態文言+補足文のみ(ボタンなし)", () => {
     const { mount, control } = mountPermission({ permission: "granted" });
     control.render();
@@ -119,32 +130,51 @@ describe("settings画面骨組(design §2.4)", () => {
     expect(consent.load).toHaveBeenCalledTimes(1);
   });
 
-  it("index.html構造: settingsScreen・2セクション・モーダル2種・noticeList・notificationDot初期hidden", () => {
+  it("index.html構造: settingsScreen(3カード)・解除dialog・noticeList・notificationDot初期hidden", () => {
     const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
     for (const id of [
       "settingsScreen", "permissionControl", "blockList", "blockMoreButton",
       "settingsButton", "noticeList", "noticeMoreButton",
-      // UI v2 Phase 4(D-09): blockModalはsafetyDialogへ統合された
-      "notificationDot", "unblockModal", "safetyDialog",
+      // UI v2 Phase 4(D-09): blockModalはsafetyDialogへ統合
+      // UI v2 Phase 5: ブロック解除の確認は旧modal-backdropからunblockDialogへ
+      "notificationDot", "unblockDialog", "safetyDialog",
       "onboardingScreen", "consentOnboarding", "consentControl", "consentSettingsTitle",
+      // D-11簡易一覧(候補・成立タブ)
+      "proposalsScreen", "matchedScreen",
     ]) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain('class="notification-dot" id="notificationDot" hidden');
+    // 旧モーダル方式は廃止(<dialog class="dlg">へ統一)
+    expect(html).not.toContain('id="unblockModal"');
+    expect(html).not.toContain('class="modal-backdrop"');
+    // 候補・成立タブは一覧ルートへ(D-11)
+    expect(html).toContain('data-nav="proposals" href="#/proposals"');
+    expect(html).toContain('data-nav="matched" href="#/matched"');
   });
 
-  it("main.js配線: 5モジュールのimport・screensへsettings・noticeButton追加リスナ・preload", () => {
+  it("main.js配線: 6モジュールのimport・screensへsettings・noticeButton追加リスナ・preload", () => {
     const mainJs = readFileSync(resolve(process.cwd(), "src/main.js"), "utf8");
     expect(mainJs).toContain('from "./latch/notice.js"');
     expect(mainJs).toContain('from "./latch/permission.js"');
     expect(mainJs).toContain('from "./latch/blocks.js"');
     expect(mainJs).toContain('from "./latch/settings.js"');
     expect(mainJs).toContain('from "./latch/safety.js"'); // UI v2 Phase 4(統合dialog)
+    expect(mainJs).toContain('from "./latch/lists.js"'); // UI v2 Phase 5(D-11)
+    expect(mainJs).toContain('dialog: $("#unblockDialog")');
     expect(mainJs).toContain('settings: $("#settingsScreen")');
+    expect(mainJs).toContain('proposals: $("#proposalsScreen")');
+    expect(mainJs).toContain('matched: $("#matchedScreen")');
     expect(mainJs).toContain('notice.preload()');
     expect(mainJs).toContain('if (!$("#noticePopover").hidden) notice.open()');
     expect(mainJs).toContain('from "./latch/consent.js"');
     expect(mainJs).toContain('onboarding: $("#onboardingScreen")');
     expect(mainJs).toContain('CONSENT_REQUIRED');
+  });
+
+  it("router: 候補・成立の一覧ルートを解析する(D-11)", async () => {
+    const { parseHash } = await import("../src/router.js");
+    expect(parseHash("#/proposals")).toEqual({ name: "proposals", id: null, query: {} });
+    expect(parseHash("#/matched")).toEqual({ name: "matched", id: null, query: {} });
   });
 });

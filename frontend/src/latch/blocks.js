@@ -1,7 +1,9 @@
-// ブロック管理(M3 ws-8 design §2.6)。設定画面の2セクションの一つ。一覧+
-// 解除(確認モーダル挟み — 再登録導線が成立済み詳細しかないため誤解除の回復
-// コストが高い)。解除の204で行除去(カーソル保持)・404(既に解除済み)は通信
-// エラー扱いにせず一覧を取り直して収束させる。遡及効果なしはUIで説明しない。
+// ブロック管理(M3 ws-8 design §2.6・UI v2 Phase 5で解除を<dialog class="dlg">へ)。
+// 設定画面の2セクションの一つ。一覧+解除(確認dialog挟み — 再登録導線が
+// 成立済み詳細しかないため誤解除の回復コストが高い)。解除の204で行除去
+// (カーソル保持)・404(既に解除済み)は通信エラー扱いにせず一覧を取り直して
+// 収束させる。遡及効果なしはUIで説明しない。行とdialogはv2部品
+// (sb-row系の行・dlg+safety系の操作ボタン)で構成する。
 import {
   BLOCK_CANCEL_LABEL,
   BLOCK_CONFIRM_SUFFIX,
@@ -12,22 +14,24 @@ import {
 } from "./texts.js";
 import { escapeHtml, noticeTimeText } from "./view.js";
 
-export const createBlocksSection = ({ client, el, modal }) => {
+export const createBlocksSection = ({ client, el, dialog }) => {
   let items = [];
   let cursor = null;
   let pending = null; // 解除確認中の行
 
   const render = () => {
     el.list.innerHTML = items.length
-      ? items
+      ? `<ul class="block-rows">${items
           .map(
-            (item) => `<div class="block-row">
-              <span class="block-name">${escapeHtml(item.display_name)}</span>
-              <span class="block-date">${escapeHtml(noticeTimeText(item.created_at))}</span>
-              <button type="button" class="block-unblock" data-role="unblock-entry" data-id="${item.blocked_id}">${BLOCK_UNBLOCK_LABEL}</button>
-            </div>`,
+            (item) => `<li class="block-row">
+              <div class="sb-row-body">
+                <span class="block-name">${escapeHtml(item.display_name)}</span>
+                <span class="sb-row-meta">${escapeHtml(noticeTimeText(item.created_at))} にブロック</span>
+              </div>
+              <button type="button" class="ghost danger block-unblock" data-role="unblock-entry" data-id="${item.blocked_id}" aria-haspopup="dialog" aria-label="${escapeHtml(item.display_name)}さんのブロックを解除">${BLOCK_UNBLOCK_LABEL}</button>
+            </li>`,
           )
-          .join("")
+          .join("")}</ul>`
       : `<p class="latch-empty"><strong>${BLOCKS_EMPTY_TEXT}</strong></p>`;
     el.moreButton.hidden = cursor == null;
     wireRows();
@@ -37,42 +41,38 @@ export const createBlocksSection = ({ client, el, modal }) => {
     for (const button of el.list.querySelectorAll("[data-role=unblock-entry]")) {
       button.addEventListener("click", () => {
         pending = items.find((item) => item.blocked_id === button.dataset.id) ?? null;
-        renderModal();
+        renderDialog();
       });
     }
   };
 
   const showError = (text) => {
-    const errorEl = modal.querySelector("[data-role=unblock-error]");
+    const errorEl = dialog.querySelector("[data-role=unblock-error]");
     errorEl.textContent = text;
     errorEl.hidden = false;
   };
 
-  const renderModal = () => {
+  // 確認dialog(<dialog class="dlg">・safety系の操作ボタンを踏襲)
+  const renderDialog = () => {
     if (!pending) return;
-    modal.innerHTML = `
-      <section class="confirmation block-dialog" role="dialog" aria-modal="true" aria-labelledby="unblockTitle">
-        <button type="button" class="modal-close" data-role="unblock-close" aria-label="閉じる"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
-        <p class="section-kicker centered"><span></span>BLOCK</p>
-        <h2 id="unblockTitle">ブロックの解除</h2>
-        <p class="block-confirm">${escapeHtml(pending.display_name)}${BLOCK_CONFIRM_SUFFIX}</p>
-        <p class="block-error" data-role="unblock-error" role="alert" hidden></p>
-        <div class="block-actions">
-          <button type="button" class="block-submit" data-role="unblock-submit">${BLOCK_UNBLOCK_LABEL}</button>
-          <button type="button" class="block-cancel" data-role="unblock-cancel">${BLOCK_CANCEL_LABEL}</button>
+    dialog.innerHTML = `
+      <div class="dlg-col">
+        <h2 class="dlg-title">ブロックの解除</h2>
+        <p class="dlg-desc"><strong>${escapeHtml(pending.display_name)}</strong>${escapeHtml(BLOCK_CONFIRM_SUFFIX)}</p>
+        <p class="safety-error" data-role="unblock-error" role="alert" hidden></p>
+        <div class="safety-actions">
+          <button type="button" class="ghost safety-btn" data-role="unblock-cancel">${BLOCK_CANCEL_LABEL}</button>
+          <button type="button" class="safety-btn safety-solid" data-role="unblock-submit">${BLOCK_UNBLOCK_LABEL}</button>
         </div>
-      </section>
+      </div>
     `;
-    modal.hidden = false;
-    document.body.classList.add("modal-open");
-    modal.querySelector("[data-role=unblock-close]").addEventListener("click", close);
-    modal.querySelector("[data-role=unblock-cancel]").addEventListener("click", close);
-    modal.querySelector("[data-role=unblock-submit]").addEventListener("click", submit);
+    if (!dialog.open) dialog.showModal();
+    dialog.querySelector("[data-role=unblock-cancel]").addEventListener("click", close);
+    dialog.querySelector("[data-role=unblock-submit]").addEventListener("click", submit);
   };
 
   const close = () => {
-    modal.hidden = true;
-    document.body.classList.remove("modal-open");
+    if (dialog.open) dialog.close();
     pending = null;
   };
 
@@ -94,9 +94,9 @@ export const createBlocksSection = ({ client, el, modal }) => {
     }
   };
 
-  // backdropクリックで閉じる(reportModalと同型・一度だけwire)
-  modal.addEventListener("click", (event) => {
-    if (event.target === modal && !modal.hidden) close();
+  // backdropクリックで閉じる(Escは<dialog>標準)
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog && dialog.open) close();
   });
 
   const load = async () => {
