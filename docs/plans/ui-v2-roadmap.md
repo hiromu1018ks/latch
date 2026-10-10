@@ -1,10 +1,11 @@
-# UI v2移行ロードマップ — 8フェーズで「夜と翡翠」へ全画面を切替える
+# UI v2移行ロードマップ — 9フェーズで「夜と翡翠」へ全画面を切替える
 
 日付: 2026-10-10 / 出典: [ui-v2-gap-analysis.md](ui-v2-gap-analysis.md)(変更点の全量・コミット8c358be)
 デザインの正: `prototype/v2/01〜05`(各`.dc.html`のinline styleと`<helmet><style>`が値の正源)
 
-この文書はUI v2移行の実行計画。本体7フェーズ+オプション1フェーズで進め、各フェーズを
-**貼り付けプロンプト1本のセッション1本**で完結させる粒度に揃えてある。判断事項を先に
+この文書はUI v2移行の実行計画。本体8フェーズ+オプション1フェーズで進め、各フェーズを
+**貼り付けプロンプト1本のセッション1本**で完結させる粒度に揃えてある(Phase 6だけは
+規模XLのため2セッション分割を認める)。判断事項を先に
 固定するPhase 0が全体の要で、ここが済むまで画面実装に着手しない。
 
 ## 進め方の前提(全フェーズ共通)
@@ -33,9 +34,10 @@
 | **3** | 待機中03+候補04(回答状態・取り下げ) | P2 | L | 待機・取り下げ・回答が実APIで通る |
 | **4** | 成立05+チャット+通報/ブロック+取消 | P3 | M | 成立〜チャット往復が実APIで通る |
 | **5** | 横断機能: 同意・設定・お知らせ・終了状態+a11y | P1〜P4 | M | 全機能がv2デザインで稼働 |
-| **6** | 統合試験・実機E2E・配信検証・基準切替完了 | P1〜P5 | M | 全自動試験緑+実機合格+承認 |
+| **6** | 実装のReact載せ替え(素のDOM実装→React・見た目不変) | P5 | XL | 全画面がReactで等価稼働・試験緑 |
+| **7** | 統合試験・実機E2E・配信検証・基準切替完了 | P1〜P6 | M | 全自動試験緑+実機合格+承認 |
 
-Phase間の依存は一直線(P0→P1→P2→P3→P4→P5→P6)。P1Bだけ並行トラックで、
+Phase間の依存は一直線(P0→P1→P2→P3→P4→P5→P6→P7)。P1Bだけ並行トラックで、
 必要なのはP2(02の人数確認・期限)とP3(回答undo・理由)とP4(成立取消)の一部だけ。
 
 ---
@@ -400,18 +402,92 @@ LATCH UI v2移行 Phase 5(横断機能の載せ替え)を実施する。
 - docs/plans/ui-v2/phase5-report.md をコミットし、STATUS.mdへ1行追記
 ````
 
-## Phase 6 — 試験と実機で全体を締め、基準切替を完了する
+## Phase 6 — 実装をReactへ載せ替える(画面のReact化・見た目不変)
+
+**追加の経緯(2026-10-10ユーザー指示「今の画面をreactで再構築するフェーズも
+追加しようよ」)。** P2〜P5は引き続き素のJavaScript(フレームワークなし)で実装し、
+v2デザインの完成(P5)を先に見通す。React載せ替えはその単独トラックとしてP6に
+置く — 移行中に「デザイン変更」と「フレームワーク差し替え」の2変数を同時に
+動かさないためである。載せ替え後の実装に対してP7(統合試験・実機E2E・ゲート
+承認)を行うので、承認済みの実装がその後に入れ替わる状態も避けられる。
+
+**スコープ**: frontend/の実装をReactへ載せ替える。**リファクタリングであり
+画面の見た目・文言・API呼び出し・a11y属性・デザイン値は一切変えない**
+(正源=現行frontend実装とプロトタイプ01〜05)。純関数モジュール
+(format・state・parseFlow・highlight・expiry・view・texts・save)とAPIクライアント
+(session・client・appState)はフレームワーク非依存のままReactからimportして
+使う。DOM配線モジュール(screen・confirm・home・detail・chat・respond・notice・
+settings・consent・blocks・report・blockFlow・permission・attendance・chrome・
+main)をReactコンポーネント+hooksへ書き換え、hashルータ(parseHash契約)は
+自作のままReact側から消費する(react-router等の追加導入はしない)。DOM依存の
+試験はReact Testing Libraryへ移行し、純関数系の試験は無傷を維持する。
+
+**スコープ外**: デザイン・文言の変更・backend・API契約・プロトタイプ側の変更。
+
+**完了条件**: 全ルートがReactで等価稼働(ビジュアルは現行と同一)・全vitest緑
+(純関数試験は無傷)・`vite build`緑・実API(miniflare/local)で主要フロー
+(01→02→保存→03→04→05)が往復・phase6-report.mdコミット。
+
+````text
+LATCH UI v2移行 Phase 6(実装のReact載せ替え)を実施する。
+作業ディレクトリ: /home/misty/Projects/latch
+
+# 最初に読むもの(この順)
+1. docs/plans/ui-v2-roadmap.md — 本フェーズの定義(載せ替え方針の経緯含む)
+2. docs/plans/ui-v2/phase2〜5-report.md — 現行実装の構成・独自値の一覧
+3. frontend/src/ — 純関数モジュール(format・state・parseFlow・highlight・
+   expiry・view・texts・save)とDOM配線モジュール(screen・confirm・home・
+   detail・chat・respond・notice・settings・consent・blocks・report・blockFlow・
+   permission・attendance・chrome・main)
+4. frontend/tests/ — 純関数系とDOM系の試験の切り分け
+5. prototype/v2/01〜05 — デザインの正(参考。実装の正は現行frontend)
+
+# 方針(最優先)
+- 本フェーズはリファクタリングである。画面の見た目・文言・API呼び出し・
+  a11y属性・デザイン値を一切変えない
+- 純関数モジュールとAPIクライアント(session/client/appState)はそのまま
+  importして使う(フレームワーク非依存の設計を維持する)
+- hashルート(router.jsのparseHash契約)は自作のままReact側から消費する
+
+# 作業
+1. react・react-dom・@vitejs/plugin-react・@testing-library/react(+必要最小限の
+   RTL周辺)を追加し、main.jsをReactのマウントへ切り替える。純関数試験が
+   すべて緑のままビルドが通るところまでを最初のコミットとする
+2. シェル(chrome)・ルーティング・toast・dialogをReactコンポーネントへ
+3. 01ホーム+02読み解き確認をコンポーネント化(01↔02のstate共有をReact流へ)
+4. 03待機中・04候補・05成立+チャットをコンポーネント化
+5. 横断画面(設定・同意・お知らせ・ブロック・attendance)をコンポーネント化
+6. 試験を移行する: 純関数系は無傷・DOM系はReact Testing Libraryへ書き換え
+   (試験の意図=文言・状態遷移・a11yは踏襲し、DOMの組立方法だけ置き換える)
+
+# 規律
+- 依存追加はreact/react-dom/@vitejs/plugin-react/@testing-library/*に限る
+  (CDN不使用・セルフホスト方針は維持)
+- デザイン値・文言を変えない。避けられない差分はreportに列挙する
+- 毎コミット `cd frontend && npx vitest run` が緑
+- 生のIntent文言(raw_text)をログへ出さない
+- 10分詰まったら推測で仕様を変えず、状況を書いて停止する
+- 本フェーズはXLのため2セッションに分割してよい(a=作業1〜3・b=作業4〜6)
+
+# 完了条件
+- 全ルートがReactで等価稼働(ビジュアルは現行と同一)
+- 全vitest緑(純関数系の試験は無傷であること)・npm run build緑
+- 実API(miniflare/local)で01→02→保存→03→04→05が通る
+- docs/plans/ui-v2/phase6-report.md をコミットし、STATUS.mdのUI v2欄へ1行追記
+````
+
+## Phase 7 — 試験と実機で全体を締め、基準切替を完了する
 
 **スコープ**: フロント全試験の緑化(残欠落・スキップの回収)・実機E2E
 (実環境: 書く→読み解く→預ける→待機→候補→回答→成立→チャットの往復)・
 契約130ケース(P1B追加13件込み・local/miniflare両実装)・Workers Assets配信検証
 (フォント読み込み・オリジン)・docs最終確認(00・03・12・STATUSの状態が実装と一致)・
-ゲート承認の依頼。
+ゲート承認の依頼。**対象はPhase 6(React載せ替え)後の実装**である。
 
 **完了条件**: 全自動試験緑・実機E2E合格・docs/STATUS整合・ユーザー承認記録。
 
 ````text
-LATCH UI v2移行 Phase 6(統合試験と切替完了)を実施する。
+LATCH UI v2移行 Phase 7(統合試験と切替完了)を実施する。
 作業ディレクトリ: /home/misty/Projects/latch
 
 # 最初に読むもの(この順)
@@ -427,7 +503,7 @@ LATCH UI v2移行 Phase 6(統合試験と切替完了)を実施する。
 3. 契約試験(130ケース・P1B追加13件込み・参照/D1両実装)が緑であることを確認する
 4. Workers Assets配信を検証する(フォントの読み込み・CSP・オリジン)
 5. docs/00・03・12・STATUS.mdが実装と一致しているか確認し、ズレを直す
-6. docs/plans/ui-v2/phase6-report.md に全体の証拠をまとめ、
+6. docs/plans/ui-v2/phase7-report.md に全体の証拠をまとめ、
    ゲート承認をユーザーへ依頼して止まる
 
 # 規律
@@ -436,7 +512,7 @@ LATCH UI v2移行 Phase 6(統合試験と切替完了)を実施する。
 - 日本語の文書修正は natural-japanese スキルを使う
 
 # 完了条件
-- 全自動試験緑・実機E2E合格・docs整合・phase6-report.mdコミット済み
+- 全自動試験緑・実機E2E合格・docs整合・phase7-report.mdコミット済み
 - ユーザーのゲート承認をSTATUS.mdへ記録
 ````
 
