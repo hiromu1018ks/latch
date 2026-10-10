@@ -3,8 +3,11 @@
 // importだけでafterEach(cleanup)が効くようにする。
 import { afterEach, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
+import { useState } from "react";
 import { ChromeProvider, useChrome } from "../src/ui/chrome.jsx";
 import { App } from "../src/App.jsx";
+import { ConfirmScreen } from "../src/intent/ConfirmScreen.jsx";
+import { createFormState } from "../src/intent/state.js";
 
 afterEach(() => {
   cleanup();
@@ -34,6 +37,33 @@ export const renderApp = ({ session, client } = {}) => {
     />,
   );
   return utils;
+};
+
+// 02単体の描画(App配線と同じ共有stateの形・confirm.test.jsxと同型)
+export const renderConfirm = ({ client, state, intentId = null } = {}) => {
+  cleanup();
+  const stub = client ?? stubClient();
+  const stateRef = { current: state ?? createFormState() };
+  const Harness = () => {
+    const [s, setS] = useState(stateRef.current);
+    const update = (updater) => {
+      const next = typeof updater === "function" ? updater(stateRef.current) : updater;
+      stateRef.current = next;
+      setS(next);
+    };
+    return (
+      <ChromeProvider>
+        <ConfirmScreen
+          client={stub}
+          state={s}
+          getState={() => stateRef.current}
+          setState={update}
+          intentId={intentId}
+        />
+      </ChromeProvider>
+    );
+  };
+  return render(<Harness />);
 };
 
 // chrome API単体の描画試験用。probeの子がuseChrome()の戻り値をcaptureする

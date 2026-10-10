@@ -1,8 +1,11 @@
 // 02「読み解き確認」の条件行構成(UI v2 Phase 2・プロトタイプ02が正源)。
 // 行=40pxアイコン枠+行番号(mono・acc)+ラベル+値(21px 700)+サブ+行末編集。
 // 行編集はテキスト1行input+保存/キャンセル(プロトタイプ02どおり)で、
-// 確定時にformat.jsのパーサで構造値へ書き戻す。ユーザー入力はすべて
-// textContentへ設定する(innerHTMLに埋めない)。
+// 確定時にformat.jsのパーサで構造値へ書き戻す。
+// UI v2 Phase 6(React載せ替え)から行の描画はsrc/intent/SlotRows.jsx(React)
+// が担い、このモジュールは行モデル・語彙・編集器(seed/commit)の純関数群。
+// 編集器のcommitは呼び出し側が渡すstateを直接書き換える(旧実装と同じ)ため、
+// React側はコピー(structuredClone)に適用して新stateへ置き換える。
 import {
   MISSING_TEXT,
   formatBudget,
@@ -17,7 +20,6 @@ import {
   parseTimeText,
 } from "./format.js";
 import { missingRequired } from "./state.js";
-import { icon } from "../ui/icons.js";
 
 export const REQUIRED_NOTE_TEXT = "時間・場所・目的を指定すると預けられます";
 // 02 D-04・03 §3の注意文言(schema.py WARNING_MESSAGE_NG_DOWNGRADED と同一の固定文字列。
@@ -122,131 +124,12 @@ const rangeText = (min, max) => {
   return fmt(min ?? max);
 };
 
-// --- 02の行DOM(view) --------------------------------------------------------
-export const renderRows = ({ listEl, state, nowIso }) => {
-  const rows = rowModels(state, nowIso).map((row) => {
-    const el = document.createElement("div");
-    el.className = "slot-row";
-    if (row.missing) el.dataset.missing = "true";
-    el.dataset.key = row.key;
-    el.dataset.label = row.label;
-
-    const iconBox = document.createElement("span");
-    iconBox.className = "slot-ic";
-    iconBox.append(icon(row.icon, 19));
-
-    const body = document.createElement("div");
-    body.className = "slot-body";
-    const line = document.createElement("span");
-    line.className = "slot-line";
-    const no = document.createElement("span");
-    no.className = "slot-no";
-    no.textContent = row.no;
-    line.append(no, row.label);
-    body.append(line);
-
-    const value = document.createElement("span");
-    value.className = "slot-value";
-    value.textContent = row.value;
-    body.append(value);
-    if (row.sub) {
-      const sub = document.createElement("span");
-      sub.className = "slot-sub";
-      sub.textContent = row.sub;
-      body.append(sub);
-    }
-
-    if (row.key === "participants") body.append(peopleFieldset(state));
-
-    const editButton = createEditButton(row.label);
-    el.append(iconBox, body, editButton);
-    return el;
-  });
-
-  const ng = ngNoteBox(state);
-  if (ng) rows.push(ng);
-  listEl.replaceChildren(...rows);
-};
-
-// 人数確認seg(D-04・プロトタイプ02のfieldset)。未回答=要確認(acc)
-const peopleFieldset = (state) => {
-  const inc = state.participantsIncludesOwner;
-  const answered = inc != null;
-  const base = formatParticipants(state.structured.participants);
-
-  const box = document.createElement("fieldset");
-  box.className = answered ? "people-box ok" : "people-box need";
-
-  const legend = document.createElement("legend");
-  legend.className = "vh";
-  legend.textContent = "あなたを人数に含めるか";
-  box.append(legend);
-
-  const question = document.createElement("p");
-  question.className = "people-q";
-  const tag = document.createElement("span");
-  tag.className = "people-tag";
-  tag.textContent = answered ? "確認済み" : "要確認";
-  question.append(tag, ` 「${base === MISSING_TEXT ? "人数" : base}」に、あなたは含まれますか？`);
-  box.append(question);
-
-  const seg = document.createElement("div");
-  seg.className = "seg";
-  for (const [value, label] of [
-    ["in", "含む"],
-    ["out", "含まない"],
-  ]) {
-    const labelEl = document.createElement("label");
-    const input = document.createElement("input");
-    input.className = "vh";
-    input.type = "radio";
-    input.name = "includes-owner";
-    input.value = value;
-    input.checked = (value === "in" && inc === true) || (value === "out" && inc === false);
-    input.dataset.action = "pick-includes-owner";
-    if (input.checked) labelEl.classList.add("on");
-    labelEl.append(input, label);
-    seg.append(labelEl);
-  }
-  box.append(seg);
-  return box;
-};
-
-// 参考条件(判定不能NG=02 D-04・parse由来soft=D-19補足)— 02の5行の下に
-// stb情報箱で出す。いずれもsoft_constraints/ng_unverifiableとして送信される
-// ため、表示から取り零さない(プロトタイプ02に相当行はない=本実装の補完)
-const ngNoteBox = (state) => {
-  if (state.softRows.length === 0 && state.ngRows.length === 0) return null;
-  const box = document.createElement("div");
-  box.className = "ng-box";
-  for (const row of state.softRows) {
-    const line = document.createElement("p");
-    line.textContent = `「${row.text}」— 参考条件として扱います`;
-    box.append(line);
-  }
-  for (const row of state.ngRows) {
-    const line = document.createElement("p");
-    line.textContent = `「${row.text}」— ${NG_NOTE_TEXT}`;
-    box.append(line);
-  }
-  return box;
-};
-
-const createEditButton = (label) => {
-  const button = document.createElement("button");
-  button.className = "edit-button";
-  button.type = "button";
-  button.dataset.action = "edit-row";
-  button.setAttribute("aria-label", `${label}を編集`);
-  button.setAttribute("aria-expanded", "false");
-  button.append(icon("pencil", 17));
-  return button;
-};
-
 // --- 行編集(テキスト1行input・プロトタイプ02) ------------------------------
 
-// 行ごとの編集の種(シード値と、確定時のstate書き戻し)
-const editors = {
+// 行ごとの編集の種(シード値と、確定時のstate書き戻し)。commitはstateを
+// 直接書き換える(React側はコピーへ適用する)。formは旧DOMの form.elements.
+// value.value と同形のアクセスだけをすればよい。
+export const editors = {
   time: {
     seed: (state, nowIso) => {
       const v = formatTime(state.structured.time.start, state.structured.time.end, nowIso);
@@ -301,77 +184,4 @@ const editors = {
       state.structured.category = parsed;
     },
   },
-};
-
-export const beginRowEdit = ({ rowEl, state, nowIso, rerender }) => {
-  if (rowEl.querySelector(".slot-edit")) return;
-  const def = ROW_DEFS.find((d) => d.key === rowEl.dataset.key);
-  if (!def) return;
-  const editor = editors[def.key];
-
-  const form = document.createElement("form");
-  form.className = "slot-edit";
-  const label = document.createElement("label");
-  label.className = "vh";
-  label.htmlFor = `edit-${def.key}`;
-  label.textContent = `${def.label}を編集`;
-  const input = document.createElement("input");
-  input.className = "field";
-  input.type = "text";
-  input.id = `edit-${def.key}`;
-  input.name = "value";
-  input.autocomplete = "off";
-  input.value = editor.seed(state, nowIso);
-  const note = document.createElement("span");
-  note.className = "slot-edit-note";
-  note.textContent = "保存すると、この条件で照らし合わせ直します";
-  const actions = document.createElement("div");
-  actions.className = "slot-edit-actions";
-  const save = document.createElement("button");
-  save.type = "submit";
-  save.textContent = "保存";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "ghost";
-  cancel.dataset.action = "cancel-edit";
-  cancel.textContent = "キャンセル";
-  actions.append(save, cancel);
-  form.append(label, input, note, actions);
-
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    editor.commit(state, form, { nowIso, fallbackIso: state.structured.time.start });
-    rerender();
-  });
-  form.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") rerender(); // 取り消し(state不変)
-  });
-  cancel.addEventListener("click", () => rerender());
-
-  const button = rowEl.querySelector(".edit-button");
-  button.setAttribute("aria-expanded", "true");
-  button.classList.add("editing");
-  rowEl.querySelector(".slot-value")?.remove();
-  rowEl.querySelector(".slot-sub")?.remove();
-  rowEl.querySelector(".people-box")?.remove();
-  rowEl.querySelector(".slot-body").append(form);
-  input.focus();
-  input.select();
-};
-
-// --- 02「足せる条件」トグルchips ---------------------------------------------
-export const renderExtras = ({ wrapEl, picked, onToggle }) => {
-  const buttons = EXTRAS.map((extra) => {
-    const on = picked.includes(extra.label);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "extra-chip ghost";
-    button.dataset.action = "toggle-extra";
-    button.dataset.label = extra.label;
-    button.setAttribute("aria-pressed", String(on));
-    button.append(icon(on ? "check" : "plus", 15), extra.label);
-    button.addEventListener("click", () => onToggle(extra.label));
-    return button;
-  });
-  wrapEl.replaceChildren(...buttons);
 };

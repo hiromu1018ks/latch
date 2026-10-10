@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { act } from "react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { renderApp } from "./helpers.jsx";
+import { renderApp, renderConfirm } from "./helpers.jsx";
+import { applyParseResult, createFormState } from "../src/intent/state.js";
 
 // UI v2 Phase 6(React載せ替え)からシェルとスケルトンはsrc/App.jsxが描くため、
 // index.htmlの本文テストは「マウント点があること」へ、構成のテストは
@@ -51,7 +53,7 @@ describe("シェル+スケルトンの構成(App描画)", () => {
   });
 
   it("02読み解き確認の主要ID(3ステップ・あなたの言葉・5行・seg・期限select)", () => {
-    setup();
+    renderConfirm({ state: createFormState() });
     const ids = [
       "confirmScreen",
       "wordsText",
@@ -69,19 +71,26 @@ describe("シェル+スケルトンの構成(App描画)", () => {
     }
   });
 
-  it("03待機中・一覧・詳細・設定・オンボーディングのsectionがある", () => {
+  it("03待機中・一覧・詳細・設定・オンボーディングのsectionをルートごとに組む", async () => {
     setup();
-    for (const id of [
-      "standbyScreen",
-      "proposalsScreen",
-      "matchedScreen",
-      "detailScreen",
-      "settingsScreen",
-      "onboardingScreen",
-      "appDialog",
-      "safetyDialog",
-      "unblockDialog",
+    const go = async (hash) => {
+      window.location.hash = hash;
+      window.dispatchEvent(new Event("hashchange"));
+      await act(async () => {});
+    };
+    for (const [hash, id] of [
+      ["#/standby", "standbyScreen"],
+      ["#/proposals", "proposalsScreen"],
+      ["#/matched", "matchedScreen"],
+      ["#/settings", "settingsScreen"],
+      ["#/onboarding", "onboardingScreen"],
+      ["#/latches/11111111-1111-4111-8111-111111111111", "detailScreen"],
     ]) {
+      await go(hash);
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+    // appDialog・統合dialog・解除dialogはシェル側に常在する
+    for (const id of ["appDialog", "safetyDialog", "unblockDialog"]) {
       expect(document.getElementById(id)).not.toBeNull();
     }
   });
@@ -122,7 +131,7 @@ describe("01・02の構成(プロトタイプが正)", () => {
   });
 
   it("02は3ステップインジケータと「こう読み解きました。」", () => {
-    renderApp();
+    renderConfirm({ state: createFormState() });
     expect(document.querySelector(".steps")).not.toBeNull();
     const text = document.body.textContent;
     expect(text).toContain("書く");
@@ -154,7 +163,7 @@ describe("本実装の構成(Task 11)", () => {
   });
 
   it("expiry selectは初期disabled(選択肢はAPI応答から構成・02のカード内)", () => {
-    renderApp();
+    renderConfirm({ state: applyParseResult(createFormState(), { category: { primary: null, secondary: null }, alcohol_involved: null, time: { start: null, end: null }, location: { name: null, radius_m: null }, budget: { max: null, currency: "JPY" }, participants: { min: null, max: null }, soft_constraints: [], negative_constraints: [], ng_unverifiable: [] }) });
     const select = document.getElementById("expiry");
     expect(select.disabled).toBe(true);
     expect(select.className).toContain("field");
@@ -203,8 +212,11 @@ describe("UI v2シェル(Phase 1)", () => {
 });
 
 describe("03待機中・04候補が届く(UI v2 Phase 3)", () => {
-  it("03の主要フック(バッジ・見出し2行・メインカード・オーブ・ほかの意思)", () => {
-    renderApp();
+  it("03の主要フック(バッジ・見出し2行・メインカード・オーブ・ほかの意思)", async () => {
+    const utils = renderApp();
+    window.location.hash = "#/standby";
+    window.dispatchEvent(new Event("hashchange"));
+    await act(async () => {});
     for (const hook of [
       "data-sb-badge",
       "data-sb-title-a",

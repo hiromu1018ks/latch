@@ -1,182 +1,13 @@
 // 画面スケルトン(UI v2 Phase 6・移行期)。旧index.htmlに静的に書かれていた
-// 各画面の骨組みをそのままJSXへ写したもの。Phase 6の各作業で中身を
-// Reactコンポーネントへ置き換えていく(01・02は作業3、03/04/05は作業4、
-// 横断は作業5)。クラス名・ID・文言・属性は現行実装から一切変えない。
-import { Icon } from "../ui/Icon.jsx";
+// 画面の骨組みのうち、まだ旧DOM配線モジュールが命を吹き込む画面
+// (03待機中・D-11一覧・設定・オンボーディング)の内側をJSXへ写したもの。
+// 01ホーム+02読み解き確認はすでにReactコンポーネント化済み(作業3)。
+// 残りも作業4・5でコンポーネント化してこのファイルは消える。
+// クラス名・ID・文言・属性は現行実装から一切変えない。
 
-// --- 01 預ける(ホーム) — UI v2 Phase 2 ---------------------------------------
-export const HomeScreenSkeleton = ({ homeRef }) => (
-  <div className="page-main" id="homeScreen" ref={homeRef}>
-    <div className="haze haze-home" aria-hidden="true"></div>
-
-    <section className="compose-section" aria-labelledby="h-compose">
-      <p className="standby-line" id="standbyLine" hidden>
-        <span className="beacon" aria-hidden="true"></span>
-        <span data-standby-count>0件の意思が待機中 — いまは何もしなくて大丈夫</span>
-      </p>
-      <h1 id="h-compose" className="hero-title">どんな条件なら、<br />動きますか。</h1>
-      <p className="hero-lead">ひとこと預けるだけで、探す必要はありません。条件が揃った瞬間に、相手と機会のほうから届きます。</p>
-
-      <div className="composer">
-        <label htmlFor="intentText" className="composer-label">条件をひとことで</label>
-        <textarea id="intentText" rows="3" maxLength={300} aria-describedby="readStatus" placeholder="例：今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい"></textarea>
-
-        <div className="read-section">
-          <p className="read-head"><span className="read-dot" aria-hidden="true"></span>LATCHの読み取り（入力に合わせて更新）</p>
-          <div id="readStatus" aria-live="polite" className="read-status">
-            <div id="readChips" className="read-chips"></div>
-            <span className="read-guide" data-guide hidden>時間・場所・人数・金額などを書くと、ここで読み取ります</span>
-            <span className="read-noread" data-noread hidden>
-              <Icon name="info" size={18} />
-              <span>まだ条件を読み取れません。「今日20時以降」「天文館で」「3人」「5,000円まで」のように、時間・場所・人数・金額のどれかを足してみてください。</span>
-            </span>
-          </div>
-          <p className="parse-error" id="parseError" role="alert" hidden></p>
-        </div>
-
-        <div className="composer-foot">
-          <div className="composer-foot-left">
-            <p className="lock-line">
-              <Icon name="lock" size={16} />
-              <span>成立するまで、この条件は誰にも見えません</span>
-            </p>
-            <button type="button" className="ghost draft-button" id="draftButton">下書きに保存</button>
-          </div>
-          <div className="cta-wrap">
-            <button type="button" className="cta read-button" id="readButton" aria-describedby="ctaHelp">
-              <span className="cta-label">読み解く</span>
-            </button>
-            <span className="cta-help" id="ctaHelp">条件を書くと、読み解けます</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="examples">
-        <p className="examples-label">こんな預け方もできます</p>
-        <div className="example-chips" id="exampleChips"></div>
-      </div>
-    </section>
-
-    <section className="wait-section" id="waitSection" aria-labelledby="h-wait">
-      <div className="wait-head">
-        <div className="wait-title">
-          <h2 id="h-wait" className="wait-heading">待機中の意思</h2>
-          <span className="wait-sub">あなたが預けて、まだ成立していない条件</span>
-        </div>
-        <a className="wait-all" href="#/standby">すべて見る
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
-        </a>
-      </div>
-      <div className="intent-grid" id="intentCards"></div>
-    </section>
-  </div>
-);
-
-// --- 02 読み解き確認 — UI v2 Phase 2 -----------------------------------------
-export const ConfirmScreenSkeleton = ({ confirmRef }) => (
-  <section className="page-main page-main--confirm" id="confirmScreen" ref={confirmRef} hidden>
-    <div className="haze haze-confirm" aria-hidden="true"></div>
-
-    <div className="confirm-head">
-      <ol className="steps" aria-label="預けるまでの手順">
-        <li className="step done">
-          <span className="step-check" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>
-          </span>
-          <span>書く<span className="vh">（完了）</span></span>
-        </li>
-        <li className="step now" aria-current="step">
-          <span className="step-line" aria-hidden="true"></span>
-          <span className="step-no" aria-hidden="true">02</span>
-          <span>読み解きを確認<span className="vh">（現在の手順）</span></span>
-        </li>
-        <li className="step todo">
-          <span className="step-line" aria-hidden="true"></span>
-          <span className="step-no" aria-hidden="true">03</span>
-          <span>預ける</span>
-        </li>
-      </ol>
-      <h1 className="confirm-title">こう読み解きました。</h1>
-      <p className="confirm-lead">ずれていたら、ここで直してください。確認して預けたら、あとは待つだけです。</p>
-    </div>
-
-    <div className="confirm-grid">
-      <div className="confirm-col">
-        <section className="card words-card" aria-labelledby="h-words">
-          <div className="card-head-row">
-            <h2 id="h-words" className="card-title">あなたの言葉</h2>
-            <a className="rewrite-link" href="#/" data-action="rewrite">
-              <Icon name="pencil" size={15} />
-              書き直す
-            </a>
-          </div>
-          <p className="words-text" id="wordsText"></p>
-          <p className="words-note">番号は、読み取った条件の番号に対応しています</p>
-        </section>
-
-        <section className="card privacy-card" aria-labelledby="h-privacy">
-          <h2 id="h-privacy" className="card-title">公開範囲と通知</h2>
-          <ul className="privacy-list">
-            <li className="privacy-item">
-              <span className="privacy-ic">
-                <Icon name="eyeOff" size={19} />
-              </span>
-              <div className="privacy-body">
-                <p className="privacy-t">成立するまで、誰にも表示されません</p>
-                <p className="privacy-s">双方が「参加する」と答えたときにだけ、はじめてお互いが見えます。</p>
-              </div>
-            </li>
-            <li className="privacy-item">
-              <span className="privacy-ic">
-                <Icon name="bell" size={19} />
-              </span>
-              <div className="privacy-body">
-                <p className="privacy-t">通知は「LATCH候補があります」の一文だけ</p>
-                <p className="privacy-s">ロック画面に「飲みたい」という意思が出ることはありません。</p>
-              </div>
-            </li>
-            <li className="privacy-item">
-              <span className="privacy-ic">
-                <Icon name="clock" size={19} />
-              </span>
-              <div className="privacy-body">
-                <p className="privacy-t"><span id="expiryLabel">—</span> に自動で取り下げ</p>
-                <p className="privacy-s">時間を過ぎた条件は、静かに消えます。</p>
-                <label htmlFor="expiry" className="expiry-label">取り下げる時刻
-                  <select id="expiry" className="field" disabled></select>
-                </label>
-              </div>
-            </li>
-          </ul>
-        </section>
-      </div>
-
-      <section className="card slots-card" aria-labelledby="h-slots">
-        <div className="slots-head">
-          <h2 id="h-slots" className="card-title">読み取った条件</h2>
-          <span aria-live="polite" className="slot-summary"><span className="dot" id="slotSummaryDot" aria-hidden="true"></span><span id="slotSummary">5項目 · 確認が必要なもの 1件</span></span>
-        </div>
-        <div id="confirmRows"></div>
-        <div className="extras">
-          <p className="extras-label">足せる条件（任意）— 足すほど、届く候補は少なくなります</p>
-          <div className="extra-chips" id="extraChips"></div>
-        </div>
-        <div className="confirm-actions">
-          <button type="button" className="cta deposit-button" id="depositButton" aria-describedby="depositHelp">
-            <span className="cta-label">この条件で預ける</span>
-          </button>
-          <a className="ghost rewrite-button" href="#/" data-action="rewrite">書き直す</a>
-        </div>
-        <p className="cta-help strong" id="depositHelp">「03 人数」の確認に答えると、預けられます。</p>
-        <p className="form-error" id="confirmError" role="alert" hidden></p>
-      </section>
-    </div>
-  </section>
-);
-
-// --- 03 待機中 — UI v2 Phase 3(プロトタイプ03が正源) --------------------------
-export const StandbyScreenSkeleton = ({ standbyRef }) => (
-  <div className="page-main page-main--standby" id="standbyScreen" ref={standbyRef} hidden>
+// --- 03 待機中 — UI v2 Phase 3(プロトタイプ03が正源)の内側 --------------------
+export const StandbyScreenInner = () => (
+  <>
     <section className="sb-hero" aria-labelledby="h-standby">
       <div className="sb-col">
         <p className="sb-badge"><span className="beacon" aria-hidden="true"></span><span data-sb-badge>待機中 · 0件</span></p>
@@ -232,33 +63,26 @@ export const StandbyScreenSkeleton = ({ standbyRef }) => (
       </div>
       <ul className="sb-others" data-sb-drafts></ul>
     </section>
-  </div>
+  </>
 );
 
-// --- 候補・成立の簡易一覧(D-11・UI v2 Phase 5) --------------------------------
-const ListScreenSkeleton = ({ id, listRef }) => (
-  <div className="page-main page-main--lists" id={id} ref={listRef} hidden>
+// --- 候補・成立の簡易一覧(D-11・UI v2 Phase 5)の内側 --------------------------
+export const ListScreenInner = ({ mode }) => (
+  <>
     <section className="list-hero">
-      <p className="pv-badge" data-list-badge hidden><span className="pv-badge-dot" aria-hidden="true"></span><span data-list-badge-text>{id === "proposalsScreen" ? "LATCH候補 · 0件" : "成立 · 0件"}</span></p>
+      <p className="pv-badge" data-list-badge hidden><span className="pv-badge-dot" aria-hidden="true"></span><span data-list-badge-text>{mode === "proposals" ? "LATCH候補 · 0件" : "成立 · 0件"}</span></p>
       <h1 className="list-title" data-list-title></h1>
     </section>
     <section className="sb-others-sec">
       <ul className="sb-others" data-list-rows></ul>
       <button className="ghost notice-more" data-list-more type="button" hidden>もっと見る</button>
     </section>
-  </div>
+  </>
 );
 
-export const ProposalsScreenSkeleton = ({ listRef }) => (
-  <ListScreenSkeleton id="proposalsScreen" listRef={listRef} />
-);
-export const MatchedScreenSkeleton = ({ listRef }) => (
-  <ListScreenSkeleton id="matchedScreen" listRef={listRef} />
-);
-
-// --- 設定(UI v2 Phase 5)とオンボーディング ------------------------------------
-export const SettingsScreenSkeleton = ({ settingsRef }) => (
-  <section className="page-main page-main--settings" id="settingsScreen" ref={settingsRef} hidden>
+// --- 設定(UI v2 Phase 5)の内側 ------------------------------------------------
+export const SettingsScreenInner = () => (
+  <>
     <header className="settings-hero">
       <p className="section-kicker"><span></span>SETTINGS</p>
       <h1 className="settings-title">設定</h1>
@@ -276,15 +100,16 @@ export const SettingsScreenSkeleton = ({ settingsRef }) => (
       <h2 id="consentSettingsTitle" className="card-title">LLM送信の同意</h2>
       <div id="consentControl"></div>
     </section>
-  </section>
+  </>
 );
 
-export const OnboardingScreenSkeleton = ({ onboardingRef }) => (
-  <section className="page-main page-main--settings" id="onboardingScreen" ref={onboardingRef} hidden>
+// --- オンボーディングの内側(文言はconsent.jsがtexts.jsの承認済み定数から描く) --
+export const OnboardingScreenInner = () => (
+  <>
     <header className="settings-hero">
       <p className="section-kicker"><span></span>ONBOARDING</p>
       <h1 className="settings-title">LLM送信の同意</h1>
     </header>
     <div id="consentOnboarding"></div>
-  </section>
+  </>
 );

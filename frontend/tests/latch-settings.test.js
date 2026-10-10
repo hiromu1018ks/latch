@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 import { act } from "react";
 import {
   PERMISSION_DEFAULT_TEXT,
@@ -20,6 +21,10 @@ const mountPermission = (notificationApi) => {
   const control = createPermissionControl({ notificationApi, mount });
   return { mount, control };
 };
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("permissionText(状態→文言写像・design §2.5)", () => {
   it("4状態+API不在の文言", () => {
@@ -130,17 +135,19 @@ describe("settings画面骨組(design §2.4・UI v2 Phase 6からApp描画)", ()
     expect(consent.load).toHaveBeenCalledTimes(1);
   });
 
-  it("App描画: settingsScreen(3カード)・解除dialog・noticeList・notificationDot初期hidden", () => {
+  it("App描画: 設定3カード・解除dialog・お知らせpopover・オンボーディングがルートごとに組める", async () => {
     renderApp();
+    const go = async (hash) => {
+      window.location.hash = hash;
+      window.dispatchEvent(new Event("hashchange"));
+      await act(async () => {});
+    };
+    // ヘッダー側(常在): 通知/アカウントpopover・統合dialog・解除dialog
     for (const id of [
-      "settingsScreen", "permissionControl", "blockList", "blockMoreButton",
       "settingsButton", "noticeList", "noticeMoreButton",
       // UI v2 Phase 4(D-09): blockModalはsafetyDialogへ統合
       // UI v2 Phase 5: ブロック解除の確認は旧modal-backdropからunblockDialogへ
       "notificationDot", "unblockDialog", "safetyDialog",
-      "onboardingScreen", "consentOnboarding", "consentControl", "consentSettingsTitle",
-      // D-11簡易一覧(候補・成立タブ)
-      "proposalsScreen", "matchedScreen",
     ]) {
       expect(document.getElementById(id)).not.toBeNull();
     }
@@ -151,6 +158,19 @@ describe("settings画面骨組(design §2.4・UI v2 Phase 6からApp描画)", ()
     // 候補・成立タブは一覧ルートへ(D-11)
     expect(document.querySelector('a[data-nav="proposals"]').getAttribute("href")).toBe("#/proposals");
     expect(document.querySelector('a[data-nav="matched"]').getAttribute("href")).toBe("#/matched");
+    // 設定画面(3カード)
+    await go("#/settings");
+    for (const id of [
+      "settingsScreen", "permissionControl", "blockList", "blockMoreButton",
+      "consentControl", "consentSettingsTitle",
+    ]) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+    // オンボーディング
+    await go("#/onboarding");
+    for (const id of ["onboardingScreen", "consentOnboarding"]) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
   });
 
   it("App配線: hash遷移で設定画面へ入る(3カードのマウント点が揃う)", async () => {

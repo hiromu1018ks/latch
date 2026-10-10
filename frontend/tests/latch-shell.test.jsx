@@ -12,20 +12,30 @@ import { renderApp, renderWithChrome, stubSession } from "./helpers.jsx";
 const css = () => readFileSync(resolve(process.cwd(), "styles.css"), "utf8");
 
 describe("シェルの構成(App描画)", () => {
-  it("画面section構造: homeScreen(01)・confirmScreen(02)・standby・一覧2・detail・設定・オンボーディング", () => {
+  it("画面section構造: ルートごとにAppが1画面を条件マウントする", async () => {
+    const actAsync = async () => await act(async () => {});
     renderApp();
-    for (const id of [
-      "homeScreen",
-      "confirmScreen",
-      "standbyScreen",
-      "proposalsScreen",
-      "matchedScreen",
-      "detailScreen",
-      "settingsScreen",
-      "onboardingScreen",
+    const go = async (hash) => {
+      window.location.hash = hash;
+      window.dispatchEvent(new Event("hashchange"));
+      await actAsync();
+    };
+    // 01ホーム(既定)
+    expect(document.getElementById("homeScreen")).not.toBeNull();
+    // 03待機中・D-11一覧・設定・オンボーディング・詳細(ブリッジ)
+    for (const [hash, id] of [
+      ["#/standby", "standbyScreen"],
+      ["#/proposals", "proposalsScreen"],
+      ["#/matched", "matchedScreen"],
+      ["#/settings", "settingsScreen"],
+      ["#/onboarding", "onboardingScreen"],
+      ["#/latches/11111111-1111-4111-8111-111111111111", "detailScreen"],
     ]) {
+      await go(hash);
       expect(document.getElementById(id)).not.toBeNull();
     }
+    await go("#/");
+    expect(document.getElementById("homeScreen")).not.toBeNull();
     // 旧workspace(2カラム入力+預け方サイドバー)は廃止済み
     expect(document.querySelector(".workspace")).toBeNull();
   });
@@ -90,16 +100,19 @@ describe("シェルの構成(App描画)", () => {
 });
 
 describe("シェルの配線(App描画・ルーターとトークンパネル)", () => {
-  it("hash変更で画面sectionが切り替わる(ルーターがReactのスケルトンを配線する)", async () => {
+  it("hash変更で画面sectionが切り替わる(parseHash契約をReactが消費する)", async () => {
     renderApp();
-    const home = document.getElementById("homeScreen");
-    const standby = document.getElementById("standbyScreen");
-    expect(home.hidden).toBe(false);
+    expect(document.getElementById("homeScreen")).not.toBeNull();
     window.location.hash = "#/standby";
     window.dispatchEvent(new Event("hashchange"));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(home.hidden).toBe(true);
-    expect(standby.hidden).toBe(false);
+    await act(async () => {});
+    expect(document.getElementById("homeScreen")).toBeNull(); // 非activeは条件マウントから外れる
+    expect(document.getElementById("standbyScreen")).not.toBeNull();
+    window.location.hash = "#/";
+    window.dispatchEvent(new Event("hashchange"));
+    await act(async () => {});
+    expect(document.getElementById("homeScreen")).not.toBeNull();
+    expect(document.getElementById("standbyScreen")).toBeNull();
   });
 
   it("トークン未設定ではトークンパネルが開き・接続ボタンがある", () => {
