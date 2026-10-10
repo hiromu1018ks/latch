@@ -53,119 +53,169 @@
       <p class="token-error" id="tokenError" role="status" hidden></p>
     </section>
 
-    <main id="main" tabindex="-1" class="page-main">
-      <div id="homeScreen">
-        <!-- 暫定表示: 旧入力画面・一覧。01/02への再構成はPhase 2 -->
-        <section class="workspace" aria-label="新しいIntent">
-          <section class="intent-editor" aria-labelledby="page-title">
-            <div class="section-kicker"><span></span>NEW INTENT</div>
-            <h1 id="page-title">やりたいことを、<br class="mobile-break" />一文だけ。</h1>
+    <main id="main" tabindex="-1">
+      <!-- 01 預ける(ホーム) — UI v2 Phase 2 -->
+      <div class="page-main" id="homeScreen">
+        <div class="haze haze-home" aria-hidden="true"></div>
 
-            <div class="intent-field">
-              <textarea id="intentText" aria-label="やりたいこと" maxlength="300" rows="4"></textarea>
-              <span class="character-count" id="characterCount">0 / 300</span>
-            </div>
+        <section class="compose-section" aria-labelledby="h-compose">
+          <p class="standby-line" id="standbyLine" hidden>
+            <span class="beacon" aria-hidden="true"></span>
+            <span data-standby-count>0件の意思が待機中 — いまは何もしなくて大丈夫</span>
+          </p>
+          <h1 id="h-compose" class="hero-title">どんな条件なら、<br>動きますか。</h1>
+          <p class="hero-lead">ひとこと預けるだけで、探す必要はありません。条件が揃った瞬間に、相手と機会のほうから届きます。</p>
 
-            <section class="conditions" aria-labelledby="conditions-title">
-              <div class="section-heading">
-                <span aria-hidden="true"></span>
-                <h2 id="conditions-title"><b>LATCH</b>が読み取った条件</h2>
+          <div class="composer">
+            <label for="intentText" class="composer-label">条件をひとことで</label>
+            <textarea id="intentText" rows="3" maxlength="300" aria-describedby="readStatus" placeholder="例：今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい"></textarea>
+
+            <div class="read-section">
+              <p class="read-head"><span class="read-dot" aria-hidden="true"></span>LATCHの読み取り（入力に合わせて更新）</p>
+              <div id="readStatus" aria-live="polite" class="read-status">
+                <div id="readChips" class="read-chips"></div>
+                <span class="read-guide" data-guide hidden>時間・場所・人数・金額などを書くと、ここで読み取ります</span>
+                <span class="read-noread" data-noread hidden>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path></svg>
+                  <span>まだ条件を読み取れません。「今日20時以降」「天文館で」「3人」「5,000円まで」のように、時間・場所・人数・金額のどれかを足してみてください。</span>
+                </span>
               </div>
-
-              <div class="condition-list" id="conditionList"></div>
-
-              <p class="required-note" id="requiredNote" hidden>時間・場所・目的を指定すると預けられます</p>
               <p class="parse-error" id="parseError" role="alert" hidden></p>
-
-              <form class="add-row" id="addConditionForm" hidden>
-                <select id="newConditionLabel" aria-label="条件の種類">
-                  <option>その他</option>
-                  <option>曜日</option>
-                  <option>移動</option>
-                  <option>雰囲気</option>
-                </select>
-                <input id="newConditionValue" placeholder="条件を入力" aria-label="追加する条件" />
-                <button type="submit" aria-label="条件を追加"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
-                <button type="button" id="cancelAdd" aria-label="追加をやめる"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
-              </form>
-              <button class="add-condition" id="addConditionButton" type="button">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-                条件を追加
-              </button>
-            </section>
-          </section>
-
-          <aside class="deposit-settings" aria-labelledby="settings-title">
-            <div class="section-heading settings-heading">
-              <span aria-hidden="true"></span>
-              <h2 id="settings-title">預け方</h2>
             </div>
 
-            <div class="setting-group">
-              <label for="expiry"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>有効期限(入力後に選べます)</label>
-              <div class="select-wrap">
-                <select id="expiry" disabled></select>
+            <div class="composer-foot">
+              <div class="composer-foot-left">
+                <p class="lock-line">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+                  <span>成立するまで、この条件は誰にも見えません</span>
+                </p>
+                <button type="button" class="ghost draft-button" id="draftButton">下書きに保存</button>
+              </div>
+              <div class="cta-wrap">
+                <button type="button" class="cta read-button" id="readButton" aria-describedby="ctaHelp">
+                  <span class="cta-label">読み解く</span>
+                </button>
+                <span class="cta-help" id="ctaHelp">条件を書くと、読み解けます</span>
               </div>
             </div>
+          </div>
 
-            <div class="setting-group">
-              <label for="privacy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>公開設定</label>
-              <div class="select-wrap">
-                <select id="privacy">
-                  <option>条件一致までは非公開</option>
-                  <option>候補にだけ概要を表示</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="setting-group">
-              <label for="notification"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>お知らせ</label>
-              <div class="select-wrap">
-                <select id="notification">
-                  <option>一致したときだけ</option>
-                  <option>近い候補も知らせる</option>
-                  <option>通知しない</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="privacy-note">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
-              <p>相手の名前やプロフィールは、<br />全員が承認するまで表示しません。</p>
-            </div>
-
-            <div class="actions-panel">
-              <button class="draft-button" id="draftButton" type="button">
-                下書き保存
-              </button>
-              <button class="submit-button" id="submitButton" type="button">
-                <span>このIntentを預ける</span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
-              </button>
-              <span class="shortcut">⌘ Enter</span>
-            </div>
-
-            <p class="form-error" id="globalError" role="alert" hidden></p>
-          </aside>
+          <div class="examples">
+            <p class="examples-label">こんな預け方もできます</p>
+            <div class="example-chips" id="exampleChips"></div>
+          </div>
         </section>
 
-        <!-- 暫定表示: 候補・成立済み一覧(Phase 3/4でD-11の簡易一覧画面へ) -->
-        <section class="latch-section" id="candidateSection" aria-labelledby="candidateTitle">
-          <div class="section-heading"><span aria-hidden="true"></span><h2 id="candidateTitle"><b>LATCH</b>候補</h2></div>
-          <div class="latch-list" id="candidateList"></div>
-          <button class="more-button" id="moreButton" type="button" hidden>もっと見る</button>
-        </section>
-
-        <section class="latch-section" id="matchedSection" aria-labelledby="matchedTitle">
-          <div class="section-heading"><span aria-hidden="true"></span><h2 id="matchedTitle">成立済み<b>LATCH</b></h2></div>
-          <div class="latch-list" id="matchedList"></div>
+        <section class="wait-section" id="waitSection" aria-labelledby="h-wait">
+          <div class="wait-head">
+            <div class="wait-title">
+              <h2 id="h-wait" class="wait-heading">待機中の意思</h2>
+              <span class="wait-sub">あなたが預けて、まだ成立していない条件</span>
+            </div>
+            <a class="wait-all" href="#/standby">すべて見る
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+            </a>
+          </div>
+          <div class="intent-grid" id="intentCards"></div>
         </section>
       </div>
 
-      <!-- Phase 2で02「読み解き確認」を実装 -->
-      <section class="placeholder-view" id="confirmScreen" aria-labelledby="confirmTitle" hidden>
-        <h1 id="confirmTitle">読み解き確認</h1>
-        <p>この画面は準備中です。条件の確認は、今しばらくお待ちください。</p>
+      <!-- 02 読み解き確認 — UI v2 Phase 2 -->
+      <section class="page-main page-main--confirm" id="confirmScreen" hidden>
+        <div class="haze haze-confirm" aria-hidden="true"></div>
+
+        <div class="confirm-head">
+          <ol class="steps" aria-label="預けるまでの手順">
+            <li class="step done">
+              <span class="step-check" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></span>
+              <span>書く<span class="vh">（完了）</span></span>
+            </li>
+            <li class="step now" aria-current="step">
+              <span class="step-line" aria-hidden="true"></span>
+              <span class="step-no" aria-hidden="true">02</span>
+              <span>読み解きを確認<span class="vh">（現在の手順）</span></span>
+            </li>
+            <li class="step todo">
+              <span class="step-line" aria-hidden="true"></span>
+              <span class="step-no" aria-hidden="true">03</span>
+              <span>預ける</span>
+            </li>
+          </ol>
+          <h1 class="confirm-title">こう読み解きました。</h1>
+          <p class="confirm-lead">ずれていたら、ここで直してください。確認して預けたら、あとは待つだけです。</p>
+        </div>
+
+        <div class="confirm-grid">
+          <div class="confirm-col">
+            <section class="card words-card" aria-labelledby="h-words">
+              <div class="card-head-row">
+                <h2 id="h-words" class="card-title">あなたの言葉</h2>
+                <a class="rewrite-link" href="#/" data-action="rewrite">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>
+                  書き直す
+                </a>
+              </div>
+              <p class="words-text" id="wordsText"></p>
+              <p class="words-note">番号は、読み取った条件の番号に対応しています</p>
+            </section>
+
+            <section class="card privacy-card" aria-labelledby="h-privacy">
+              <h2 id="h-privacy" class="card-title">公開範囲と通知</h2>
+              <ul class="privacy-list">
+                <li class="privacy-item">
+                  <span class="privacy-ic">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 6.1A9.6 9.6 0 0 1 12 6c5 0 8.5 4.5 9 6-.3.8-1.2 2.3-2.7 3.6M6.4 7.6C4.5 8.9 3.3 10.8 3 12c.5 1.5 4 6 9 6 1.4 0 2.6-.3 3.7-.8"></path><path d="M9.9 10a3 3 0 0 0 4.1 4.1"></path></svg>
+                  </span>
+                  <div class="privacy-body">
+                    <p class="privacy-t">成立するまで、誰にも表示されません</p>
+                    <p class="privacy-s">双方が「参加する」と答えたときにだけ、はじめてお互いが見えます。</p>
+                  </div>
+                </li>
+                <li class="privacy-item">
+                  <span class="privacy-ic">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+                  </span>
+                  <div class="privacy-body">
+                    <p class="privacy-t">通知は「LATCH候補があります」の一文だけ</p>
+                    <p class="privacy-s">ロック画面に「飲みたい」という意思が出ることはありません。</p>
+                  </div>
+                </li>
+                <li class="privacy-item">
+                  <span class="privacy-ic">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>
+                  </span>
+                  <div class="privacy-body">
+                    <p class="privacy-t"><span id="expiryLabel">—</span> に自動で取り下げ</p>
+                    <p class="privacy-s">時間を過ぎた条件は、静かに消えます。</p>
+                    <label for="expiry" class="expiry-label">取り下げる時刻
+                      <select id="expiry" class="field" disabled></select>
+                    </label>
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </div>
+
+          <section class="card slots-card" aria-labelledby="h-slots">
+            <div class="slots-head">
+              <h2 id="h-slots" class="card-title">読み取った条件</h2>
+              <span aria-live="polite" class="slot-summary"><span class="dot" id="slotSummaryDot" aria-hidden="true"></span><span id="slotSummary">5項目 · 確認が必要なもの 1件</span></span>
+            </div>
+            <div id="confirmRows"></div>
+            <div class="extras">
+              <p class="extras-label">足せる条件（任意）— 足すほど、届く候補は少なくなります</p>
+              <div class="extra-chips" id="extraChips"></div>
+            </div>
+            <div class="confirm-actions">
+              <button type="button" class="cta deposit-button" id="depositButton" aria-describedby="depositHelp">
+                <span class="cta-label">この条件で預ける</span>
+              </button>
+              <a class="ghost rewrite-button" href="#/" data-action="rewrite">書き直す</a>
+            </div>
+            <p class="cta-help strong" id="depositHelp">「03 人数」の確認に答えると、預けられます。</p>
+            <p class="form-error" id="confirmError" role="alert" hidden></p>
+          </section>
+        </div>
       </section>
 
       <!-- Phase 3で03「待機中」を実装 -->
@@ -207,18 +257,7 @@
 
     <dialog class="dlg" id="appDialog"></dialog>
 
-    <!-- 暫定: 旧モーダル群(Phase 2〜5で<dialog class="dlg">へ統合) -->
-    <div class="modal-backdrop" id="confirmationModal" role="presentation" hidden>
-      <section class="confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
-        <button class="modal-close" id="modalClose" type="button" aria-label="閉じる"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
-        <div class="confirmation-mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></div>
-        <p class="section-kicker centered"><span></span>INTENT SAVED</p>
-        <h2 id="confirmation-title">あとは、置いておくだけ。</h2>
-        <p>条件が重なる候補が見つかったときだけ、LATCHがお知らせします。</p>
-        <div class="confirmation-summary"></div>
-        <button class="return-button" id="returnButton" type="button">Intentを確認する</button>
-      </section>
-    </div>
+    <!-- 暫定: 通報・ブロックの旧モーダル(Phase 4/5で<dialog class="dlg">へ統合) -->
     <div class="modal-backdrop" id="reportModal" role="presentation" hidden></div>
     <div class="modal-backdrop" id="unblockModal" role="presentation" hidden></div>
     <div class="modal-backdrop" id="blockModal" role="presentation" hidden></div>

@@ -1,19 +1,23 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  EXTRAS,
   NG_NOTE_TEXT,
   REQUIRED_NOTE_TEXT,
-  attachAddCondition,
   beginRowEdit,
-  renderConditions,
+  readSlots,
+  renderExtras,
+  renderRows,
+  rowModels,
 } from "../src/intent/conditions.js";
 import { applyParseResult, createFormState } from "../src/intent/state.js";
 
-const NOW = "2026-09-27T12:00:00+09:00";
+// now = JST 2026-10-10(土) 12:00
+const NOW = "2026-10-10T12:00:00+09:00";
 
 const PARSED = {
   category: { primary: "drinking", secondary: null },
   alcohol_involved: true,
-  time: { start: "2026-09-27T20:00:00+09:00", end: null },
+  time: { start: "2026-10-10T20:00:00+09:00", end: null },
   location: { name: "天文館", radius_m: null },
   budget: { max: 5000, currency: "JPY" },
   participants: { min: 2, max: 4 },
@@ -23,194 +27,251 @@ const PARSED = {
 };
 
 beforeEach(() => {
-  document.body.innerHTML = '<div class="condition-list" id="conditionList"></div>';
+  document.body.innerHTML = '<div id="confirmRows"></div><div id="extraChips"></div>';
 });
 
-const listEl = () => document.querySelector("#conditionList");
+const rowsEl = () => document.querySelector("#confirmRows");
+const extrasEl = () => document.querySelector("#extraChips");
 
-describe("renderConditions(design §2.5・§2.7・§2.8)", () => {
-  it("parse結果から5行+soft行+NG行を構成する(文言はプロトタイプ固定)", () => {
+describe("readSlots(01 composerの読み取りchips)", () => {
+  it("値のある行だけ(label+value)を返す(v2様式の値)", () => {
     const state = applyParseResult(createFormState(), PARSED);
-    renderConditions({ listEl: listEl(), state, now: NOW });
-    const rows = [...listEl().querySelectorAll(".condition-row")];
-    expect(rows.map((r) => r.dataset.label)).toEqual([
-      "時間",
-      "場所",
-      "人数",
-      "予算",
-      "目的",
-      "その他",
-      "NG",
+    expect(readSlots(state, NOW)).toEqual([
+      { key: "time", label: "時間", value: "今日 10/10（土）20:00〜" },
+      { key: "location", label: "場所", value: "天文館" },
+      { key: "participants", label: "人数", value: "2〜4人" },
+      { key: "budget", label: "予算", value: "1人 5,000円まで" },
+      { key: "category", label: "目的", value: "飲み" },
     ]);
-    const text = (label) =>
-      rows.find((r) => r.dataset.label === label).querySelector(".condition-value").textContent;
-    expect(text("時間")).toBe("今日 20:00以降");
-    expect(text("場所")).toBe("天文館");
-    expect(text("人数")).toBe("2〜4人");
-    expect(text("予算")).toBe("ひとり5,000円まで");
-    expect(text("目的")).toBe("飲み");
-    expect(text("その他")).toBe("軽く飲みたい");
-    expect(text("NG")).toBe("会社関係の人は避けたい");
   });
 
-  it("必須3欠落行は催促状態(data-missing・「指定なし」)", () => {
-    renderConditions({ listEl: listEl(), state: createFormState(), now: NOW });
-    const missing = [...listEl().querySelectorAll('.condition-row[data-missing="true"]')];
-    expect(missing.map((r) => r.dataset.label)).toEqual(["時間", "場所", "目的"]);
-    for (const row of missing) {
-      expect(row.querySelector(".condition-value").textContent).toBe("指定なし");
-    }
+  it("空状態は0件(ガイド文を表示する側の条件)", () => {
+    expect(readSlots(createFormState(), NOW)).toEqual([]);
   });
+});
 
-  it("soft行はplusアイコン・追加行と同型(SVGはプロトタイプ由来)", () => {
+describe("renderRows(02の読み取った条件5行)", () => {
+  it("番号+アイコン+ラベル+値+サブの5行を構成する(文言はプロトタイプ02準拠)", () => {
     const state = applyParseResult(createFormState(), PARSED);
-    renderConditions({ listEl: listEl(), state, now: NOW });
-    const softRow = listEl().querySelector('[data-label="その他"]');
-    expect(softRow.querySelector(".condition-icon svg").dataset.icon).toBe("plus");
+    renderRows({ listEl: rowsEl(), state, nowIso: NOW });
+    const rows = [...rowsEl().querySelectorAll(".slot-row")];
+    expect(rows.map((r) => r.dataset.key)).toEqual([
+      "time",
+      "location",
+      "participants",
+      "budget",
+      "category",
+    ]);
+    const row = (key) => rows.find((r) => r.dataset.key === key);
+    expect(row("time").querySelector(".slot-no").textContent).toBe("01");
+    expect(row("time").querySelector(".slot-value").textContent).toBe(
+      "今日 10/10（土）20:00〜",
+    );
+    expect(row("time").querySelector(".slot-sub").textContent).toBe(
+      "終わりの指定なし · 有効期限まで受け付け",
+    );
+    expect(row("budget").querySelector(".slot-value").textContent).toBe("1人 5,000円まで");
+    expect(row("budget").querySelector(".slot-sub").textContent).toBe(
+      "1軒目の目安として扱います",
+    );
+    expect(row("time").querySelector(".slot-ic svg").dataset.icon).toBe("clock");
+    expect(row("participants").querySelector(".slot-ic svg").dataset.icon).toBe("people");
   });
 
-  it("NG行はinfoアイコン・data-label=NG・直下に注意文言(02 D-04)", () => {
+  it("必須3欠落行はdata-missing・人数行にはseg(D-04)がある", () => {
+    renderRows({ listEl: rowsEl(), state: createFormState(), nowIso: NOW });
+    const missing = [...rowsEl().querySelectorAll('.slot-row[data-missing="true"]')];
+    expect(missing.map((r) => r.dataset.key)).toEqual(["time", "location", "category"]);
+    const people = rowsEl().querySelector('[data-key="participants"]');
+    const seg = people.querySelector('.seg input[name="includes-owner"]');
+    expect(seg).not.toBeNull();
+    expect(people.querySelector(".people-tag").textContent).toBe("要確認");
+  });
+
+  it("人数確認の回答で値・サブ・タグが変わる(「含む」=そのまま/「含まない」=あなた＋)", () => {
+    const answered = (inc) => {
+      const state = {
+        ...applyParseResult(createFormState(), PARSED),
+        participantsIncludesOwner: inc,
+      };
+      renderRows({ listEl: rowsEl(), state, nowIso: NOW });
+      const people = rowsEl().querySelector('[data-key="participants"]');
+      return {
+        value: people.querySelector(".slot-value").textContent,
+        sub: people.querySelector(".slot-sub").textContent,
+        tag: people.querySelector(".people-tag").textContent,
+        boxClass: people.querySelector(".people-box").className,
+      };
+    };
+    expect(answered(true)).toMatchObject({
+      value: "2〜4人（あなたを含む）",
+      sub: "相手は1〜3人",
+      tag: "確認済み",
+    });
+    expect(answered(true).boxClass).toContain("ok");
+    expect(answered(false)).toMatchObject({
+      value: "あなた＋2〜4人",
+      sub: "合計3〜5人",
+      tag: "確認済み",
+    });
+    expect(answered(null).value).toBe("2〜4人");
+  });
+
+  it("判定不能NGは5行の下にstb注記箱(注意文言は固定文字列)", () => {
     const state = applyParseResult(createFormState(), PARSED);
-    renderConditions({ listEl: listEl(), state, now: NOW });
-    const ngRow = listEl().querySelector('[data-label="NG"]');
-    expect(ngRow.querySelector(".condition-icon svg").dataset.icon).toBe("info");
-    const note = ngRow.querySelector(".ng-note");
-    expect(note.textContent).toBe(NG_NOTE_TEXT);
+    renderRows({ listEl: rowsEl(), state, nowIso: NOW });
+    const box = rowsEl().querySelector(".ng-box");
+    expect(box.textContent).toContain("会社関係の人は避けたい");
+    expect(box.textContent).toContain(NG_NOTE_TEXT);
     expect(NG_NOTE_TEXT).toBe("この条件は確実には除外できません。参考条件として扱います");
   });
 
   it("各行に編集ボタン(aria-label)がある", () => {
     const state = applyParseResult(createFormState(), PARSED);
-    renderConditions({ listEl: listEl(), state, now: NOW });
-    for (const row of listEl().querySelectorAll(".condition-row")) {
+    renderRows({ listEl: rowsEl(), state, nowIso: NOW });
+    for (const row of rowsEl().querySelectorAll(".slot-row")) {
       const button = row.querySelector(".edit-button");
-      expect(button).not.toBeNull();
       expect(button.getAttribute("aria-label")).toBe(`${row.dataset.label}を編集`);
     }
   });
 
   it("再描画で行が重複しない(replaceChildren)", () => {
     const state = applyParseResult(createFormState(), PARSED);
-    renderConditions({ listEl: listEl(), state, now: NOW });
-    renderConditions({ listEl: listEl(), state, now: NOW });
-    expect(listEl().querySelectorAll(".condition-row").length).toBe(7);
+    renderRows({ listEl: rowsEl(), state, nowIso: NOW });
+    renderRows({ listEl: rowsEl(), state, nowIso: NOW });
+    expect(rowsEl().querySelectorAll(".slot-row").length).toBe(5);
   });
 });
 
-describe("固定文言", () => {
-  it("催促注記の文言", () => {
-    expect(REQUIRED_NOTE_TEXT).toBe("時間・場所・目的を指定すると預けられます");
-  });
-});
-
-describe("beginRowEdit(タイプ別エディタ・design §2.5)", () => {
+describe("beginRowEdit(テキスト1行input・プロトタイプ02)", () => {
   const editState = () => applyParseResult(createFormState(), PARSED);
 
-  // main.jsの委譲リスナーを介さずbeginRowEditを直接呼ぶ(rerenderは再描画のみ)
-  const openEditor = (state, label) => {
-    renderConditions({ listEl: listEl(), state, now: NOW });
-    const row = listEl().querySelector(`[data-label="${label}"]`);
+  const openEditor = (state, key) => {
+    renderRows({ listEl: rowsEl(), state, nowIso: NOW });
+    const row = rowsEl().querySelector(`[data-key="${key}"]`);
     beginRowEdit({
       rowEl: row,
       state,
-      rerender: () => renderConditions({ listEl: listEl(), state, now: NOW }),
+      nowIso: NOW,
+      rerender: () => renderRows({ listEl: rowsEl(), state, nowIso: NOW }),
     });
-    return listEl().querySelector(`[data-label="${label}"]`);
+    return rowsEl().querySelector(`[data-key="${key}"]`);
   };
 
-  it("時間: datetime-localで確定するとstartがtz-aware ISOへ書き換わる", () => {
+  it("時間: 「明日 20:30」で確定するとstartが翌日JSTのISOへ書き換わる", () => {
     const state = editState();
-    const row = openEditor(state, "時間");
-    const input = row.querySelector('input[type="datetime-local"]');
-    expect(input.value).toBe("2026-09-27T20:00"); // ISO→datetime-local(JST)
-    input.value = "2026-09-28T19:30";
-    row.querySelector(".condition-edit").requestSubmit();
-    expect(state.structured.time.start).toBe("2026-09-28T19:30:00+09:00");
+    const row = openEditor(state, "time");
+    row.querySelector("input").value = "明日 20:30";
+    row.querySelector(".slot-edit").requestSubmit();
+    expect(state.structured.time.start).toBe("2026-10-11T20:30:00+09:00");
   });
 
-  it("時間: 未入力で確定するとstart=nullへ戻る(催促状態・Review Focus 4)", () => {
+  it("時間: 未入力で確定するとstart=nullへ戻る(催促状態)", () => {
     const state = editState();
-    const row = openEditor(state, "時間");
-    row.querySelector('input[type="datetime-local"]').value = "";
-    row.querySelector(".condition-edit").requestSubmit();
+    const row = openEditor(state, "time");
+    row.querySelector("input").value = "";
+    row.querySelector(".slot-edit").requestSubmit();
     expect(state.structured.time.start).toBe(null);
   });
 
-  it("場所: name+半径(任意)を書き戻す", () => {
+  it("場所: テキストをnameへ書き戻す", () => {
     const state = editState();
-    const row = openEditor(state, "場所");
-    row.querySelector('input[name="name"]').value = "天文館周辺";
-    row.querySelector('input[name="radius"]').value = "2000";
-    row.querySelector(".condition-edit").requestSubmit();
-    expect(state.structured.location).toEqual({ name: "天文館周辺", radius_m: 2000 });
+    const row = openEditor(state, "location");
+    row.querySelector("input").value = "天文館周辺";
+    row.querySelector(".slot-edit").requestSubmit();
+    expect(state.structured.location.name).toBe("天文館周辺");
   });
 
-  it("人数: min/max数値(1〜4)を書き戻す・空はnull", () => {
-    const state = editState();
-    const row = openEditor(state, "人数");
-    row.querySelector('input[name="min"]').value = "3";
-    row.querySelector('input[name="max"]').value = "";
-    row.querySelector(".condition-edit").requestSubmit();
-    expect(state.structured.participants).toEqual({ min: 3, max: null });
+  it("人数: 「3〜5人」を書き戻すとsegが要確認へ戻る(人数が変わったため)", () => {
+    const state = { ...editState(), participantsIncludesOwner: true };
+    const row = openEditor(state, "participants");
+    row.querySelector("input").value = "3〜5人";
+    row.querySelector(".slot-edit").requestSubmit();
+    expect(state.structured.participants).toEqual({ min: 3, max: 5 });
+    expect(state.participantsIncludesOwner).toBe(null);
   });
 
-  it("予算: max数値を書き戻す・空はnull", () => {
+  it("人数: 読み取れない入力は現在値を保持(再描画で戻る)", () => {
     const state = editState();
-    const row = openEditor(state, "予算");
-    row.querySelector('input[name="max"]').value = "8000";
-    row.querySelector(".condition-edit").requestSubmit();
+    const row = openEditor(state, "participants");
+    row.querySelector("input").value = "たくさん";
+    row.querySelector(".slot-edit").requestSubmit();
+    expect(state.structured.participants).toEqual({ min: 2, max: 4 });
+  });
+
+  it("予算: 「8,000円まで」をmaxへ書き戻す・空はnull", () => {
+    const state = editState();
+    const row = openEditor(state, "budget");
+    row.querySelector("input").value = "8,000円まで";
+    row.querySelector(".slot-edit").requestSubmit();
     expect(state.structured.budget.max).toBe(8000);
+
+    const row2 = openEditor(state, "budget");
+    row2.querySelector("input").value = "";
+    row2.querySelector(".slot-edit").requestSubmit();
+    expect(state.structured.budget.max).toBe(null);
   });
 
-  it("目的: primaryのselect+secondaryテキスト", () => {
+  it("目的: 種別の語はprimary・自由文はsecondaryへ", () => {
     const state = editState();
-    const row = openEditor(state, "目的");
-    row.querySelector("select").value = "meal";
-    row.querySelector('input[name="secondary"]').value = "焼肉";
-    row.querySelector(".condition-edit").requestSubmit();
-    expect(state.structured.category).toEqual({ primary: "meal", secondary: "焼肉" });
-  });
-
-  it("soft行: テキスト編集でsoftRowsが書き換わる", () => {
-    const state = editState();
-    const row = openEditor(state, "その他");
-    row.querySelector("input").value = "静かなお店";
-    row.querySelector(".condition-edit").requestSubmit();
-    expect(state.softRows[0].text).toBe("静かなお店");
-  });
-
-  it("NG行: テキスト編集でngRowsが書き換わる(削除UIなし・design §2.8)", () => {
-    const state = editState();
-    const row = openEditor(state, "NG");
-    row.querySelector("input").value = "取引先の人は避けたい";
-    row.querySelector(".condition-edit").requestSubmit();
-    expect(state.ngRows[0].text).toBe("取引先の人は避けたい");
+    const row = openEditor(state, "category");
+    row.querySelector("input").value = "焼肉";
+    row.querySelector(".slot-edit").requestSubmit();
+    expect(state.structured.category).toEqual({ primary: "drinking", secondary: "焼肉" });
   });
 
   it("Escapeで取り消し(stateは不変)", () => {
     const state = editState();
-    const row = openEditor(state, "場所");
-    row.querySelector('input[name="name"]').value = "別の場所";
-    row.querySelector(".condition-edit").dispatchEvent(
+    const row = openEditor(state, "location");
+    row.querySelector("input").value = "別の場所";
+    row.querySelector(".slot-edit").dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     );
     expect(state.structured.location.name).toBe("天文館");
   });
 });
 
-describe("attachAddCondition(条件の追加)", () => {
-  it("フォーム送信でsoftRowsへtextのみ追加される(ラベルはUI補助)", () => {
-    document.body.innerHTML += `
-      <form class="add-row" id="addConditionForm">
-        <select id="newConditionLabel"><option>雰囲気</option></select>
-        <input id="newConditionValue" aria-label="追加する条件" />
-      </form>`;
-    const state = applyParseResult(createFormState(), PARSED);
-    const form = document.querySelector("#addConditionForm");
-    attachAddCondition({ formEl: form, state, rerender: () => {} });
-    document.querySelector("#newConditionValue").value = "落ち着いた席";
-    form.requestSubmit();
-    expect(state.softRows.map((r) => r.text)).toContain("落ち着いた席");
-    expect(JSON.stringify(state.softRows)).not.toContain("雰囲気"); // ラベルは格納しない
+describe("renderExtras(足せる条件トグル)", () => {
+  it("固定3値のトグルchips(プロトタイプ02)・押下でon/offが反転する", () => {
+    expect(EXTRAS.map((e) => e.label)).toEqual([
+      "禁煙の店",
+      "2時間くらいで解散",
+      "全員はじめまして",
+    ]);
+    const picked = [];
+    const rerender = () =>
+      renderExtras({
+        wrapEl: extrasEl(),
+        picked,
+        onToggle: (label) => {
+          picked.splice(0, picked.length, ...(picked.includes(label) ? [] : [label]));
+          rerender();
+        },
+      });
+    rerender();
+    const chip = extrasEl().querySelectorAll(".extra-chip")[0];
+    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    chip.click();
+    expect(picked).toEqual(["禁煙の店"]);
+    expect(
+      extrasEl().querySelectorAll(".extra-chip")[0].getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+});
+
+describe("rowModels(行モデルの純関数)", () => {
+  it("未回答の人数サブは催促文・必須欠落はvalue=指定なし", () => {
+    const rows = rowModels(createFormState(), NOW);
+    expect(rows.find((r) => r.key === "participants").sub).toBe(
+      "あなたを含むかどうかを確認してください",
+    );
+    expect(rows.find((r) => r.key === "time").value).toBe("指定なし");
+    expect(rows.find((r) => r.key === "time").missing).toBe(true);
+  });
+});
+
+describe("固定文言", () => {
+  it("催促注記の文言", () => {
+    expect(REQUIRED_NOTE_TEXT).toBe("時間・場所・目的を指定すると預けられます");
   });
 });

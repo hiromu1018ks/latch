@@ -12,25 +12,38 @@ describe("frontend雛形", () => {
     expect(html()).toContain('src="/src/main.js"');
   });
 
-  it("入力画面の主要IDを維持する(暫定表示・Phase 2で01/02へ再構成)", () => {
+  it("01ホームの主要ID(UI v2 Phase 2・composer+chips+例文+待機中の意思)", () => {
     const ids = [
       "intentText",
-      "characterCount",
-      "conditionList",
-      "addConditionButton",
-      "addConditionForm",
-      "newConditionLabel",
-      "newConditionValue",
-      "cancelAdd",
-      "expiry",
-      "privacy",
-      "notification",
-      "submitButton",
+      "readStatus",
+      "readChips",
+      "parseError",
+      "readButton",
       "draftButton",
+      "ctaHelp",
+      "exampleChips",
+      "intentCards",
+      "standbyLine",
+      "waitSection",
       "toast",
-      "confirmationModal",
-      "modalClose",
-      "returnButton",
+    ];
+    for (const id of ids) {
+      expect(html()).toContain(`id="${id}"`);
+    }
+  });
+
+  it("02読み解き確認の主要ID(3ステップ・あなたの言葉・5行・seg・期限select)", () => {
+    const ids = [
+      "confirmScreen",
+      "wordsText",
+      "confirmRows",
+      "extraChips",
+      "expiry",
+      "expiryLabel",
+      "slotSummary",
+      "depositButton",
+      "depositHelp",
+      "confirmError",
     ];
     for (const id of ids) {
       expect(html()).toContain(`id="${id}"`);
@@ -44,20 +57,66 @@ describe("frontend雛形", () => {
   });
 });
 
+describe("01・02の構成(プロトタイプが正)", () => {
+  it("ヒーロー「どんな条件なら、動きますか。」とcomposerのplaceholder", () => {
+    expect(html()).toContain("どんな条件なら、<br>動きますか。");
+    expect(html()).toContain(
+      'placeholder="例：今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい"',
+    );
+  });
+
+  it("textareaは300字上限を維持し文字数カウンタは存在しない(プロトタイプ01)", () => {
+    expect(html()).toMatch(/<textarea id="intentText"[^>]*maxlength="300"/);
+    expect(html()).not.toContain("characterCount");
+  });
+
+  it("読み取りchipsはaria-live=polite・未読み取りガイドの2状態", () => {
+    expect(html()).toContain('id="readStatus" aria-live="polite"');
+    expect(html()).toContain("data-guide");
+    expect(html()).toContain("data-noread");
+    expect(html()).toContain("まだ条件を読み取れません");
+  });
+
+  it("例文4種のchips枠と「読み解く」CTA", () => {
+    expect(html()).toContain("こんな預け方もできます");
+    expect(html()).toContain('id="exampleChips"');
+    expect(html()).toContain('id="readButton"');
+    expect(html()).toContain("<span class=\"cta-label\">読み解く</span>");
+  });
+
+  it("02は3ステップインジケータと「こう読み解きました。」", () => {
+    expect(html()).toContain('class="steps"');
+    expect(html()).toContain("書く");
+    expect(html()).toContain("読み解きを確認");
+    expect(html()).toContain("預ける");
+    expect(html()).toContain("こう読み解きました。");
+    expect(html()).toContain("あなたの言葉");
+    expect(html()).toContain("公開範囲と通知");
+    expect(html()).toContain("読み取った条件");
+    expect(html()).toContain("<span class=\"cta-label\">この条件で預ける</span>");
+  });
+
+  it("公開設定・通知設定のselectは存在しない(D-02: 既定値で確定送信)", () => {
+    expect(html()).not.toContain('id="privacy"');
+    expect(html()).not.toContain('id="notification"');
+  });
+
+  it("旧確認モーダルは存在しない(02→03遷移に置き換わった)", () => {
+    expect(html()).not.toContain("confirmationModal");
+    expect(html()).not.toContain("returnButton");
+    expect(html()).not.toContain("modalClose");
+  });
+});
+
 describe("本実装の構成(Task 11)", () => {
-  it("トークンパネル・催促注記・エラー表示の要素がある", () => {
-    for (const id of ["tokenPanel", "idpToken", "tokenConnect", "tokenError", "requiredNote", "parseError", "globalError"]) {
+  it("トークンパネル・エラー表示の要素がある", () => {
+    for (const id of ["tokenPanel", "idpToken", "tokenConnect", "tokenError", "parseError"]) {
       expect(html()).toContain(`id="${id}"`);
     }
   });
 
-  it("expiry selectは初期disabled(選択肢はAPI応答から構成)", () => {
-    expect(html()).toMatch(/<select id="expiry" disabled><\/select>/);
-  });
-
-  it("初期テキストは空(サンプル文言を残さない・文言対応表)", () => {
-    expect(html()).toContain('id="characterCount">0 / 300');
-    expect(html()).not.toContain("天文館");
+  it("expiry selectは初期disabled(選択肢はAPI応答から構成・02のカード内)", () => {
+    expect(html()).toMatch(/<select id="expiry" class="field" disabled><\/select>/);
   });
 });
 

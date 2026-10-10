@@ -14,13 +14,15 @@ export const emptyStructured = () => ({
 export const createFormState = () => ({
   rawText: "",
   structured: emptyStructured(),
-  softRows: [], // 「条件を追加」(その他・曜日・移動・雰囲気)とparse由来soft(D-19補足)
+  softRows: [], // parse由来soft(D-19補足)。02の「足せる条件」トグル分は保存時のsoftExtras
   ngRows: [], // 判定不能NG(02 D-04・03 §3)
+  participantsIncludesOwner: null, // 02の人数確認seg(未回答=null・D-04)
   parseStatus: "idle", // idle | in-flight | ok | fallback | error
 });
 
 export const applyParseResult = (state, structuredIntent) => ({
   ...state,
+  participantsIncludesOwner: null, // 再読み取りで人数は変わり得るためsegは要確認へ戻す
   structured: {
     category: { ...structuredIntent.category },
     alcohol_involved: structuredIntent.alcohol_involved,

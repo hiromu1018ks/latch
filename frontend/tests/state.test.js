@@ -30,6 +30,10 @@ describe("初期状態", () => {
   it("テキストが空のとき下書きも不可(raw_textのみ必須)", () => {
     expect(canDraft(createFormState())).toBe(false);
   });
+
+  it("人数確認(D-04)は未回答=nullから始まる", () => {
+    expect(createFormState().participantsIncludesOwner).toBe(null);
+  });
 });
 
 describe("applyParseResult", () => {
@@ -54,6 +58,15 @@ describe("applyParseResult", () => {
     expect(state.structured).not.toHaveProperty("visibility");
     expect(state.structured).not.toHaveProperty("notification_level");
     expect(state.structured).not.toHaveProperty("expires_at");
+  });
+
+  it("再読み取りで人数確認は要確認(null)へ戻る(人数が変わり得るため)", () => {
+    const answered = {
+      ...applyParseResult({ ...createFormState(), rawText: "x" }, PARSED),
+      participantsIncludesOwner: false,
+    };
+    const reparsed = applyParseResult(answered, PARSED);
+    expect(reparsed.participantsIncludesOwner).toBe(null);
   });
 });
 

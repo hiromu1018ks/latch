@@ -8,11 +8,11 @@ beforeEach(() => {
 const select = () => document.querySelector("#expiry");
 
 const DATA = {
+  // D-01: 3択(プロトタイプ02準拠・completion.pyの固定値)
   options: [
-    { label: "今夜 23:30", expires_at: "2026-09-27T23:30:00+09:00", selectable: true },
-    { label: "明日 12:00", expires_at: "2026-09-28T12:00:00+09:00", selectable: true },
-    { label: "明日 23:30", expires_at: "2026-09-28T23:30:00+09:00", selectable: true },
-    { label: "3日後まで", expires_at: "2026-09-30T21:00:00+09:00", selectable: true },
+    { label: "今日 22:00", expires_at: "2026-09-27T22:00:00+09:00", selectable: true },
+    { label: "今日 23:59", expires_at: "2026-09-27T23:59:00+09:00", selectable: true },
+    { label: "明日 5:00", expires_at: "2026-09-28T05:00:00+09:00", selectable: true },
   ],
   default_index: 1,
 };
@@ -41,12 +41,11 @@ describe("applyExpiryOptions", () => {
     expect(idx).toBe(1);
     const options = [...select().options];
     expect(options.map((o) => o.textContent)).toEqual([
-      "今夜 23:30",
-      "明日 12:00",
-      "明日 23:30",
-      "3日後まで",
+      "今日 22:00",
+      "今日 23:59",
+      "明日 5:00",
     ]);
-    expect(options[0].value).toBe("2026-09-27T23:30:00+09:00");
+    expect(options[0].value).toBe("2026-09-27T22:00:00+09:00");
     expect(select().selectedIndex).toBe(1);
   });
 
@@ -67,7 +66,7 @@ describe("applyExpiryOptions", () => {
     };
     const idx = applyExpiryOptions(select(), noDefault);
     expect(idx).toBe(1);
-    expect(select().value).toBe("2026-09-28T12:00:00+09:00");
+    expect(select().value).toBe("2026-09-27T23:59:00+09:00");
   });
 });
 
@@ -75,8 +74,8 @@ describe("selectedExpiry", () => {
   it("選択中のlabelと絶対時刻を返す(クライアントは絶対時刻をexpires_atとして送る)", () => {
     applyExpiryOptions(select(), DATA);
     expect(selectedExpiry(select())).toEqual({
-      label: "明日 12:00",
-      expiresAt: "2026-09-28T12:00:00+09:00",
+      label: "今日 23:59",
+      expiresAt: "2026-09-27T23:59:00+09:00",
     });
   });
 });

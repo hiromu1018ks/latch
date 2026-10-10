@@ -51,6 +51,13 @@ export const createParseFlow = ({ debounceMs = 1000, send, onResult, onError }) 
       if (timer) clearTimeout(timer);
       timer = setTimeout(flush, debounceMs);
     },
+    // debounceを打ち切って即時送信(01のCTA「読み解く」— 入力直後の遷移で
+    // 古いparse結果を使わないために待つ)。同一テキストなら送信せず即完了
+    commit: () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      return flush();
+    },
     retry: () => {
       // flush後はpendingが空のため、直近テキスト(lastText)を再送対象へ戻す
       pending = pending ?? lastText;

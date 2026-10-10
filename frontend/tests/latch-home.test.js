@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { NO_LATCH_TITLE } from "../src/latch/texts.js";
-import {
-  createHome,
-  latchCardHtml,
-  splitStatuses,
-} from "../src/latch/home.js";
+import { createHome, intentCardHtml, splitStatuses } from "../src/latch/home.js";
 
 const LATCH_ID = "11111111-1111-4111-8111-111111111111";
 const fullProposal = {
@@ -30,20 +25,43 @@ const latch = (status, overrides = {}) => ({
   ...overrides,
 });
 
+const INTENT_ID = "aaaaaaaa-1111-4111-8111-111111111111";
+// GET /v1/intents の応答要素(IntentOut・05 §5)
+const intent = (overrides = {}) => ({
+  id: INTENT_ID,
+  status: "active",
+  version: 1,
+  raw_text: "今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい",
+  structured_data: {},
+  structured_intent: {
+    category: { primary: "drinking", secondary: null },
+    time: { start: "2026-10-10T20:00:00+09:00", end: null },
+    location: { name: "天文館", radius_m: null },
+    budget: { max: 5000, currency: "JPY" },
+    participants: { min: 2, max: 4 },
+  },
+  expires_at: "2026-10-10T23:59:00+09:00",
+  created_at: "2026-10-10T11:48:00+09:00",
+  updated_at: "2026-10-10T11:48:00+09:00",
+  ...overrides,
+});
+
+const NOW = "2026-10-10T12:00:00+09:00";
+
 const mountHome = (callImpl) => {
   const client = { call: vi.fn(callImpl) };
   const el = {
-    candidateList: document.createElement("div"),
-    matchedList: document.createElement("div"),
-    moreButton: document.createElement("button"),
+    intentCards: document.createElement("div"),
+    standbyLine: document.createElement("p"),
+    waitSection: document.createElement("section"),
   };
-  el.moreButton.hidden = true;
+  el.standbyLine.innerHTML = '<span class="beacon"></span><span data-standby-count></span>';
   const onCounts = vi.fn();
   const home = createHome({ client, el, onCounts });
   return { client, el, home, onCounts };
 };
 
-describe("splitStatuses(design §2.2・引用#9)", () => {
+describe("splitStatuses(バッジ仕分け・引用#9)", () => {
   it("proposed/partial_accept→候補・matched/completed→成立済み・終了3種は捨てる", () => {
     const { candidates, matched } = splitStatuses([
       latch("proposed"),
@@ -59,71 +77,71 @@ describe("splitStatuses(design §2.2・引用#9)", () => {
   });
 });
 
-describe("latchCardHtml", () => {
-  it("カード行は#/latches/{id}へのリンク", () => {
-    const html = latchCardHtml(latch("proposed"), "2026-10-01T09:00:00+09:00");
-    expect(html).toContain(`href="#/latches/${LATCH_ID}"`);
-    expect(html).toContain("2026-10-01 20:00 天文館周辺"); // 見出し=日時+場所
-    expect(html).toContain("一致度 高");
+describe("intentCardHtml(01待機中の意思カード・プロトタイプ01)", () => {
+  it("カテゴリ+相対時間・原文引用・条件タグ・期限行・待機中pillを組む", () => {
+    const html = intentCardHtml(intent(), NOW);
+    expect(html).toContain(`href="#/standby"`); // Phase 3で候補→04・ほか→03へ接続
+    expect(html).toContain("飲み · 12分前に預けた");
+    expect(html).toContain("「今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい」");
+    expect(html).toContain(">20:00〜<");
+    expect(html).toContain(">天文館<");
+    expect(html).toContain(">2〜4人<");
+    expect(html).toContain(">〜¥5,000<");
+    expect(html).toContain("今日 23:59 まで有効");
+    expect(html).toContain("待機中");
+    expect(html).toContain("静かに待機中");
   });
 
-  it("area_name nullの見出しは日時のみ(人数を行に混ぜない)", () => {
-    const html = latchCardHtml(
-      latch("proposed", { proposal: { ...fullProposal, area_name: null } }),
-      "2026-10-01T09:00:00+09:00",
+  it("expires_at nullは「期限なし」", () => {
+    const html = intentCardHtml(intent({ expires_at: null }), NOW);
+    expect(html).toContain("期限なし");
+  });
+
+  it("raw_textはエスケープされる(XSS対策・所有者への表示のみ)", () => {
+    const html = intentCardHtml(
+      intent({ raw_text: '<img src=x onerror=alert(1)>"&\'' }),
+      NOW,
     );
-    expect(html).toContain("2026-10-01 20:00");
-    expect(html).not.toContain("2026-10-01 20:00 2人");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img");
+  });
+
+  it("候補N件=acc強調カード(proposalCount>0・Phase 3で接続する経路)", () => {
+    const html = intentCardHtml(intent(), NOW, { proposalCount: 2 });
+    expect(html).toContain('class="intent-card lift acc"');
+    expect(html).toContain("候補 2件");
+    expect(html).toContain("候補を見る");
   });
 });
 
-describe("createHome(design §2.2)", () => {
-  it("loadはGET /v1/latches?limit=20を1回・itemsをstatusで仕分け描画", async () => {
-    const { client, el, home } = mountHome(async () => ({
-      items: [latch("proposed"), latch("matched", { id: "88888888-8888-4888-8888-888888888888" })],
+describe("createHome(01の待機中の意思+バッジ供給)", () => {
+  it("loadIntentsはGET /v1/intents?status=activeでカードを描画し待機中バッジへ", async () => {
+    const { client, el, home, onCounts } = mountHome(async () => ({
+      items: [intent(), intent({ id: "bbbbbbbb-2222-4222-8222-222222222222", raw_text: "年収1,000万円以上なら転職を考える" })],
       next_cursor: null,
     }));
-    await home.load();
-    expect(client.call).toHaveBeenCalledWith("GET", "/v1/latches?limit=20");
-    expect(el.candidateList.querySelectorAll(".latch-card").length).toBe(1);
-    expect(el.matchedList.querySelectorAll(".latch-card").length).toBe(1);
+    await home.loadIntents();
+    expect(client.call).toHaveBeenCalledWith("GET", "/v1/intents?status=active");
+    expect(el.intentCards.querySelectorAll(".intent-card").length).toBe(2);
+    expect(onCounts).toHaveBeenCalledWith({ standby: 2 });
+    expect(el.standbyLine.hidden).toBe(false);
+    expect(el.standbyLine.querySelector("[data-standby-count]").textContent).toBe(
+      "2件の意思が待機中 — いまは何もしなくて大丈夫",
+    );
+    expect(el.waitSection.hidden).toBe(false);
   });
 
-  it("終了済み(rejected/expired/cancelled)はどちらのセクションにも出ない", async () => {
-    const { el, home } = mountHome(async () => ({
-      items: [latch("rejected"), latch("expired", { id: "55555555-5555-4555-8555-555555555555" }), latch("cancelled", { id: "44444444-4444-4444-8444-444444444444" })],
-      next_cursor: null,
-    }));
-    await home.load();
-    expect(el.candidateList.querySelectorAll(".latch-card").length).toBe(0);
-    expect(el.matchedList.querySelectorAll(".latch-card").length).toBe(0);
+  it("0件はヒーロー行とセクションを隠す(プロトタイプに空状態の規定なし)", async () => {
+    const { el, home, onCounts } = mountHome(async () => ({ items: [], next_cursor: null }));
+    await home.loadIntents();
+    expect(el.intentCards.querySelectorAll(".intent-card").length).toBe(0);
+    expect(el.standbyLine.hidden).toBe(true);
+    expect(el.waitSection.hidden).toBe(true);
+    expect(onCounts).toHaveBeenCalledWith({ standby: 0 });
   });
 
-  it("next_cursorが残れば「もっと見る」を表示し追頁でcursorを渡す", async () => {
-    const pages = [
-      { items: [latch("proposed")], next_cursor: "c1" },
-      { items: [latch("proposed", { id: "99999999-9999-4999-8999-999999999999" })], next_cursor: null },
-    ];
-    const { client, el, home } = mountHome(async () => pages.shift());
-    await home.load();
-    expect(el.moreButton.hidden).toBe(false);
-    await home.loadMore();
-    expect(client.call.mock.calls[1]).toEqual([
-      "GET",
-      "/v1/latches?limit=20&cursor=c1",
-    ]);
-    expect(el.candidateList.querySelectorAll(".latch-card").length).toBe(2);
-    expect(el.moreButton.hidden).toBe(true); // 終端
-  });
-
-  it("next_cursor=nullなら「もっと見る」は非表示のまま", async () => {
-    const { el, home } = mountHome(async () => ({ items: [], next_cursor: null }));
-    await home.load();
-    expect(el.moreButton.hidden).toBe(true);
-  });
-
-  it("loadは候補・成立の件数をonCountsへ(ヘッダー/タブバーのバッジ供給)", async () => {
-    const { home, onCounts } = mountHome(async () => ({
+  it("loadはGET /v1/latches?limit=20で候補・成立のバッジだけ供給する(一覧はPhase 3/4)", async () => {
+    const { client, el, home, onCounts } = mountHome(async () => ({
       items: [
         latch("proposed"),
         latch("partial_accept", { id: "99999999-9999-4999-8999-999999999999" }),
@@ -132,41 +150,7 @@ describe("createHome(design §2.2)", () => {
       next_cursor: null,
     }));
     await home.load();
+    expect(client.call).toHaveBeenCalledWith("GET", "/v1/latches?limit=20");
     expect(onCounts).toHaveBeenLastCalledWith({ proposals: 2, matched: 1 });
-  });
-
-  it("loadIntentsはactive数を待機中バッジへ(onCounts・UI v2 Phase 1)", async () => {
-    const intent = () => ({
-      id: "aaaaaaa1-1111-4111-8111-111111111111",
-      status: "active",
-      structured_intent: {
-        category: { primary: "drinking", secondary: null },
-        time: { start: "2026-10-01T20:00:00+09:00", end: null },
-      },
-      expires_at: null,
-    });
-    const { client, home, onCounts } = mountHome(async () => ({
-      items: [intent(), intent()],
-      next_cursor: null,
-    }));
-    await home.loadIntents();
-    expect(client.call).toHaveBeenCalledWith("GET", "/v1/intents?status=active");
-    expect(onCounts).toHaveBeenCalledWith({ standby: 2 });
-  });
-
-  it("候補セクションの空状態は「まだ提案はありません」", async () => {
-    const { el, home } = mountHome(async () => ({ items: [], next_cursor: null }));
-    await home.load();
-    expect(el.candidateList.textContent).toContain(NO_LATCH_TITLE);
-  });
-
-  it("hidden_until_match形の候補カードは「条件が合う候補があります」", async () => {
-    const { el, home } = mountHome(async () => ({
-      items: [latch("proposed", { proposal: { headcount: 2, match_level: "medium" } })],
-      next_cursor: null,
-    }));
-    await home.load();
-    expect(el.candidateList.textContent).toContain("条件が合う候補があります");
-    expect(el.candidateList.textContent).not.toContain("天文館");
   });
 });

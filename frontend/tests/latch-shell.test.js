@@ -9,17 +9,16 @@ const mainJs = () => readFileSync(resolve(process.cwd(), "src/main.js"), "utf8")
 const chromeJs = () => readFileSync(resolve(process.cwd(), "src/ui/chrome.js"), "utf8");
 const css = () => readFileSync(resolve(process.cwd(), "styles.css"), "utf8");
 
-describe("M3 ws-7 画面構造(design §2.1〜§2.2・§3)", () => {
-  it("画面section構造: homeScreen(workspace+2セクション)とdetailScreen・プレースホルダ2件", () => {
+describe("画面構成(UI v2 Phase 2・01ホーム+02読み解き確認)", () => {
+  it("画面section構造: homeScreen(01)・confirmScreen(02)・standbyプレースホルダ・detail", () => {
     expect(html()).toContain('id="homeScreen"');
+    expect(html()).toContain('id="confirmScreen"');
+    expect(html()).toContain('id="standbyScreen"'); // UI v2 03(Phase 3)
     expect(html()).toContain('id="detailScreen"');
-    expect(html()).toContain('id="confirmScreen"'); // UI v2 02
-    expect(html()).toContain('id="standbyScreen"'); // UI v2 03
-    expect(html()).toContain('id="candidateList"');
-    expect(html()).toContain('id="matchedList"');
-    expect(html()).toContain('id="moreButton"');
-    // 既存の入力画面要素はworkspace内に維持(smoke.test.jsのID群)
-    expect(html()).toContain('class="workspace"');
+    // 旧workspace(2カラム入力+預け方サイドバー)は廃止
+    expect(html()).not.toContain('class="workspace"');
+    expect(html()).not.toContain("candidateList");
+    expect(html()).not.toContain("matchedList");
   });
 
   it("新ヘッダー: ロゴSVG+wordmark・topnav4項目(data-nav)・通知/アカウント", () => {
@@ -48,8 +47,9 @@ describe("M3 ws-7 画面構造(design §2.1〜§2.2・§3)", () => {
     expect(html()).toContain('id="reportModal"');
   });
 
-  it("main.jsはscreen.jsとrouter.jsをimportして画面群を配線する", () => {
+  it("main.jsはscreen.js・confirm.jsとrouter.jsをimportして画面群を配線する", () => {
     expect(mainJs()).toContain('from "./intent/screen.js"');
+    expect(mainJs()).toContain('from "./intent/confirm.js"');
     expect(mainJs()).toContain('from "./router.js"');
     expect(mainJs()).toContain('from "./latch/home.js"');
     expect(mainJs()).toContain('from "./latch/detail.js"');
@@ -59,30 +59,45 @@ describe("M3 ws-7 画面構造(design §2.1〜§2.2・§3)", () => {
     expect(mainJs()).toContain('standby: $("#standbyScreen")');
     expect(mainJs()).toContain("chrome.setCurrentNav"); // aria-current
     expect(mainJs()).toContain("chrome.setCounts"); // バッジ件数
+    expect(mainJs()).toContain("createFormState"); // 01↔02で共有するフォーム状態
+    expect(mainJs()).toContain("confirmScreen.enter()"); // #/confirmで02を初期化
   });
 
-  it("chrome.jsはバッジ・aria-current・toast・dialog制御を持ちテーマ切替を持たない", () => {
+  it("chrome.jsはバッジ・aria-current・toast・dialog制御を持ち旧モーダルを持たない", () => {
     expect(chromeJs()).toContain("setCounts");
     expect(chromeJs()).toContain("setCurrentNav");
     expect(chromeJs()).toContain("showToast");
     expect(chromeJs()).toContain("openAppDialog");
+    expect(chromeJs()).not.toContain("openModal");
+    expect(chromeJs()).not.toContain("closeModal");
     expect(chromeJs()).not.toContain("data-theme");
     expect(chromeJs()).not.toContain("latch-theme");
   });
 
-  it("styles.cssに新画面クラスがある(暫定表示+共通部品)", () => {
+  it("styles.cssに01・02の画面クラスと共通部品がある", () => {
     for (const className of [
-      ".latch-card", ".latch-section", ".chat-message", ".chat-mine",
-      ".chat-theirs", ".respond-button", ".attendance-field", ".report-entry",
-      ".latch-empty",
+      // 01(プロトタイプ01)
+      ".composer", ".chip", ".example-chip", ".intent-card", ".intent-quote",
+      ".intent-tag", ".intent-pill", ".beacon", ".hero-title",
+      // 02(プロトタイプ02)
+      ".steps", ".words-card", ".privacy-card", ".slots-card", ".slot-row",
+      ".slot-value", ".people-box", ".seg", ".extra-chip", ".deposit-button",
+      // 共通部品
       ".tabbar", ".dlg", ".toast-pos", ".count-pill", ".ghost", ".cta", ".danger", ".lift",
     ]) {
       expect(css()).toContain(className);
     }
   });
 
+  it("composerのfocus-within glowと02の行アニメーション(reduced-motionで停止)", () => {
+    expect(css()).toContain(".composer:focus-within");
+    expect(css()).toContain("@keyframes rowIn");
+    expect(css()).toContain("@keyframes chipIn");
+    expect(css()).toContain("@keyframes beacon");
+  });
+
   it("tokenPanel等の既存構造は温存される", () => {
-    for (const id of ["tokenPanel", "idpToken", "tokenConnect", "toast", "confirmationModal", "noticePopover"]) {
+    for (const id of ["tokenPanel", "idpToken", "tokenConnect", "toast", "noticePopover"]) {
       expect(html()).toContain(`id="${id}"`);
     }
   });

@@ -1,10 +1,13 @@
-// エントリポイント(M3 ws-7 design §3・UI v2 Phase 1)。共通初期化(セッション・
-// トークンパネル・シェル)+ルーター起動のみを担う。入力画面の配線は screen.js、
-// ホーム・詳細は latch/* へ委譲。意図文言をログに出さない(01 §21)。
+// エントリポイント(M3 ws-7 design §3・UI v2 Phase 2)。共通初期化(セッション・
+// トークンパネル・シェル)+ルーター起動のみを担う。01の入力はscreen.js・
+// 02の確認はconfirm.js(state共有)・ホーム・詳細は latch/* へ委譲。
+// 意図文言をログに出さない(01 §21)。
 import { initChrome } from "./ui/chrome.js";
 import { createClient } from "./api/client.js";
 import { createSession, exchangeIdpToken } from "./api/session.js";
 import { initIntentScreen } from "./intent/screen.js";
+import { initConfirmScreen } from "./intent/confirm.js";
+import { createFormState } from "./intent/state.js";
 import { createAppState } from "./appState.js";
 import { createRouter } from "./router.js";
 import { createHome } from "./latch/home.js";
@@ -51,11 +54,6 @@ const chrome = initChrome({
   ],
   toast: $("#toast"),
   appDialog: $("#appDialog"),
-  modal: {
-    root: $("#confirmationModal"),
-    closeButton: $("#modalClose"),
-    returnButton: $("#returnButton"),
-  },
 });
 
 // アカウントボタンは表示名のイニシャル1字(失敗時は空のまま)
@@ -102,20 +100,28 @@ $("#tokenConnect").addEventListener("click", async () => {
   }
 });
 
-// --- 入力画面(既存ロジック・screen.jsへ切り出し) ---------------------------
-initIntentScreen({ client, chrome });
+// --- 01入力+02確認(state共有・UI v2 Phase 2) --------------------------------
+const intentState = createFormState();
+const intentScreen = initIntentScreen({ client, chrome, state: intentState });
+const confirmScreen = initConfirmScreen({ client, chrome, state: intentState });
+
+// 02の「書き直す」→01でcomposerへフォーカス(hash遷移後に当てる)
+document.addEventListener("click", (event) => {
+  if (event.target.closest('[data-action="rewrite"]')) {
+    window.setTimeout(() => intentScreen.focusComposer(), 0);
+  }
+});
 
 // --- ホーム・詳細・通報・お知らせ・設定(ws-7 §2.1〜§2.2・ws-8 §2.1〜§2.7) --
 const home = createHome({
   client,
   el: {
-    candidateList: $("#candidateList"),
-    matchedList: $("#matchedList"),
-    moreButton: $("#moreButton"),
+    intentCards: $("#intentCards"),
+    standbyLine: $("#standbyLine"),
+    waitSection: $("#waitSection"),
   },
   onCounts: (partial) => chrome.setCounts(partial), // 待機中・候補・成立バッジ
 });
-$("#moreButton").addEventListener("click", () => home.loadMore().catch(() => {}));
 
 // お知らせ(ws-8 design §2.1〜§2.2): 起動時1回のpreloadでドット判定
 const notice = createNotice({
@@ -196,6 +202,8 @@ const router = createRouter({
     if (route.name === "home") {
       home.load().catch(() => {}); // 通信失敗時は空状態のまま(再訪で再試行)
       home.loadIntents().catch(() => {});
+    } else if (route.name === "confirm") {
+      confirmScreen.enter();
     } else if (route.name === "settings") {
       settings.show();
     } else if (route.name === "onboarding") {
@@ -203,7 +211,7 @@ const router = createRouter({
     } else if (route.name === "latch") {
       detail.show(route.id).catch(() => {});
     }
-    // confirm・standbyはPhase 2/3までプレースホルダ表示のみ
+    // standbyはPhase 3までプレースホルダ表示のみ
   },
 });
 router.start();

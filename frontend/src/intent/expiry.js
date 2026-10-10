@@ -24,7 +24,9 @@ export const applyExpiryOptions = (selectEl, data) => {
 };
 
 export const selectedExpiry = (selectEl) => {
-  const option = selectEl.selectedOptions[0];
+  // selectedOptionsは一部DOM実装でselectedIndex代入後も更新が遅れるため
+  // selectedIndex経由で取り出す
+  const option = selectEl.options[selectEl.selectedIndex];
   if (!option) return { label: null, expiresAt: null };
   return { label: option.textContent, expiresAt: option.value };
 };

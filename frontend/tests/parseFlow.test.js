@@ -120,6 +120,27 @@ describe("createParseFlow(design §2.4)", () => {
     flow.dispose();
   });
 
+  it("commit()はdebounceを打ち切って即時送信する(01のCTA「読み解く」)", async () => {
+    const send = vi.fn(async () => ({ structured_intent: {}, warnings: [] }));
+    const flow = createParseFlow({ send, onResult: vi.fn(), onError: vi.fn() });
+    flow.input("今日20時以降、天文館で軽く飲みたい。");
+    await flow.commit();
+    expect(send).toHaveBeenCalledTimes(1); // 1秒を待たない
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(send).toHaveBeenCalledTimes(1); // 二重送信しない
+    flow.dispose();
+  });
+
+  it("commit()は同一テキスト(直前成功と同じ)なら送信せず即完了する", async () => {
+    const send = vi.fn(async () => ({ structured_intent: {}, warnings: [] }));
+    const flow = createParseFlow({ send, onResult: vi.fn(), onError: vi.fn() });
+    flow.input("今日20時以降、天文館で軽く飲みたい。");
+    await vi.advanceTimersByTimeAsync(1000);
+    await flow.commit();
+    expect(send).toHaveBeenCalledTimes(1);
+    flow.dispose();
+  });
+
   it("dispose()でタイマー停止", async () => {
     const send = vi.fn(async () => ({}));
     const flow = createParseFlow({ send, onResult: vi.fn(), onError: vi.fn() });

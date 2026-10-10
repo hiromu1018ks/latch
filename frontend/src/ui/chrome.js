@@ -1,13 +1,13 @@
-// アプリシェルの制御(UI v2 Phase 1)。テーマ切替・「Intent N件」popoverは廃止
-// (gap分析§2)。担うのは ①topnav/tabbarのaria-currentと件数バッジ
-// ②右上toast ③<dialog class="dlg">の土台 ④popover(お知らせ・アカウント)
-// ⑤旧確認モーダル(暫定・Phase 2で02→03遷移に置き換わる)。
-// デザイン値はprototype/v2の共通<style>と03(drop-dlg・toast)に拠る。
+// アプリシェルの制御(UI v2 Phase 2)。テーマ切替・「Intent N件」popover・旧確認
+// モーダルは廃止(gap分析§2・確認は02画面が担う)。担うのは ①topnav/tabbarの
+// aria-currentと件数バッジ ②右上toast ③<dialog class="dlg">の土台
+// ④popover(お知らせ・アカウント)。デザイン値はprototype/v2の共通<style>と
+// 03(drop-dlg・toast)に拠る。
 import { icon } from "./icons.js";
 
 const TOAST_AUTO_HIDE_MS = 2400;
 
-export const initChrome = ({ popovers = [], toast, appDialog, modal }) => {
+export const initChrome = ({ popovers = [], toast, appDialog }) => {
   // --- nav(tabbar・topnav共通のdata-nav属性) --------------------------------
   const navLinks = () => [
     ...document.querySelectorAll(".topnav [data-nav], .tabbar [data-nav]"),
@@ -142,34 +142,6 @@ export const initChrome = ({ popovers = [], toast, appDialog, modal }) => {
   }
   document.addEventListener("click", () => closePopovers());
 
-  // --- 旧確認モーダル(暫定・Phase 2で廃止) -----------------------------------
-  const openModal = ({ expiryLabel, privacyLabel }) => {
-    const summary = modal.root.querySelector(".confirmation-summary");
-    summary.replaceChildren();
-    const clock = icon("clock", 22);
-    clock.setAttribute("aria-hidden", "true");
-    summary.append(clock, ` ${expiryLabel}まで`);
-    const lock = icon("lock", 22);
-    lock.setAttribute("aria-hidden", "true");
-    summary.append(lock, ` ${privacyLabel === "条件一致までは非公開" ? "成立までは非公開" : privacyLabel}`);
-    modal.root.hidden = false;
-    document.body.classList.add("modal-open");
-    modal.closeButton.focus();
-  };
-  const closeModal = ({ submitButton } = {}) => {
-    modal.root.hidden = true;
-    document.body.classList.remove("modal-open");
-    submitButton?.focus();
-  };
-
-  // 「Intentを確認する」(returnButton)のclickでモーダルを閉じない —
-  // 保存成功(onActiveSaved)で閉じる。保存失敗時はモーダルを開いたまま
-  // main.js のonFormErrorが扱う(現行踏襲)
-  modal.closeButton.addEventListener("click", () => closeModal({}));
-  modal.root.addEventListener("click", (event) => {
-    if (event.target === modal.root) closeModal({});
-  });
-
   return {
     showToast,
     setCounts,
@@ -177,7 +149,5 @@ export const initChrome = ({ popovers = [], toast, appDialog, modal }) => {
     setAccountInitial,
     openAppDialog,
     closeAppDialog,
-    openModal,
-    closeModal,
   };
 };

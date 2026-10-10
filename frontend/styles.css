@@ -164,15 +164,23 @@ body.modal-open{overflow:hidden}
 .spinner{animation:spin .8s linear infinite}
 @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none !important;transition:none !important}}
 
-/* ===== 画面コンテナ(01のpage-main値を既定に。02〜05の個別値は各画面実装フェーズで上書き) ===== */
+/* ===== 画面コンテナ(01=page-main既定値。02は--confirm修飾。Phase 2) ===== */
+#main{position:relative;z-index:1;display:block;padding:0 clamp(16px, 4vw, 48px)}
 .page-main{
-  position:relative;z-index:1;max-width:1120px;margin:0 auto;
-  padding:clamp(40px, 7vw, 104px) clamp(16px, 4vw, 48px) 120px;
+  position:relative;max-width:1120px;margin:0 auto;
+  padding:clamp(40px, 7vw, 104px) 0 120px;
   display:flex;flex-direction:column;gap:clamp(56px, 8vw, 88px);
 }
+.page-main--confirm{
+  max-width:1200px;padding-top:clamp(32px, 6vw, 80px);gap:44px;
+}
+/* page-mainを担わない画面(詳細・設定・プレースホルダ)の縦余白 */
+#main > section:not(.page-main){padding:clamp(40px, 7vw, 104px) 0 120px}
 
-/* 画面ごとの翡翠haze(位置・大きさは各画面フェーズで設定する。ここは共通の置き場のみ) */
+/* 画面ごとの翡翠haze(01=上部中央・02=右上。inline値はプロトタイプ01・02) */
 .haze{position:absolute;pointer-events:none;z-index:0;background:radial-gradient(closest-side, var(--acc-haze), rgba(11, 12, 18, 0) 72%)}
+.haze-home{top:-260px;left:50%;width:1200px;height:760px;transform:translateX(-50%)}
+.haze-confirm{top:120px;right:-260px;width:900px;height:900px}
 
 @media (max-width:720px){
   .hdr{padding-top:12px !important;padding-bottom:12px !important}
@@ -185,7 +193,7 @@ body.modal-open{overflow:hidden}
     -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
     border-top:1px solid var(--line);
   }
-  .page-main{padding-bottom:calc(112px + env(safe-area-inset-bottom)) !important}
+  .page-main,#main > section{padding-bottom:calc(112px + env(safe-area-inset-bottom)) !important}
   .toast-pos{top:80px;right:16px}
 }
 
@@ -200,7 +208,6 @@ h1{
   margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
   font-weight:700;font-size:clamp(26px, 3vw, 30px);line-height:1.25;letter-spacing:0.02em;
 }
-#page-title{font-size:clamp(38px, 5.6vw, 76px);line-height:1.2} /* 01ヒーロー値 */
 h2{font-family:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif}
 .section-kicker{
   margin:0 0 16px;display:flex;align-items:center;gap:10px;
@@ -212,87 +219,372 @@ h2{font-family:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif}
 .section-heading h2 b{font-weight:700}
 .centered{justify-content:center;margin-bottom:8px}
 
-/* --- 入力部品(field・02のselect/input値) -------------------------------- */
-.field, .condition-edit input, .condition-edit select, .add-row input, .add-row select,
-.condition-edit input[type="number"], .select-wrap select, .chat-input, .token-panel textarea {
+/* --- 入力部品(field・02のselect/input値・プロトタイプ02) ------------------- */
+.field, .chat-input, .token-panel textarea {
   min-height:44px;padding:8px 12px;
   border:1px solid var(--line-strong);border-radius:12px;
   background:var(--s1);color:var(--t1);font-family:inherit;font-size:16px;
 }
 .token-panel textarea{font-size:13px;font-family:monospace;min-height:0}
-.field:focus, .condition-edit input:focus, .condition-edit select:focus,
-.add-row input:focus, .select-wrap select:focus, .chat-input:focus{border-color:var(--acc) !important}
+.field:focus, .chat-input:focus{border-color:var(--acc) !important}
 textarea::placeholder, input::placeholder{color:var(--t3)}
-.select-wrap{position:relative}
-.select-wrap select{width:100%;appearance:none;padding:0 12px}
 
-/* --- 入力画面(workspace) -------------------------------------------------- */
-.workspace{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(335px,1fr);gap:40px;align-items:start}
-.intent-editor,.deposit-settings{display:flex;flex-direction:column;gap:24px}
-.intent-field{position:relative}
-.intent-field textarea{
-  width:100%;min-height:128px;resize:vertical;display:block;padding:16px;
-  border:1px solid var(--line-strong);border-radius:28px;
-  background:var(--s1);color:var(--t1);
+/* ===========================================================================
+   01 預ける(ホーム) — プロトタイプ01のinline styleが正源(UI v2 Phase 2)
+   =========================================================================== */
+.compose-section{display:flex;flex-direction:column;gap:28px;max-width:960px}
+.standby-line{
+  margin:0;display:flex;align-items:center;gap:12px;
+  font-size:14px;color:var(--t2);
+}
+.standby-line .beacon{position:relative;width:7px;height:7px;flex:none;border-radius:999px;background:var(--stb)}
+.standby-line .beacon::after{
+  content:"";position:absolute;inset:0;border-radius:999px;background:inherit;
+  animation:beacon 2.4s ease-out infinite;
+}
+@keyframes beacon{0%{transform:scale(1);opacity:.9}70%{transform:scale(2.8);opacity:0}100%{opacity:0}}
+.hero-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(38px, 5.6vw, 76px);line-height:1.2;letter-spacing:0.02em;
+}
+.hero-lead{margin:0;max-width:620px;font-size:17px;line-height:1.9;color:var(--t2);text-wrap:pretty}
+
+/* composerカード(フォーカス時の枠+glow) */
+.composer{
+  position:relative;width:100%;box-sizing:border-box;margin-top:8px;
+  padding:clamp(20px, 3vw, 28px) clamp(20px, 3vw, 28px) 22px;
+  display:flex;flex-direction:column;gap:20px;
+  background:var(--s1);border:1px solid var(--line-strong);border-radius:28px;
+  box-shadow:0 40px 120px -50px var(--acc-glow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition:border-color .2s ease, box-shadow .2s ease;
+}
+.composer:focus-within{
+  border-color:var(--acc-line) !important;
+  box-shadow:0 0 0 3px var(--acc-soft), 0 40px 120px -50px var(--acc-glow) !important;
+}
+.composer-label{font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2)}
+.composer textarea{
+  width:100%;box-sizing:border-box;min-height:128px;padding:0;resize:none;
+  background:transparent;border:none;outline:none;color:var(--t1);
   font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
-  font-size:clamp(22px, 2.4vw, 30px);line-height:1.6; /* 01 composer値 */
+  font-size:clamp(22px, 2.4vw, 30px);line-height:1.6;
 }
-.character-count{position:absolute;right:20px;bottom:14px;color:var(--t3);font-size:13px}
+.composer textarea:focus-visible{outline:none}
 
-/* --- 条件リスト(02の行構成に寄せる暫定) ------------------------------------ */
-.condition-list{border-top:1px solid var(--line)}
-.condition-row{
-  display:grid;grid-template-columns:40px 96px minmax(0,1fr) 44px;gap:16px;
-  align-items:center;padding:16px 0;border-bottom:1px solid var(--line);
+/* 読み取りchips(aria-live=polite・未読み取りの2状態) */
+.read-section{
+  display:flex;flex-direction:column;gap:12px;padding-top:18px;
+  border-top:1px dashed var(--line);
 }
-.condition-icon{
-  width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
-  background:var(--s2);color:var(--t2);
+.read-head{
+  margin:0;display:flex;align-items:center;gap:10px;
+  font-size:13.5px;color:var(--t2);
 }
-.condition-label{font-size:13.5px;color:var(--t3)}
-.condition-value{min-width:0;font-size:16px;color:var(--t1)}
-.condition-row.condition-missing .condition-value,
-.condition-row.condition-error .condition-value{color:var(--dng)}
-.edit-button{
-  width:44px;height:44px;padding:0;border-radius:12px;display:grid;place-items:center;
-  border:1px solid var(--line-strong);background:transparent;color:var(--t2);cursor:pointer;
+.read-dot{
+  width:6px;height:6px;border-radius:999px;background:var(--acc);
+  box-shadow:0 0 10px var(--acc-glow);
 }
-.add-condition{
-  margin-top:18px;min-height:44px;padding:0 16px;display:inline-flex;align-items:center;gap:8px;
-  border:1px solid var(--line-strong);border-radius:999px;
-  background:transparent;color:var(--t2);font-size:14px;cursor:pointer;
+.read-status{display:flex;flex-wrap:wrap;gap:8px}
+.read-chips{display:contents}
+.chip{
+  display:inline-flex;align-items:baseline;gap:10px;padding:9px 14px;
+  border-radius:12px;background:var(--s2);border:1px solid var(--line);
+  animation:chipIn .3s cubic-bezier(.2,.8,.2,1) both;
 }
-.add-row{
-  min-height:60px;padding:10px 0;display:grid;
-  grid-template-columns:112px minmax(0,1fr) 44px 44px;align-items:center;gap:8px;
-  border-bottom:1px solid var(--line);
+@keyframes chipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.chip-label{font-size:12.5px;font-weight:700;letter-spacing:0.06em;color:var(--acc)}
+.chip-value{font-size:15px;font-weight:500;color:var(--t1)}
+.read-guide{padding:9px 0;font-size:14px;color:var(--t3)}
+.read-noread{
+  display:inline-flex;align-items:flex-start;gap:10px;padding:12px 14px;
+  border-radius:12px;background:var(--stb-soft);border:1px solid var(--stb-line);
+  font-size:14px;line-height:1.7;color:var(--t1);
 }
-.condition-edit{display:flex;flex-wrap:wrap;gap:8px;align-items:center;grid-column:3 / 5;min-width:0}
-.ng-row .condition-value{font-size:15px}
-.ng-row .condition-icon{color:var(--stb)}
-.required-note,.parse-error,.form-error,.ng-note{margin:10px 0 0;font-size:13px;color:var(--t3)}
-.parse-error,.form-error{color:var(--dng)}
+.read-noread svg{flex:none;margin-top:3px;color:var(--stb)}
+.parse-error{margin:0;font-size:13px;color:var(--dng)}
 .parse-retry{
   margin-left:10px;min-height:44px;padding:0 16px;border:1px solid var(--line-strong);
   border-radius:999px;background:transparent;color:var(--t2);font:inherit;font-size:13px;cursor:pointer;
 }
 
-/* --- 預け方サイドバー(Phase 2で02のカードへ移設) --------------------------- */
-.setting-group{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
-.setting-group label{font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2)}
-.privacy-note{
-  margin-top:8px;padding:18px 0;display:flex;align-items:flex-start;gap:12px;
-  border-top:1px solid var(--line);color:var(--t2);
+/* composer下段(鍵行+CTA+下書き) */
+.composer-foot{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;
 }
-.privacy-note p{margin:0;font-size:13.5px;line-height:1.7}
-.actions-panel{
-  margin-top:auto;padding-top:24px;display:grid;grid-template-columns:1fr;
-  justify-items:stretch;align-items:center;gap:10px;border-top:1px solid var(--line);
-}
+.composer-foot-left{display:flex;flex-direction:column;gap:8px}
+.lock-line{margin:0;display:flex;align-items:center;gap:8px;font-size:14px;color:var(--t2)}
 .draft-button{
-  min-height:44px;padding:0 18px;display:inline-flex;align-items:center;justify-content:center;
-  border:1px solid var(--line-strong);border-radius:999px;
-  background:transparent;color:var(--t2);font-size:14px;cursor:pointer;
+  align-self:flex-start;min-height:36px;padding:0 14px;display:inline-flex;align-items:center;
+  border:1px solid var(--line);border-radius:999px;
+  background:transparent;color:var(--t3);font-size:13px;cursor:pointer;
+}
+.draft-button:disabled{opacity:.5;cursor:not-allowed}
+.cta-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.cta-help{font-size:13px;color:var(--t3)}
+.cta-help.strong{color:var(--t1)}
+
+/* 例文chips */
+.examples{display:flex;flex-direction:column;gap:12px}
+.examples-label{margin:0;font-size:14px;color:var(--t3)}
+.example-chips{display:flex;flex-wrap:wrap;gap:10px}
+.example-chip{
+  display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:8px 18px;
+  box-sizing:border-box;border-radius:999px;
+  background:rgba(18, 20, 29, 0.6);border:1px solid var(--line-strong);color:var(--t2);
+  font-family:inherit;font-size:14px;text-align:left;cursor:pointer;
+}
+.example-tag{flex:none;font-size:12px;font-weight:700;color:var(--t3)}
+
+/* 待機中の意思(カード一覧) */
+.wait-section{display:flex;flex-direction:column;gap:24px}
+.wait-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px}
+.wait-title{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+.wait-heading{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(26px, 3vw, 30px);
+}
+.wait-sub{font-size:14px;color:var(--t3)}
+.wait-all{
+  display:inline-flex;align-items:center;gap:6px;min-height:44px;
+  color:var(--t2);font-size:14px;text-decoration:none;
+}
+.intent-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(min(300px, 100%), 1fr));gap:16px}
+.intent-card{
+  position:relative;display:flex;flex-direction:column;gap:18px;padding:24px;
+  border-radius:22px;background:var(--s1);border:1px solid var(--line);
+  color:var(--t1);text-decoration:none;
+}
+.intent-card.acc{
+  border-color:var(--acc-line);
+  box-shadow:0 24px 70px -36px var(--acc-glow);
+}
+.intent-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.intent-card-cat{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--t2)}
+.intent-pill{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+  font-size:13px;font-weight:700;
+}
+.intent-pill.stb{background:var(--stb-soft);color:var(--stb)}
+.intent-pill.stb .dot{width:6px;height:6px;border-radius:999px;background:var(--stb)}
+.intent-pill.acc{background:var(--acc);color:var(--on-acc)}
+.intent-quote{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-size:19px;line-height:1.65;
+}
+.intent-tags{display:flex;flex-wrap:wrap;gap:6px}
+.intent-tag{padding:5px 10px;border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px}
+.intent-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-top:auto;padding-top:14px;border-top:1px solid var(--line);
+  font-size:13.5px;color:var(--t2);
+}
+.intent-foot-see{display:inline-flex;align-items:center;gap:6px}
+.intent-foot-see.acc{color:var(--acc);font-weight:700}
+
+/* ===========================================================================
+   02 読み解き確認 — プロトタイプ02のinline styleが正源(UI v2 Phase 2)
+   =========================================================================== */
+.confirm-head{display:flex;flex-direction:column;gap:22px}
+.steps{
+  list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;align-items:center;
+  gap:10px 14px;font-size:14px;
+}
+.step{display:inline-flex;align-items:center;gap:10px}
+.step.done{color:var(--t2)}
+.step.now{color:var(--t1);font-weight:700}
+.step.todo{color:var(--t3)}
+.step-check{
+  width:26px;height:26px;border-radius:999px;display:grid;place-items:center;
+  background:var(--s2);color:var(--t2);
+}
+.step-line{width:28px;height:1px;background:var(--line-strong)}
+.step-no{
+  width:26px;height:26px;box-sizing:border-box;border-radius:999px;display:grid;place-items:center;
+  font-family:'IBM Plex Mono',monospace;font-size:12px;
+}
+.step.now .step-no{
+  background:var(--acc);color:var(--on-acc);font-weight:600;
+  box-shadow:0 0 18px var(--acc-glow);
+}
+.step.todo .step-no{border:1px solid var(--line-strong)}
+.confirm-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(34px, 4.4vw, 60px);line-height:1.25;letter-spacing:0.02em;
+}
+.confirm-lead{margin:0;max-width:640px;font-size:16.5px;line-height:1.9;color:var(--t2);text-wrap:pretty}
+
+.confirm-grid{
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(min(460px, 100%), 1fr));
+  gap:24px;align-items:start;
+}
+.confirm-col{display:flex;flex-direction:column;gap:20px;min-width:0}
+.card{
+  border-radius:24px;background:var(--s1);border:1px solid var(--line);
+  display:flex;flex-direction:column;
+}
+.card-title{margin:0;font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2)}
+.card-head-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+
+/* あなたの言葉(D-03ハイライト) */
+.words-card{padding:30px 32px 32px;gap:20px}
+.rewrite-link{
+  display:inline-flex;align-items:center;gap:6px;min-height:44px;
+  color:var(--t2);font-size:14px;text-decoration:none;
+}
+.words-text{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-size:clamp(22px, 2.5vw, 32px);line-height:2.1;letter-spacing:0.02em;text-wrap:pretty;
+}
+.words-text mark{
+  background:var(--acc-soft);color:var(--t1);padding:2px 6px;border-radius:6px;
+  box-shadow:inset 0 -2px 0 var(--acc);
+  -webkit-box-decoration-break:clone;box-decoration-break:clone;
+}
+.words-text sup{
+  margin-left:4px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+  font-weight:600;line-height:0;color:var(--acc);
+}
+.words-note{margin:0;font-size:13.5px;color:var(--t3)}
+
+/* 公開範囲と通知(D-02: 説明3項目+期限select) */
+.privacy-card{padding:28px 32px;gap:20px;background:#0F1119}
+.privacy-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:18px}
+.privacy-item{display:grid;grid-template-columns:40px minmax(0, 1fr);gap:14px;align-items:start}
+.privacy-ic{
+  width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+  background:var(--s2);color:var(--stb);
+}
+.privacy-body{display:flex;flex-direction:column;gap:4px}
+.privacy-t{margin:0;font-size:15px;font-weight:700}
+.privacy-s{margin:0;font-size:14px;line-height:1.7;color:var(--t2)}
+.expiry-label{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:14px;color:var(--t2)}
+.expiry-label select{cursor:pointer}
+
+/* 読み取った条件(5行) */
+.slots-card{
+  min-width:0;padding:8px 32px 32px;
+  box-shadow:0 50px 140px -70px var(--acc-glow);
+}
+.slots-head{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;
+  padding:22px 0 14px;
+}
+.slot-summary{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--t2)}
+.slot-summary .dot{width:6px;height:6px;border-radius:999px;background:var(--acc)}
+.slot-summary .dot.ok{background:var(--stb)}
+.slot-row{
+  display:grid;grid-template-columns:40px minmax(0, 1fr) 44px;gap:16px;align-items:start;
+  padding:20px 0;border-top:1px solid var(--line);
+  animation:rowIn .4s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes rowIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+.slot-ic{
+  width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+  background:var(--s2);color:var(--t2);
+}
+.slot-body{display:flex;flex-direction:column;gap:5px;min-width:0}
+.slot-line{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--t3)}
+.slot-no{font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--acc)}
+.slot-value{font-size:21px;font-weight:700;line-height:1.4}
+.slot-row[data-missing="true"] .slot-value{font-size:16px;font-weight:500;color:var(--t3)}
+.slot-row.slot-error .slot-value{color:var(--dng)}
+.slot-sub{font-size:14px;color:var(--t2)}
+.edit-button{
+  width:44px;height:44px;padding:0;border-radius:12px;display:grid;place-items:center;
+  border:1px solid var(--line-strong);background:transparent;color:var(--t2);cursor:pointer;
+}
+.edit-button.editing{background:var(--s3)}
+
+/* 行編集(テキスト1行input+保存/キャンセル) */
+.slot-edit{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.slot-edit input{
+  width:100%;box-sizing:border-box;min-height:48px;padding:0 16px;
+  border-radius:12px;border:1px solid var(--line-strong);
+  background:var(--bg);color:var(--t1);font-family:inherit;font-size:17px;font-weight:700;
+  outline:none;
+}
+.slot-edit-note{font-size:13.5px;color:var(--t3)}
+.slot-edit-actions{display:flex;flex-wrap:wrap;gap:8px}
+.slot-edit-actions button[type="submit"]{
+  min-height:44px;padding:0 20px;border-radius:999px;border:none;
+  background:var(--t1);color:var(--bg);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;
+}
+.slot-edit-actions button[type="button"]{
+  min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--line-strong);
+  background:transparent;color:var(--t2);font-family:inherit;font-size:14px;cursor:pointer;
+}
+
+/* 人数確認seg(D-04) */
+.people-box{
+  margin:12px 0 0;padding:16px;border-radius:16px;background:var(--s2);
+  border:1px solid var(--line);display:flex;flex-direction:column;gap:12px;min-width:0;
+}
+.people-box.need{background:var(--acc-soft);border-color:var(--acc-line)}
+.people-q{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:15px;color:var(--t1)}
+.people-tag{
+  padding:3px 10px;border-radius:999px;font-size:12.5px;font-weight:700;
+  background:var(--acc);color:var(--on-acc);
+}
+.people-box.ok .people-tag{background:var(--stb-soft);color:var(--stb)}
+.seg{
+  align-self:flex-start;display:inline-flex;gap:4px;padding:4px;border-radius:999px;
+  background:var(--bg);border:1px solid var(--line-strong);
+}
+.seg label{
+  display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 20px;
+  white-space:nowrap;border-radius:999px;background:transparent;color:var(--t2);
+  font-size:14px;font-weight:700;cursor:pointer;
+}
+.seg label:has(input:focus-visible){outline:2px solid var(--acc);outline-offset:2px}
+.seg label.on{background:var(--t1);color:var(--bg)}
+
+/* NG注記(判定不能NG・02 D-04) */
+.ng-box{
+  display:flex;flex-direction:column;gap:8px;margin-top:8px;padding:16px;
+  border-radius:12px;background:var(--stb-soft);border:1px solid var(--stb-line);
+  font-size:14px;line-height:1.7;color:var(--t1);
+}
+.ng-box p{margin:0}
+
+/* 足せる条件トグル */
+.extras{
+  display:flex;flex-direction:column;gap:12px;padding:22px 0 6px;border-top:1px solid var(--line);
+}
+.extras-label{margin:0;font-size:14px;color:var(--t2)}
+.extra-chips{display:flex;flex-wrap:wrap;gap:8px}
+.extra-chip{
+  display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;
+  border-radius:999px;background:transparent;border:1px solid var(--line-strong);
+  color:var(--t2);font-family:inherit;font-size:14px;cursor:pointer;
+}
+.extra-chip[aria-pressed="true"]{background:var(--s3);border-color:var(--t2);color:var(--t1)}
+
+/* CTA(この条件で預ける) */
+.confirm-actions{
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:18px;
+  padding-top:24px;border-top:1px solid var(--line);
+}
+.deposit-button{
+  flex:1 1 260px;display:inline-flex;align-items:center;justify-content:center;gap:12px;
+  min-height:58px;padding:0 28px;border-radius:999px;border:none;
+  background:var(--s3);color:var(--t2);font-family:inherit;font-size:17px;font-weight:700;cursor:pointer;
+}
+.deposit-button:not(:disabled){
+  background:var(--acc);color:var(--on-acc);
+  box-shadow:0 16px 48px -14px var(--acc-glow);
+}
+.rewrite-button{
+  display:inline-flex;align-items:center;justify-content:center;min-height:58px;
+  padding:0 24px;box-sizing:border-box;border-radius:999px;
+  border:1px solid var(--line-strong);color:var(--t2);font-size:15px;text-decoration:none;
+}
+.slots-card .cta-help{margin:14px 0 0;font-size:13.5px;line-height:1.7}
+.form-error{margin:10px 0 0;font-size:13px;color:var(--dng)}
+
+/* --- バッジ・空状態・もっと見る・同意ボタン(暫定表示で使用) ----------------- */
+.badge{
+  padding:5px 10px;border-radius:8px;background:var(--s2);color:var(--t1);
+  font-size:13px;font-weight:500;
 }
 .submit-button{
   min-height:54px;padding:0 28px;display:inline-flex;align-items:center;justify-content:center;gap:10px;
@@ -301,25 +593,6 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   box-shadow:0 12px 40px -10px var(--acc-glow);
 }
 .submit-button:disabled{background:var(--s3);color:var(--t2);box-shadow:none;cursor:not-allowed}
-.shortcut{padding:2px 0;justify-self:center;color:var(--t3);font-size:13px}
-
-/* --- ホーム2セクション(候補・成立済み) ------------------------------------- */
-.latch-section{display:flex;flex-direction:column;gap:16px}
-.latch-list{display:grid;gap:16px}
-.latch-card{
-  display:flex;flex-direction:column;gap:10px;padding:24px;
-  border:1px solid var(--line);border-radius:22px;
-  background:var(--s1);text-decoration:none;color:var(--t1);
-  transition:border-color .2s ease,background-color .2s ease;
-}
-.latch-card:hover,.latch-card:focus-visible{border-color:var(--line-strong);background:#151826}
-.latch-card-title{font-size:18px;font-weight:700}
-.latch-card-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.badge{
-  padding:5px 10px;border-radius:8px;background:var(--s2);color:var(--t1);
-  font-size:13px;font-weight:500;
-}
-.latch-card-deadline{font-size:13px;font-weight:700;color:var(--dng)}
 .latch-empty{
   display:grid;gap:6px;padding:28px 22px;border:1px dashed var(--line);border-radius:22px;
   color:var(--t2);background:var(--s1);
@@ -434,25 +707,11 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   display:grid;place-items:center;border:1px solid transparent;border-radius:12px;
   color:var(--t2);background:transparent;cursor:pointer;
 }
-.confirmation-mark{
-  width:52px;height:52px;margin:0 auto 18px;display:grid;place-items:center;
-  border:1px solid var(--acc-line);border-radius:999px;
-  background:var(--acc-soft);color:var(--acc);
-}
 .confirmation h2{
   margin:0 0 14px;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
   font-size:22px;font-weight:700;
 }
 .confirmation > p:not(.section-kicker){margin:0 auto;max-width:380px;color:var(--t2);font-size:14px;line-height:1.8}
-.confirmation-summary{
-  margin:24px 0;display:flex;justify-content:center;align-items:center;gap:10px;
-  padding:14px 16px;border-radius:14px;background:var(--s2);
-  color:var(--t1);font-size:14px;
-}
-.return-button{
-  min-height:48px;padding:0 20px;border:none;border-radius:999px;
-  background:var(--acc);color:var(--on-acc);font-weight:700;cursor:pointer;
-}
 .report-dialog,.block-dialog{display:grid;gap:16px;text-align:left}
 .report-target,.block-target,.block-confirm{font-size:14.5px}
 .report-target-select,.report-reasons,.block-target-select{
@@ -540,18 +799,16 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
 .placeholder-view{display:grid;gap:12px}
 .placeholder-view p{margin:0;color:var(--t2);font-size:15px;line-height:1.9}
 
-/* --- 暫定のレスポンシブ(旧800/560pxを720pxへ統合) --------------------------- */
+/* --- 暫定のレスポンシブ(旧800/560pxを720pxへ統合+02の520px) ----------------- */
 @media (max-width:720px){
-  .workspace{grid-template-columns:1fr}
-  .deposit-settings{border-top:1px solid var(--line);padding-top:24px}
-  .condition-row{grid-template-columns:40px 64px minmax(0,1fr) 44px;gap:10px}
-  .condition-label{font-size:12.5px}
-  .condition-value{font-size:14.5px}
-  .add-row{grid-template-columns:96px minmax(0,1fr) 44px}
-  .add-row button:last-child{grid-column:3}
   .chat-message{max-width:92%}
   .chat-form{flex-direction:column}
   .chat-send{width:100%;height:44px}
-  .confirmation-summary{flex-wrap:wrap}
-  .actions-panel{grid-template-columns:1fr}
+}
+@media (max-width:520px){
+  .words-card,.privacy-card{padding-left:20px;padding-right:20px}
+  .slots-card{padding-left:20px;padding-right:20px}
+  .slot-row{grid-template-columns:minmax(0, 1fr) 44px;gap:12px}
+  .slot-ic{display:none}
+  .seg label{padding:0 16px}
 }
