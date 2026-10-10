@@ -104,7 +104,7 @@ Parserはフィールドの抽出のみを行い、デフォルトの補完はPa
 | フィールド | Parserの出力 | アプリ層の補完(03 D-19) |
 |---|---|---|
 | time.end | null可 | nullなら time.start + 3時間 |
-| expires_at | Parserは出力しない | time.start + 3時間に最も近い選択肢(4値の選択式「今夜 23:30 / 明日 12:00 / 明日 23:30 / 3日後まで」。03 v0.4第3節) |
+| expires_at | Parserは出力しない | time.start + 3時間に最も近い選択肢(3値の選択式「今日 22:00 / 今日 23:59 / 明日 5:00」。03 v0.5第3節・UI v2 Phase 0のD-01で4値から変更) |
 | participants | null可 | min=2 / max=2 |
 | visibility | Parserは出力しない | hidden_until_match(公開設定。「条件一致までは非公開 / 候補にだけ概要を表示」の2値。確認モーダルで選択、02 v0.3 D-03) |
 | notification_level | Parserは出力しない | proposals_only(お知らせ設定。「一致したときだけ / 近い候補も知らせる / 通知しない」の3値。預け方パネルで選択、03 v0.4第3節。v0.4新設) |

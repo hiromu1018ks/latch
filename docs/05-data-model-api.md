@@ -1,10 +1,17 @@
 # LATCH データモデル・API仕様書
 
-- 文書バージョン: v0.5
+- 文書バージョン: v0.6
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28)
-- 前提文書: 01 要件定義書 v0.5 / 02 スコープ合意書 v0.3 / 03 UX仕様書 v0.4 / 04 システムアーキテクチャ設計書 v0.5
+- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28。v0.6更新: 2026-10-10)
+- 前提文書: 01 要件定義書 v0.7 / 02 スコープ合意書 v0.4 / 03 UX仕様書 v0.5 / 04 システムアーキテクチャ設計書 v0.5
+- v0.6の変更点(UI v2基準切替): プロトタイプv2「夜と翡翠」への基準切替に伴うAPI改版(決定記録はdocs/plans/ui-v2/phase0-decisions.md)。主要変更は次のとおり。
+  - expiry-optionsの選択肢を4値から**3値(今日 22:00 / 今日 23:59 / 明日 5:00)**へ変更(D-01。completion.pyの選択肢生成を更新。実装はUI v2 Phase 1B)
+  - structured_dataへ**participants_includes_owner**(あなたを含むか・既定true)を追加(D-04。「含まない」の場合はクライアントがparticipants実効値を+1して送信する)
+  - **回答取り消しAPI**(POST /v1/latches/{id}/response/undo)を追加(D-06。回答済み→未回答へ戻す。04のjoined/declined状態の「回答を取り消す」に対応)
+  - responsesへ**reason_codes**(見送り理由・time/place/size/mood)を追加(D-07。defer時のみ受理・任意複数。相手への開示なし)
+  - **参加取り消しAPI**(POST /v1/latches/{id}/leave)を追加(D-08。自分の参加のみ取り消す・チャットへシステム行・自分は書込不可・LATCHはmatched継続)
+  - visibility・notification_levelのUI選択導線廃止に伴い、両フィールドは「UIからは常に既定値で送信される」旨を明記(値域・既定値は不変。D-02)
 - v0.5の変更点(TypeSafe Jev採用): 07 v0.5(2026-09-28オーナー裁定・C案)に追従し、match_candidates.jev_resultとcalibration_records.predictionの格納形をSystem Oneモデル「TypeSafe Jev」の応答に合わせて更新した。全変更箇所と出典はdocs/reviews/jev-systemone-revision.mdに記録。主要変更は次のとおり。
   - jev_result: reason(自由文)を廃止 — System Oneモデルはテキストを生成せず、フォールバックLLM時も一貫して無し(07 v0.5第4節)。格納するのはanswers値(noul確率・score正規化値)とconfidence、provider、model(応答のバージョンID)
   - prediction: 数値のみの前提を明記し、provider・modelキーを追加。既存のキー(would_*・jev_5axis等)と型は不変
@@ -88,7 +95,7 @@ users ──1:N── notifications / reports
 | geo_radius_m | integer | NULL | draftではNULL可(v0.4)。active化時に確定(未指定は1,000m既定半径、03 v0.4 D-19) |
 | budget_max | integer | NULL | NULL=制約なし(03 D-19)。minは原則使わない |
 | participants_min / participants_max | smallint | NOT NULL, DEFAULT 2 | 提案者自身を含む人数(01第15節) |
-| visibility | text | NOT NULL, CHECK IN ('hidden_until_match','summary_only'), DEFAULT 'hidden_until_match' | 公開設定(02 v0.3 D-03再決定)。hidden_until_match=条件一致までは非公開(提案画面に条件サマリを表示せず、成立時に解放)、summary_only=候補にだけ概要を表示(提案画面に条件サマリを表示)。UI名称は「公開設定」(03 v0.4第3節)。Layer 1の判定対象ではない(開示範囲はproposal生成分岐で制御) |
+| visibility | text | NOT NULL, CHECK IN ('hidden_until_match','summary_only'), DEFAULT 'hidden_until_match' | 公開設定(02 v0.3 D-03再決定)。hidden_until_match=条件一致までは非公開(提案画面に条件サマリを表示せず、成立時に解放)、summary_only=候補にだけ概要を表示(提案画面に条件サマリを表示)。Layer 1の判定対象ではない(開示範囲はproposal生成分岐で制御)。**UIからの変更導線はv0.6で廃止(D-02)。クライアントは常に既定値hidden_until_matchで送信する(値域・A/B試験時のAPI直叩きによる変更は可)** |
 | notification_level | text | NOT NULL, CHECK IN ('proposals_only','nearby_also','muted'), DEFAULT 'proposals_only' | お知らせ設定(03 v0.4第3節、v0.4新設)。proposals_only=閾値超過の提案のみ通知、nearby_also=閾値未満候補の発生通知も送る(条件サマリ・相手情報は含まない。D-08の日次上限に含めるが同時進行上限には適用しない、06 v0.4第6節)、muted=提案通知を送らない(遷移自体はproposedまで行う、06 v0.4第6節)。UI名称は「お知らせ」(預け方パネル) |
 | status | text | NOT NULL | draft/active/paused/matched/expired/cancelled(第6節) |
 | version | integer | NOT NULL, DEFAULT 1 | 更新ごとに+1。MatchEvent payloadに含む(01第16節) |
@@ -108,6 +115,7 @@ intents.structured_dataは、Hard Constraintとして独立カラム化した項
 ```json
 {
   "category_secondary": "焼肉",
+  "participants_includes_owner": true,
   "soft_constraints": [
     {"text": "軽く飲みたい", "downgraded_from_ng": false},
     {"text": "会社関係の人は避けたい", "downgraded_from_ng": true}
@@ -121,6 +129,7 @@ intents.structured_dataは、Hard Constraintとして独立カラム化した項
 | キー | 型 | 説明 |
 |---|---|---|
 | category_secondary | string \| null | 07 Parser出力のcategory.secondary。03第4節の「焼肉」等の表示に使う(proposalの生成元、第5節)。primaryはintents.category_primary |
+| participants_includes_owner | boolean | 「あなたを含むか」の回答(v0.6新設・D-04)。既定true。02の人数確認segで回答し、「含まない」の場合はクライアントがparticipantsの実効値を+1して(あなた+2〜4人=合計3〜5人)送信する。03の「条件を直す」で02へ戻った際のseg復元に使う。マッチング判定は+1後のparticipantsで行う(送信値が正) |
 | soft_constraints | オブジェクト配列 | 各要素は`text`(条件の文言)と`downgraded_from_ng`(boolean)を持つ。02 D-04の降格条件の格納時に、元の`ng_unverifiable`の各要素を`downgraded_from_ng: true`としてここへ格納する。`ng_unverifiable`そのものは保存しない(降格事実はフラグで保持)。このフラグは06第4節のLayer 3語彙重なり計算の除外判定と、06第2節のJev入力タグ化([soft]+判定不能表示)が参照する |
 | negative_constraints | string配列 | 判定可能なnegative条件(ブロック)は独立カラム+Layer 1で判定するため、07規則5の帰結としてMVPでは常に空配列である(v0.4で公開設定はLayer 1の判定対象から外れたため「公開範囲」を例から除去。06 v0.4)。空であることが正常系である旨を明示する(06 Layer 1・09の期待値表もこれに従う) |
 | time_flexibility_minutes / location_flexibility | null | MVPでは常にnull(03 D-19の固定扱い)。将来の抽出有効化に備えた予約 |
@@ -170,11 +179,12 @@ intents.structured_dataは、Hard Constraintとして独立カラム化した項
 ```json
 "responses": [
   {"user_id": "...", "intent_id": "...",
-   "response": "yes | no | defer", "answered_at": "2026-09-26T19:40:00+09:00"}
+   "response": "yes | no | defer", "answered_at": "2026-09-26T19:40:00+09:00",
+   "reason_codes": ["time", "place"]}
 ]
 ```
 
-`defer`が「今回は見送る」である。状態遷移はnoと同じrejected相当だが、回答種別はこのフィールドで保持し、再提案制御(03 D-07)の判定に使う。
+`defer`が「今回は見送る」である。状態遷移はnoと同じrejected相当だが、回答種別はこのフィールドで保持し、再提案制御(03 D-07)の判定に使う。`reason_codes`は見送り理由(v0.6新設・D-07・任意・複数・値はtime/place/size/mood)で、defer回答時のみ受理する。提案精度改善のための匿名データであり、相手への開示・通知には使わない(03 v0.5第7節)。回答取り消し(D-06)で見送りを取り消した場合はreason_codesも破棄する。calibration_records.actual_responsesにも同形で保持する(09の判定資料)。
 
 **proposalの構造(正式フィールド一覧と生成元)。** latches.proposalは通知文・提案画面の表示要素(03第4節・第5節)のデータソースである。文言はクライアント/Layer 5のテンプレートがこの構造から組み立てる(A/B対象の「通知文」(09第5節)の変更に構造が引かれないため)。格納禁止はraw_text・soft/NG条件の文言・座標(08第2.3節・08 D-11)。
 
@@ -278,7 +288,7 @@ CREATE INDEX idx_intents_embedding ON intents
 | 409 | LATCH_EXPIRED | response_deadline / expires_at経過後の回答 | LATCH回答 |
 | 409 | ALREADY_ANSWERED | 同一LATCHへの二重回答 | LATCH回答 |
 | 409 | LATCH_CLOSED | 競合クローズ後(他LATCH成立・参加Intent変化等、01第8節) | LATCH回答 |
-| 409 | CHAT_READONLY | ブロック適用中のLATCHへの送信(08 D-23) | チャット送信 |
+| 409 | CHAT_READONLY | ブロック適用中(08 D-23)または参加取り消し済み(D-08)のLATCHへの送信 | チャット送信 |
 | 409 | ATTENDANCE_ALREADY_SUBMITTED | 実施自己申告の二重回答(訂正不可) | attendance |
 | 409 | ATTENDANCE_WINDOW_CLOSED | completed遷移から3日経過後の自己申告 | attendance |
 | 409 | USER_EXISTS | 登録済みのauth_subjectでの初回登録 | POST /v1/users |
@@ -416,7 +426,27 @@ response: 200 {"latch": {"id": "…", "status": "partial_accept", "response_dead
 errors:   409 LATCH_EXPIRED(回答期限切れ) / 409 ALREADY_ANSWERED(二重回答) / 409 LATCH_CLOSED(競合クローズ後)、422 VALIDATION_ERROR(response値が不正)
 ```
 
-`response`は `yes` / `no` / `defer`(見送り)の3値(03 D-07)。期限切れの判定はstatusに加えてresponse_deadline / expires_atとの比較を含む条件付きUPDATEで行い(06第6節)、バッチ遅延時にも期限後の回答が成立しない。
+`response`は `yes` / `no` / `defer`(見送り)の3値(03 D-07)。**UI(04)から送られるのはyes(参加する)とdefer(今回は見送る)の2値で、noのUI導線は廃止した(v0.6・D-05。API値としては温存し、02#14の試験はAPI直叩きで検証する)**。defer回答では任意で`reasons`(値はtime/place/size/mood・複数可)を受け付け、responses.reason_codesへ格納する(D-07)。期限切れの判定はstatusに加えてresponse_deadline / expires_atとの比較を含む条件付きUPDATEで行い(06第6節)、バッチ遅延時にも期限後の回答が成立しない。
+
+### POST /v1/latches/{latch_id}/response/undo — 回答取り消し(v0.6新設・D-06)
+
+```json
+request:  {}
+response: 200 {"latch": {"id": "…", "status": "proposed", "response_deadline": "…"}}
+errors:   409 UNANSWERED(未回答)/ 409 LATCH_CLOSED(matched済み・競合クローズ後)/ 409 LATCH_EXPIRED(回答期限・Intent期限経過)/ 404(参加者以外)
+```
+
+自分の回答を取り消して未回答へ戻す(04のjoined・declined状態の「回答を取り消す」「取り消す」)。latches.responsesから自分の回答を除去し、状態をpartial_acceptまたはproposedへ戻す。reason_codesが紐づく場合は同時に破棄する。latch_status_eventsへ遷移を記録する。回答APIと同一の直列化(FOR UPDATE+条件付きUPDATE、06第6節)で実装し、取り消しと回答の競合を排除する。実装はUI v2 Phase 1B。
+
+### POST /v1/latches/{latch_id}/leave — 参加取り消し(v0.6新設・D-08)
+
+```json
+request:  {}
+response: 200 {"latch": {"id": "…", "status": "matched", "left": true}}
+errors:   409 ALREADY_LEFT(取り消し済み)/ 409 LATCH_CLOSED(matched以外)/ 404(参加者以外)
+```
+
+matchedのLATCHで自分の参加のみを取り消す(05画面の「この成立を取り消す」)。次を一つのトランザクションで行う。①messagesへシステム行(sender_idはNULL・body「{表示名}が参加を取り消しました」)を挿入する。②自分をチャット書込不可とする(以後の送信は409 CHAT_READONLY)。③calibration_records.cancelled_after=trueを記録する。**latches.statusはmatchedのまま変わらない(残りのメンバーの会話は継続し、LATCHは解散しない。headcountの再判定も行わない)。**残りのメンバーへはシステム行で通知する(プッシュ通知はしない)。参加Intentは待機に戻らない(削除もしない)。対象はmatchedのみで、completed後は409 LATCH_CLOSED。実装はUI v2 Phase 1B。
 
 ### POST /v1/latches/{latch_id}/attendance — 実施自己申告(09 D-09)
 
@@ -433,7 +463,7 @@ completed遷移後のLATCHに対し、参加者が「実際に会いましたか
 | メソッド/パス | 目的 | 認可・備考 |
 |---|---|---|
 | GET /v1/intents | 自Intent一覧(statusフィルタ可: `?status=draft`等。フィルタなしは全status) | 所有者のみ。ページネーション共通規定を適用。既定ソートはcreated_at降順。下書き一覧とActive Intent一覧の表示に使う(v0.4) |
-| GET /v1/intents/expiry-options | 有効期限4選択肢と既定選択の取得(03 第3節FR-13。UIの期限計算がcompletion.pyの単一実装〔07 第2節〕を消費するための経路・v0.4) | 認証済みユーザー全員。クエリ`time_start`(任意・ISO 8601 tz-aware・naiveは422 VALIDATION_ERROR)がある場合は`default_index`=`time_start+3時間に最も近い選択可能候補`の位置(なしはnull)。応答は`{"options": [{"label", "expires_at", "selectable"}×4], "default_index": <int\|null>}`。実装はcompletion.pyの呼び出しのみ(新規計算ロジックなし) |
+| GET /v1/intents/expiry-options | 有効期限3選択肢と既定選択の取得(03 v0.5第3節・D-01で4値から3値へ変更。UIの期限計算がcompletion.pyの単一実装〔07 第2節〕を消費するための経路) | 認証済みユーザー全員。選択肢は**「今日 22:00 / 今日 23:59 / 明日 5:00」の3値**(プロトタイプv2準拠)。クエリ`time_start`(任意・ISO 8601 tz-aware・naiveは422 VALIDATION_ERROR)がある場合は`default_index`=`time_start+3時間に最も近い選択可能候補`の位置(なしはnull)。応答は`{"options": [{"label", "expires_at", "selectable"}×3], "default_index": <int\|null>}`。実装はcompletion.pyの呼び出しのみ(新規計算ロジックなし。選択肢変更はUI v2 Phase 1Bで実装) |
 | GET /v1/intents/{id} | Intent取得 | 所有者のみ |
 | PATCH /v1/intents/{id} | 更新(raw_text+structured_intentの全置換。version+1、Event発行)/ status遷移(下書き→預けるのactive化を含む、v0.4) | 所有者のみ。検証はPOSTと同一(時刻検証・ジオコーディング・年齢検証を含む)。構造データの変更でalcohol_involved=trueとなる場合(category変更を含む)は作成者の年齢検証を行い、20歳未満なら422 UNDER_AGE(08 D-10)。**draft中のPATCH(v0.4)**: status=draftのIntentへのPATCH(下書き内容の更新・再保存)では、raw_textの必須(最大300字)以外の検証・ジオコーディング・Embedding・Match Event発行を行わない(下書き保存と同一の扱い。06 v0.4第9節)。**draft→activeの遷移(v0.4)**: statusを`active`に変更するPATCHはactive作成と同一の全検証(必須3フィールド・時刻検証・ジオコーディング・年齢検証)を通過して初めて受理し、検証不通なら422でstatusはdraftのまま据え置く。受理時にgeo_center・embeddingを確定し、初回のMatch Eventを発行する。条件内容の実質変更を伴わないactive化はversionを据え置く(全置換後のstructured_dataが同一の場合)。active→draftへの逆遷移は不可(打切りはcancel) |
 | DELETE /v1/intents/{id} | 削除(01第21節の削除範囲を適用) | 所有者のみ |
