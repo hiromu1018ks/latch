@@ -54,7 +54,6 @@ button,textarea,select,input{font:inherit}
 button,select{cursor:pointer}
 :focus-visible{outline:2px solid var(--acc);outline-offset:3px}
 main:focus{outline:none}
-body.modal-open{overflow:hidden}
 
 /* ===== 視覚隠し・スキップリンク・ドットグリッド(プロトタイプ共通) ===== */
 .vh{position:absolute !important;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

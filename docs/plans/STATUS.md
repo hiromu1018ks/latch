@@ -6,7 +6,7 @@
 
 ## 現在
 
-- フェーズ: **M4完了・G4承認済み(2026-10-06)→ UI v2移行Phase 0完了(2026-10-10)→ UI v2 Phase 1完了(2026-10-10)→ UI v2 Phase 1B完了(2026-10-10)→ UI v2 Phase 2完了(2026-10-10)→ UI v2 Phase 3完了(2026-10-10)→ UI v2 Phase 4完了(2026-10-10)**。次は**UI v2 Phase 5(横断機能+a11y)**。P3〜P7を経て11 Phase 0(内部α)へ(12 v0.4第3.1節・UI v2欄参照。2026-10-10にReact載せ替えP6を挿入し統合試験はP7へ繰り下げ)。ws-9(FCM実機送信)は資材待ちで独立挿入可
+- フェーズ: **M4完了・G4承認済み(2026-10-06)→ UI v2移行Phase 0完了(2026-10-10)→ UI v2 Phase 1完了(2026-10-10)→ UI v2 Phase 1B完了(2026-10-10)→ UI v2 Phase 2完了(2026-10-10)→ UI v2 Phase 3完了(2026-10-10)→ UI v2 Phase 4完了(2026-10-10)→ UI v2 Phase 5完了(2026-10-10)**。次は**UI v2 Phase 6(React載せ替え・XL)**。P3〜P7を経て11 Phase 0(内部α)へ(12 v0.4第3.1節・UI v2欄参照。2026-10-10にReact載せ替えP6を挿入し統合試験はP7へ繰り下げ)。ws-9(FCM実機送信)は資材待ちで独立挿入可
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
@@ -27,7 +27,7 @@
 | 2 | 01ホーム+02読み解き確認+保存 | P1(P1B一部) | 完了(2026-10-10・[phase2-report.md](ui-v2/phase2-report.md)) |
 | 3 | 03待機中+04候補(回答2択・undo・理由) | P2 | 完了(2026-10-10・[phase3-report.md](ui-v2/phase3-report.md)) |
 | 4 | 05成立+チャット+通報/ブロック+参加取り消し+カレンダー | P3 | 完了(2026-10-10・[phase4-report.md](ui-v2/phase4-report.md)) |
-| 5 | 横断機能(同意・設定・お知らせ・終了状態)+a11y総点検 | P1〜P4 | 未着手 |
+| 5 | 横断機能(同意・設定・お知らせ・終了状態)+a11y総点検 | P1〜P4 | 完了(2026-10-10・[phase5-report.md](ui-v2/phase5-report.md)) |
 | 6 | 実装のReact載せ替え(素のDOM実装→React・見た目不変) | P5 | 未着手(2026-10-10ユーザー指示で追加) |
 | 7 | 統合試験・実機E2E・配信検証・基準切替完了 | P1〜P6 | 未着手 |
 
@@ -38,6 +38,8 @@ P1実施記録(2026-10-10): デザイン基盤と新シェルを切替え完了�
 P1B実施記録(2026-10-10): API拡張5件(D-01・D-04・D-06・D-07・D-08)をbackend(PostgreSQL+D1/Workers両実装)へ実装し契約試験まで通した。undo・leaveの2経路新設・expiry-options 3択化・structured_data.participants_includes_owner・responses.reason_codes・latches.left_user_ids/messages.sender_id NULL可(alembic 0009+D1 0005)。`make test`1579・`make test-ci`2160・契約(参照132/D1 130・P1B追加13ケース)・miniflare probe緑。backend lint残留21件とprobe試験ドリフト・cutover変換の追随も回収。詳細はphase1b-report.md。
 
 P4実施記録(2026-10-10): 05成立・チャットを全面再構成(成立ヒーローsnap/burst+条件タグ・aside 3カード=成立した内容/メンバー/安全のために・チャット=ヘッダー+role=log+開始行+相手/自分のbubble+単行input+円形送信)・通報とブロックを統合dialogへ(D-09・理由4択はdialog内ステップ・report.js/blockFlow.jsをsafety.jsへ統合)・参加取り消し(D-08・POST leave+取り消し後姿+サーバのシステム行表示)・カレンダーに追加(D-10・クライアント完結の.ics)・attendanceをv2様式へ(D-14)。同期ロジック(30秒poll・cursor差分)は現行踏襲。実API(compose local)で成立〜チャット往復・通報/ブロック・leave(残存メンバー継続・ALREADY_LEFT・CHAT_READONLY)まで確認。vitest 337緑・build緑。持ち帰りはmatched_at/left_user_idsの開示ほか(phase4-report.md)。
+
+P5実施記録(2026-10-10): 横断機能をv2部品で再実装(文言は既存の承認済み定数を維持)。LLM同意=v2カード+cta・設定=3カード構成+ブロック解除を`<dialog class="dlg">`へ統一(旧modal-backdrop廃止)・お知らせpopoverをv2様式へ再構成し03のトーストとは併存(D-14の判断)+Esc閉じとフォーカス復帰+aria-controls/haspopup・下書きの最小導線(D-13・03に下書きセクション+02編集CTAのPATCH status=active化)・終了状態/未発見をv2カードへ・**D-11簡易一覧2画面(#/proposals・#/matched・phase4持ち帰り4の回収)**。a11y総点検(コントラスト実測: line-strong 3.2〜3.7:1・t2 7.5〜8.7:1・t3 5.2〜5.6:1と全基準超え)+モバイル390px(tabbar・safe-area・チャットcalc(100dvh-180px))を実ブラウザで確認。実API(compose local)で同意・解除・下書きactive化・一覧・終了状態まで往復。vitest 358緑・build緑。独自構成した画面の一覧と判断理由はphase5-report.md。
 
 ## M0 作業単位
 

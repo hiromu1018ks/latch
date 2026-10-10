@@ -14,7 +14,6 @@ import {
   CONSENT_SCOPE_TEXT,
   CONSENT_STATE_AGREED_TEXT,
   CONSENT_STATE_NOT_AGREED_TEXT,
-  CONSENT_TITLE,
   CONSENT_TOAST_TEXT,
 } from "./texts.js";
 import { escapeHtml, noticeTimeText } from "./view.js";
@@ -39,10 +38,11 @@ export const createConsent = ({ client, chrome, el }) => {
 
   const renderInto = (mount, { interactive }) => {
     const agreed = state.consented_at != null;
-    // v2部品(card+cta)で構成(UI v2 Phase 5)。文言は2026-10-03承認済みのまま
+    // v2部品(card+cta)で構成(UI v2 Phase 5)。文言は2026-10-03承認済みのまま。
+    // 題は画面側のh1(オンボーディング)・セクションh2(設定)が担うため
+    // カード内では出さない
     mount.innerHTML = `
       <section class="card consent-card">
-        <p class="consent-title">${escapeHtml(CONSENT_TITLE)}</p>
         ${buildBody()}
         <p class="consent-state"${agreed ? ' data-agreed="true"' : ""} data-role="consent-state">${escapeHtml(stateLine(state.consented_at))}</p>
         ${

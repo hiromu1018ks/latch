@@ -11,7 +11,6 @@ import {
   CONSENT_REQUIRED_TOAST_TEXT,
   CONSENT_SCOPE_TEXT,
   CONSENT_STATE_NOT_AGREED_TEXT,
-  CONSENT_TITLE,
   CONSENT_TOAST_TEXT,
 } from "../src/latch/texts.js";
 import { createConsent } from "../src/latch/consent.js";
@@ -66,11 +65,11 @@ describe("オンボーディング画面(design §2.4)", () => {
     expect(button.disabled).toBe(false);
   });
 
-  it("文言表示: 承認済み文言の全定数が載る", async () => {
+  it("文言表示: 承認済み文言の全定数が載る(題は画面側h1が担うためカードには出ない)", async () => {
     const { consent, onboarding } = await mountConsent();
     await consent.show();
     const text = onboarding.textContent;
-    expect(text).toContain(CONSENT_TITLE);
+    expect(onboarding.querySelector(".consent-title")).toBeNull();
     expect(text).toContain(CONSENT_LEAD_TEXT);
     expect(text).toContain(CONSENT_DESTINATIONS_TEXT);
     expect(text).toContain(CONSENT_SCOPE_TEXT);
@@ -133,10 +132,10 @@ describe("オンボーディング画面(design §2.4)", () => {
 });
 
 describe("設定画面第3セクション(design §2.4・D-14「設定画面から常に再確認できる」)", () => {
-  it("loadは設定mountへ文言と状態を描く(操作要素なし)", async () => {
+  it("loadは設定mountへ文言と状態を描く(操作要素なし・題はセクションh2が担う)", async () => {
     const { consent, settings } = await mountConsent({ consented_at: NOW_ISO });
     await consent.load();
-    expect(settings.textContent).toContain(CONSENT_TITLE);
+    expect(settings.querySelector(".consent-title")).toBeNull();
     expect(settings.textContent).toContain("同意済み");
     expect(settings.querySelector("button")).toBeNull();
   });
