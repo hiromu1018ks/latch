@@ -142,12 +142,11 @@ describe("settings画面骨組(design §2.4・UI v2 Phase 6からApp描画)", ()
       window.dispatchEvent(new Event("hashchange"));
       await act(async () => {});
     };
-    // ヘッダー側(常在): 通知/アカウントpopover・統合dialog・解除dialog
+    // ヘッダー側(常在): 通知/アカウントpopover・解除dialog
     for (const id of [
       "settingsButton", "noticeList", "noticeMoreButton",
-      // UI v2 Phase 4(D-09): blockModalはsafetyDialogへ統合
       // UI v2 Phase 5: ブロック解除の確認は旧modal-backdropからunblockDialogへ
-      "notificationDot", "unblockDialog", "safetyDialog",
+      "notificationDot", "unblockDialog",
     ]) {
       expect(document.getElementById(id)).not.toBeNull();
     }
@@ -171,6 +170,9 @@ describe("settings画面骨組(design §2.4・UI v2 Phase 6からApp描画)", ()
     for (const id of ["onboardingScreen", "consentOnboarding"]) {
       expect(document.getElementById(id)).not.toBeNull();
     }
+    // UI v2 Phase 4(D-09): blockModalはsafetyDialogへ統合(詳細画面が担う)
+    await go("#/latches/11111111-1111-4111-8111-111111111111");
+    expect(document.getElementById("safetyDialog")).not.toBeNull();
   });
 
   it("App配線: hash遷移で設定画面へ入る(3カードのマウント点が揃う)", async () => {

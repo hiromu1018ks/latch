@@ -1,10 +1,10 @@
 // アプリ本体(UI v2 Phase 6)。Reactがマウントの起点となり、シェル(ヘッダー・
 // tabbar・toast・appDialog・トークンパネル)はコンポーネント+コンテキスト、
 // hashルートはrouter.jsのparseHash契約をそのまま消費して画面を切り替える。
-// 01ホーム+02読み解き確認はReactコンポーネント(フォームstateをAppで1つ共有)、
-// 03/一覧/詳細/設定/オンボーディングは移行期のため旧DOM配線モジュールを
-// 条件マウントのブリッジで稼働させ、以降の作業で順次コンポーネント化する
-// (03/一覧/04/05=作業4、横断=作業5)。
+// 01ホーム+02読み解き確認(作業3)・03待機中/一覧/04候補/05成立+チャット(作業4)は
+// Reactコンポーネント(01↔02のフォームstateをAppで1つ共有)。設定/オンボーディングは
+// 移行期のため旧DOM配線モジュールを条件マウントのブリッジで稼働させ、作業5で
+// コンポーネント化する。
 // 意図文言をログに出さない(01 §21)。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "./api/client.js";
@@ -13,21 +13,18 @@ import { parseHash } from "./router.js";
 import { createFormState } from "./intent/state.js";
 import { HomeScreen } from "./intent/HomeScreen.jsx";
 import { ConfirmScreen } from "./intent/ConfirmScreen.jsx";
-import { createDetail } from "./latch/detail.js";
-import { createStandby } from "./latch/standby.js";
 import { createNotice } from "./latch/notice.js";
-import { createLatchList } from "./latch/lists.js"; // D-11簡易一覧(候補・成立)
 import { createPermissionControl } from "./latch/permission.js";
 import { createBlocksSection } from "./latch/blocks.js";
-import { createSafetyFlow } from "./latch/safety.js";
 import { createConsent } from "./latch/consent.js";
+import { StandbyScreen } from "./latch/StandbyScreen.jsx";
+import { ListsScreen } from "./latch/ListsScreen.jsx";
+import { DetailScreen } from "./latch/DetailScreen.jsx";
 import { ChromeProvider, useChrome, ToastArea, AppDialog } from "./ui/chrome.jsx";
 import { Header } from "./ui/Header.jsx";
 import { Tabbar } from "./ui/Tabbar.jsx";
 import { TokenPanel } from "./ui/TokenPanel.jsx";
 import {
-  StandbyScreenInner,
-  ListScreenInner,
   SettingsScreenInner,
   OnboardingScreenInner,
 } from "./ui/skeletons.jsx";
@@ -229,10 +226,10 @@ const AppBody = ({
             intentId={route.id}
           />
         )}
-        {route.name === "standby" && <StandbyBridge client={client} />}
-        {route.name === "proposals" && <ListBridge client={client} mode="proposals" />}
-        {route.name === "matched" && <ListBridge client={client} mode="matched" />}
-        {route.name === "latch" && <DetailBridge client={client} appState={appState} latchId={route.id} />}
+        {route.name === "standby" && <StandbyScreen client={client} />}
+        {route.name === "proposals" && <ListsScreen client={client} mode="proposals" />}
+        {route.name === "matched" && <ListsScreen client={client} mode="matched" />}
+        {route.name === "latch" && <DetailScreen client={client} appState={appState} latchId={route.id} />}
         {route.name === "settings" && <SettingsBridge client={client} consentRef={consentRef} />}
         {route.name === "onboarding" && <OnboardingBridge client={client} consentRef={consentRef} />}
       </main>
@@ -240,8 +237,6 @@ const AppBody = ({
       <ToastArea />
 
       <AppDialog />
-      {/* 通報・ブロックの統合dialog(UI v2 Phase 4・D-09)。中身は移行期safety.jsが構成する */}
-      <dialog className="dlg" id="safetyDialog" aria-label="通報・ブロック"></dialog>
       {/* ブロック解除の確認dialog(UI v2 Phase 5)。中身は移行期blocks.jsが構成する */}
       <dialog className="dlg" id="unblockDialog" aria-labelledby="unblockTitle"></dialog>
 
@@ -260,65 +255,6 @@ const useBridgeChrome = () => {
     [showToast, openAppDialog, setCurrentNav, setCounts],
   );
 };
-// --- 03 待機中(移行期ブリッジ・作業4でコンポーネント化) -----------------------
-const StandbyBridge = ({ client }) => {
-  const chrome = useBridgeChrome();
-  const ref = useRef(null);
-  useEffect(() => {
-    const standby = createStandby({ client, chrome, root: ref.current, onCounts: chrome.setCounts });
-    standby.show().catch(() => {});
-    return () => standby.stop();
-  }, [client, chrome]);
-  return (
-    <div className="page-main page-main--standby" id="standbyScreen" ref={ref}>
-      <StandbyScreenInner />
-    </div>
-  );
-};
-
-// --- D-11簡易一覧(移行期ブリッジ・作業4でコンポーネント化) --------------------
-const ListBridge = ({ client, mode }) => {
-  const chrome = useBridgeChrome();
-  const ref = useRef(null);
-  useEffect(() => {
-    const list = createLatchList({ client, root: ref.current, mode, onCounts: chrome.setCounts });
-    list.show().catch(() => {});
-    const moreButton = ref.current.querySelector("[data-list-more]");
-    const onMore = () => list.loadMore().catch(() => {});
-    moreButton.addEventListener("click", onMore);
-    return () => moreButton.removeEventListener("click", onMore);
-  }, [client, mode, chrome]);
-  return (
-    <div
-      className="page-main page-main--lists"
-      id={mode === "proposals" ? "proposalsScreen" : "matchedScreen"}
-      ref={ref}
-    >
-      <ListScreenInner mode={mode} />
-    </div>
-  );
-};
-
-// --- 04/05 詳細(移行期ブリッジ・作業4でコンポーネント化) ----------------------
-const DetailBridge = ({ client, appState, latchId }) => {
-  const chrome = useBridgeChrome();
-  const ref = useRef(null);
-  useEffect(() => {
-    // 詳細のnav強調は開いたlatchの実態で変わる(detail.jsが差し替える)。
-    // 直接訪問・notfoundの既定は候補(旧main.jsのNAV_BY_ROUTEと同じ)
-    chrome.setCurrentNav("proposals");
-    const safetyFlow = createSafetyFlow({
-      client,
-      dialog: $("#safetyDialog"),
-      onBlocked: () => detail.refresh(),
-    });
-    const detail = createDetail({ client, appState, chrome, root: ref.current, safety: safetyFlow });
-    detail.show(latchId).catch(() => {});
-    return () => detail.flush(); // 画面離脱時の未送信見送り(D-07)+タイマー停止
-  }, [client, appState, latchId, chrome]);
-  return <section className="detail-view" id="detailScreen" ref={ref}></section>;
-};
-
 // --- 設定(移行期ブリッジ・作業5でコンポーネント化) -----------------------------
 const SettingsBridge = ({ client, consentRef }) => {
   const chrome = useBridgeChrome();

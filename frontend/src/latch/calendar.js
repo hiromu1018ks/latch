@@ -63,6 +63,10 @@ export const buildIcs = ({ latch, nowIso = new Date().toISOString() }) => {
   return `${lines.join("\r\n")}\r\n`;
 };
 
+// 時刻が組めるか(カレンダーに追加ボタンの無効化判定。React版も同じ判定を使う)
+export const hasCalendarTime = (latch) =>
+  Boolean(parseJstSummary(latch?.time_summary ?? latch?.proposal?.time_summary));
+
 // ボタンの組立helper(成立した内容カード内・時刻が取れない場合は無効化)
 export const calendarButtonHtml = (latch) => {
   const p = latch?.proposal ?? {};

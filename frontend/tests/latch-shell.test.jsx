@@ -66,11 +66,15 @@ describe("シェルの構成(App描画)", () => {
     }
   });
 
-  it("右上toast(toast-pos)とwordmarkのhrefは#/ ・通報・ブロックの統合dialog(safetyDialog)がある", () => {
+  it("右上toast(toast-pos)とwordmarkのhrefは#/ ・通報・ブロックの統合dialogは詳細で出る", async () => {
     renderApp();
     expect(document.querySelector(".toast-pos#toast")).not.toBeNull();
     expect(document.querySelector("a.brand").getAttribute("href")).toBe("#/");
     // UI v2 Phase 4(D-09): 旧のreportModal/blockModalは統合dialogへ
+    // (統合dialogは詳細画面が担うため、詳細ルートで存在する)
+    window.location.hash = "#/latches/11111111-1111-4111-8111-111111111111";
+    window.dispatchEvent(new Event("hashchange"));
+    await act(async () => {});
     expect(document.getElementById("safetyDialog")).not.toBeNull();
     expect(document.getElementById("reportModal")).toBeNull();
     expect(document.getElementById("blockModal")).toBeNull();
