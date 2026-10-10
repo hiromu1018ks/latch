@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon, Logo } from "./Icon.jsx";
 import { useChrome } from "./chrome.jsx";
+import { NoticeList, useNotice } from "../latch/NoticePopover.jsx";
 
 const NAV_ITEMS = [
   { name: "deposit", href: "#/", label: "預ける" },
@@ -56,9 +57,21 @@ const CountPill = ({ count, tone }) => {
   );
 };
 
-export const Header = () => {
+export const Header = ({ client, noticeEnabled = false }) => {
   const { currentNav, accountInitial } = useChrome();
   const { openName, toggle, registerButton } = usePopovers();
+  // お知らせ: 起動時1回のpreloadでドット判定・popoverを開くたびに取得+既読化
+  const notice = useNotice(client);
+  useEffect(() => {
+    if (!noticeEnabled) return;
+    notice.preload().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noticeEnabled, client]);
+  const openNotice = () => {
+    const willOpen = openName !== "notice";
+    toggle("notice");
+    if (willOpen) notice.open().catch(() => {}); // 開いたときだけ取得・既読化
+  };
 
   return (
     <header className="hdr">
@@ -93,16 +106,16 @@ export const Header = () => {
             ref={(el) => registerButton("notice", el)}
             onClick={(event) => {
               event.stopPropagation();
-              toggle("notice");
+              openNotice();
             }}
           >
             <Icon name="bell" size={20} />
-            <NotificationDot />
+            {/* 未読ドット(お知らせの未読があるときだけ点く) */}
+            <span className="notification-dot" id="notificationDot" hidden={!notice.hasUnread}></span>
           </button>
           <div className="popover notification-popover" id="noticePopover" role="status" hidden={openName !== "notice"} onClick={(event) => event.stopPropagation()}>
             <p className="popover-kicker">お知らせ</p>
-            <div className="notice-list" id="noticeList"></div>
-            <button className="ghost notice-more" id="noticeMoreButton" type="button" hidden>もっと見る</button>
+            <NoticeList notice={notice} />
           </div>
         </div>
         <div className="popover-wrap">
@@ -141,6 +154,3 @@ export const Header = () => {
   );
 };
 
-// 未読ドット(お知らせの未読があるときだけ点く)。点灯はNoticeDotBridgeが
-// DOM操作で行う(お知らせ本体は後続コミットでReact化 — Phase 6 作業5)。
-const NotificationDot = () => <span className="notification-dot" id="notificationDot" hidden></span>;

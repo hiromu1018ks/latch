@@ -1,10 +1,11 @@
 // アプリ本体(UI v2 Phase 6)。Reactがマウントの起点となり、シェル(ヘッダー・
 // tabbar・toast・appDialog・トークンパネル)はコンポーネント+コンテキスト、
 // hashルートはrouter.jsのparseHash契約をそのまま消費して画面を切り替える。
-// 01ホーム+02読み解き確認(作業3)・03待機中/一覧/04候補/05成立+チャット(作業4)は
-// Reactコンポーネント(01↔02のフォームstateをAppで1つ共有)。設定/オンボーディングは
-// 移行期のため旧DOM配線モジュールを条件マウントのブリッジで稼働させ、作業5で
-// コンポーネント化する。
+// 01ホーム+02読み解き確認(作業3)・03待機中/一覧/04候補/05成立+チャット(作業4)・
+// 設定/オンボーディング(作業5)はすべてReactコンポーネント(01↔02のフォーム
+// stateをAppで1つ共有)。純関数モジュール(format・state・parseFlow・highlight・
+// expiry・view・texts・save)とAPIクライアント(session・client・appState)は
+// フレームワーク非依存のままimportして使う。
 // 意図文言をログに出さない(01 §21)。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "./api/client.js";
@@ -13,24 +14,18 @@ import { parseHash } from "./router.js";
 import { createFormState } from "./intent/state.js";
 import { HomeScreen } from "./intent/HomeScreen.jsx";
 import { ConfirmScreen } from "./intent/ConfirmScreen.jsx";
-import { createNotice } from "./latch/notice.js";
-import { createPermissionControl } from "./latch/permission.js";
-import { createBlocksSection } from "./latch/blocks.js";
-import { createConsent } from "./latch/consent.js";
 import { StandbyScreen } from "./latch/StandbyScreen.jsx";
 import { ListsScreen } from "./latch/ListsScreen.jsx";
 import { DetailScreen } from "./latch/DetailScreen.jsx";
+import { SettingsScreen, OnboardingScreen } from "./latch/SettingsScreen.jsx";
+import { ensureConsentGuidance, notifyConsentRequired } from "./latch/consentGate.js";
 import { ChromeProvider, useChrome, ToastArea, AppDialog } from "./ui/chrome.jsx";
 import { Header } from "./ui/Header.jsx";
 import { Tabbar } from "./ui/Tabbar.jsx";
 import { TokenPanel } from "./ui/TokenPanel.jsx";
-import {
-  SettingsScreenInner,
-  OnboardingScreenInner,
-} from "./ui/skeletons.jsx";
 
 // ルート→topnav/tabbarの強調先。latch(詳細)は提案姿なら候補・成立姿なら成立と
-// 実態で変わるため、詳細側(移行期はdetail.js・将来はDetailScreen)が差し替える
+// 実態で変わるため、詳細側(DetailScreen)が差し替える
 const NAV_BY_ROUTE = {
   home: "deposit",
   confirm: "deposit", // 02は「預ける」流れの中(Phase 2)
@@ -40,28 +35,11 @@ const NAV_BY_ROUTE = {
   latch: "proposals",
 };
 
-// 同意フローのapp横断インスタンス(422 CONSENT_REQUIREDの横断検出から呼ばれる
-// notifyRequiredをclientラップへ提供するため)。client単位で1つ。
-const consentInstances = new WeakMap();
-const ensureConsent = (client, chrome, consentRef) => {
-  if (!consentInstances.has(client)) {
-    // elは後からブリッジ(設定・オンボーディング)が差し込めるようにホルダーで渡す
-    const el = { onboarding: null, settings: null };
-    const consent = createConsent({ client, chrome, el });
-    consent.el = el;
-    consentInstances.set(client, consent);
-    consentRef.current = consent;
-  }
-  return consentInstances.get(client);
-};
-
 // アプリ全体。sessionはmain.jsが生成して注入する(試験からはスタブを注入する)。
 // client/appStateは省略時に生成する(試験からはスタブを注入できる)。
 // clientは422 CONSENT_REQUIREDの横断検出(誘導経路b)をラップしたもの — 全Intent
-// 操作はこのcallを通るため、個別画面の変更なしで全経路を拾う。consentは
-// 画面配線のあとでconsentRefへ入るため参照解決は呼び出し時。
+// 操作はこのcallを通るため、個別画面の変更なしで全経路を拾う。
 export const App = ({ session, client: injectedClient, appState: injectedAppState }) => {
-  const consentRef = useRef(null);
   const [tokenPanelVisible, setTokenPanelVisible] = useState(() => !session.hasTokens());
   const showTokenPanelRef = useRef(() => {});
   showTokenPanelRef.current = () => setTokenPanelVisible(true);
@@ -77,7 +55,7 @@ export const App = ({ session, client: injectedClient, appState: injectedAppStat
           return await baseClient.call(method, path, opts);
         } catch (err) {
           if (err?.status === 422 && err?.code === "CONSENT_REQUIRED") {
-            consentRef.current?.notifyRequired();
+            notifyConsentRequiredRef.current?.();
           }
           throw err;
         }
@@ -88,15 +66,18 @@ export const App = ({ session, client: injectedClient, appState: injectedAppStat
 
   const { client, appState } = created;
 
+  // 422検出時の誘導はchromeのトーストを伴うため、AppBodyから受け取る
+  const notifyConsentRequiredRef = useRef(null);
+
   return (
     <ChromeProvider>
       <AppBody
         session={session}
         client={client}
         appState={appState}
-        consentRef={consentRef}
         tokenPanelVisible={tokenPanelVisible}
         hideTokenPanel={() => setTokenPanelVisible(false)}
+        notifyConsentRequiredRef={notifyConsentRequiredRef}
       />
     </ChromeProvider>
   );
@@ -106,12 +87,14 @@ const AppBody = ({
   session,
   client,
   appState,
-  consentRef,
   tokenPanelVisible,
   hideTokenPanel,
+  notifyConsentRequiredRef,
 }) => {
-  const { setCurrentNav, setAccountInitial } = useChrome();
-  const bridgeChrome = useBridgeChrome();
+  const { setCurrentNav, setAccountInitial, showToast } = useChrome();
+
+  // 422 CONSENT_REQUIREDの横断検出から呼ぶ(誘導経路b)
+  notifyConsentRequiredRef.current = () => notifyConsentRequired(showToast);
 
   // --- hashルート(router.jsのparseHash契約をReactから消費する) ----------------
   const [hash, setHash] = useState(() => window.location.hash);
@@ -133,7 +116,7 @@ const AppBody = ({
   const intentStateRef = useRef(intentState);
   intentStateRef.current = intentState;
   // 同期待ちが必要なflow(parseFlow・saveFlow)のために、更新を即時に参照できる
-  // ミラー付きのsetterにする(純関数updateは呼び出し側で組てもらう)
+  // ミラー付きのsetterにする
   const updateIntentState = useCallback((updater) => {
     const next = typeof updater === "function" ? updater(intentStateRef.current) : updater;
     intentStateRef.current = next;
@@ -149,28 +132,6 @@ const AppBody = ({
       .then((me) => setAccountInitial(Array.from(me.display_name ?? "?")[0] ?? "?"))
       .catch(() => {});
   }, [session, appState, setAccountInitial]);
-
-  // --- お知らせ(移行期ブリッジ。popoverの中身は作業5でコンポーネント化) -------
-  useEffect(() => {
-    const list = $("#noticeList");
-    const moreButton = $("#noticeMoreButton");
-    const dot = $("#notificationDot");
-    const button = $("#noticeButton");
-    if (!list || !moreButton || !dot || !button) return;
-    const notice = createNotice({ client, el: { list, moreButton, dot } });
-    if (session.hasTokens()) notice.preload().catch(() => {});
-    const onMore = () => notice.loadMore().catch(() => {});
-    const onOpen = () => {
-      // popoverを開いたことの検知(開いたときだけ取得・既読化)
-      if (!$("#noticePopover").hidden) notice.open().catch(() => {});
-    };
-    moreButton.addEventListener("click", onMore);
-    button.addEventListener("click", onOpen);
-    return () => {
-      moreButton.removeEventListener("click", onMore);
-      button.removeEventListener("click", onOpen);
-    };
-  }, [client, session]);
 
   // 02の「書き直す」→01でcomposerへフォーカス(hash遷移後に当てる)
   useEffect(() => {
@@ -189,26 +150,24 @@ const AppBody = ({
     return () => document.removeEventListener("click", onRewriteClick);
   }, []);
 
-  // トークン接続済みで起動した場合も未同意なら誘導
+  // トークン接続済みで起動した場合も未同意なら誘導(誘導経路a)
   useEffect(() => {
     if (!session.hasTokens()) return;
-    ensureConsent(client, bridgeChrome, consentRef)
-      .ensureGuidance()
-      .catch(() => {});
-  }, [session, client, bridgeChrome, consentRef]);
+    ensureConsentGuidance(client).catch(() => {});
+  }, [session, client]);
 
   return (
     <>
       <a className="skip" href="#main">本文へスキップ</a>
 
-      <Header />
+      <Header client={client} noticeEnabled={session.hasTokens()} />
 
       <TokenPanel
         session={session}
         visible={tokenPanelVisible}
         onHide={hideTokenPanel}
         onConnected={() => {
-          consentRef.current?.ensureGuidance().catch(() => {});
+          ensureConsentGuidance(client).catch(() => {}); // 接続後の未同意誘導(a)
         }}
       />
 
@@ -230,76 +189,16 @@ const AppBody = ({
         {route.name === "proposals" && <ListsScreen client={client} mode="proposals" />}
         {route.name === "matched" && <ListsScreen client={client} mode="matched" />}
         {route.name === "latch" && <DetailScreen client={client} appState={appState} latchId={route.id} />}
-        {route.name === "settings" && <SettingsBridge client={client} consentRef={consentRef} />}
-        {route.name === "onboarding" && <OnboardingBridge client={client} consentRef={consentRef} />}
+        {route.name === "settings" && <SettingsScreen client={client} />}
+        {route.name === "onboarding" && <OnboardingScreen client={client} />}
       </main>
 
       <ToastArea />
 
       <AppDialog />
-      {/* ブロック解除の確認dialog(UI v2 Phase 5)。中身は移行期blocks.jsが構成する */}
-      <dialog className="dlg" id="unblockDialog" aria-labelledby="unblockTitle"></dialog>
+      {/* ブロック解除の確認dialogは設定画面(BlocksSection)が担う */}
 
       <Tabbar />
     </>
-  );
-};
-
-const $ = (selector) => document.querySelector(selector);
-
-// 移行期ブリッジ用: 旧DOM配線モジュールへ渡すchrome相当(安定の関数だけを含む)。
-const useBridgeChrome = () => {
-  const { showToast, openAppDialog, setCurrentNav, setCounts } = useChrome();
-  return useMemo(
-    () => ({ showToast, openAppDialog, setCurrentNav, setCounts }),
-    [showToast, openAppDialog, setCurrentNav, setCounts],
-  );
-};
-// --- 設定(移行期ブリッジ・作業5でコンポーネント化) -----------------------------
-const SettingsBridge = ({ client, consentRef }) => {
-  const chrome = useBridgeChrome();
-  const ref = useRef(null);
-  useEffect(() => {
-    const root = ref.current;
-    const consent = ensureConsent(client, chrome, consentRef);
-    consent.el.settings = root.querySelector("#consentControl");
-    const permissionControl = createPermissionControl({
-      notificationApi: typeof Notification !== "undefined" ? Notification : undefined,
-      mount: root.querySelector("#permissionControl"),
-    });
-    permissionControl.render();
-    const blocks = createBlocksSection({
-      client,
-      el: { list: root.querySelector("#blockList"), moreButton: root.querySelector("#blockMoreButton") },
-      dialog: $("#unblockDialog"),
-    });
-    const onMore = () => blocks.loadMore().catch(() => {});
-    root.querySelector("#blockMoreButton").addEventListener("click", onMore);
-    blocks.load().catch(() => {}); // 通信失敗時は空状態のまま(再訪で再試行)
-    consent.load().catch(() => {}); // 第3セクション(LLM送信の同意)
-    return () => {
-      root.querySelector("#blockMoreButton").removeEventListener("click", onMore);
-    };
-  }, [client, chrome, consentRef]);
-  return (
-    <section className="page-main page-main--settings" id="settingsScreen" ref={ref}>
-      <SettingsScreenInner />
-    </section>
-  );
-};
-
-// --- オンボーディング(移行期ブリッジ・作業5でコンポーネント化) -----------------
-const OnboardingBridge = ({ client, consentRef }) => {
-  const chrome = useBridgeChrome();
-  const ref = useRef(null);
-  useEffect(() => {
-    const consent = ensureConsent(client, chrome, consentRef);
-    consent.el.onboarding = ref.current.querySelector("#consentOnboarding");
-    consent.show().catch(() => {});
-  }, [client, chrome, consentRef]);
-  return (
-    <section className="page-main page-main--settings" id="onboardingScreen" ref={ref}>
-      <OnboardingScreenInner />
-    </section>
   );
 };

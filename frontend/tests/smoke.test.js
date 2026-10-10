@@ -89,12 +89,12 @@ describe("シェル+スケルトンの構成(App描画)", () => {
       await go(hash);
       expect(document.getElementById(id)).not.toBeNull();
     }
-    // appDialog・解除dialogはシェル側に常在・統合dialogは詳細(DetailScreen)が担う
-    for (const id of ["appDialog", "unblockDialog"]) {
-      expect(document.getElementById(id)).not.toBeNull();
-    }
+    // appDialogはシェル側に常在・統合dialogは詳細・解除dialogは設定が担う
+    expect(document.getElementById("appDialog")).not.toBeNull();
     await go("#/latches/11111111-1111-4111-8111-111111111111");
     expect(document.getElementById("safetyDialog")).not.toBeNull();
+    await go("#/settings");
+    expect(document.getElementById("unblockDialog")).not.toBeNull();
   });
 });
 

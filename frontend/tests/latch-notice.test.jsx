@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import {
   ANSWERED_TEXT,
   ATTENDANCE_QUESTION,
@@ -18,7 +19,11 @@ import {
   notificationLines,
   noticeTimeText,
 } from "../src/latch/view.js";
-import { createNotice } from "../src/latch/notice.js";
+import { NoticeList, useNotice } from "../src/latch/NoticePopover.jsx";
+
+// 旧createNotice(素のDOM配線)の試験を、Reactのhook+コンポーネント(useNotice/
+// NoticeList・UI v2 Phase 6)のRTLへ書き換えたもの。意図=preloadの二重取得なし・
+// 未読行のドットとvh・既読化のPOST・追頁・空状態・取得失敗の表示維持は踏襲。
 
 // API応答のfixture(§2-1のNotificationItem型・proposalは全フィールド版)
 const LATCH_ID = "11111111-1111-4111-8111-111111111111";
@@ -147,33 +152,59 @@ describe("noticeTimeText(created_atのJST書式)", () => {
   });
 });
 
-const mountNotice = (callImpl) => {
+// useNotice+NoticeListの描画ハーネス(Header内のpopover中身と同じ構成)
+const mountNoticeList = (callImpl, { preloadFirst = false } = {}) => {
+  cleanup();
   const client = { call: vi.fn(callImpl ?? (async () => ({ items: [], next_cursor: null }))) };
-  const el = {
-    list: document.createElement("div"),
-    moreButton: document.createElement("button"),
-    dot: document.createElement("span"),
+  let noticeRef = null;
+  const Harness = () => {
+    const notice = useNotice(client);
+    noticeRef = notice;
+    return <NoticeList notice={notice} />;
   };
-  el.moreButton.hidden = true;
-  el.dot.hidden = true;
-  const notice = createNotice({ client, el });
-  return { client, el, notice };
+  const utils = render(<Harness />);
+  return { client, utils, notice: () => noticeRef, preloadFirst };
 };
 
-describe("createNotice(design §2.1〜§2.2)", () => {
+const rows = () => [...document.querySelectorAll(".notice-item")];
+const dot = () => document.getElementById("notificationDot");
+
+// ドットはHeaderが描くため、harnessでも同じ条件式を置いて確認する
+const DotProbe = ({ notice }) => (
+  <span className="notification-dot" id="notificationDot" hidden={!notice.hasUnread}></span>
+);
+const mountWithDot = (callImpl) => {
+  cleanup();
+  const client = { call: vi.fn(callImpl) };
+  let noticeRef = null;
+  const Harness = () => {
+    const notice = useNotice(client);
+    noticeRef = notice;
+    return (
+      <>
+        <DotProbe notice={notice} />
+        <NoticeList notice={notice} />
+      </>
+    );
+  };
+  render(<Harness />);
+  return { client, notice: () => noticeRef };
+};
+
+describe("useNotice+NoticeList(design §2.1〜§2.2)", () => {
   it("preloadはGET /v1/notifications?limit=20を1回・未読があればドット表示+行描画", async () => {
-    const { client, el, notice } = mountNotice(async () => ({
+    const { client, notice } = mountWithDot(async () => ({
       items: [item("proposal", notificationLatch("proposed"))],
       next_cursor: null,
     }));
-    await notice.preload();
+    await act(async () => { await notice().preload(); });
     expect(client.call).toHaveBeenCalledWith("GET", "/v1/notifications?limit=20");
-    expect(el.dot.hidden).toBe(false);
-    expect(el.list.querySelectorAll(".notice-item").length).toBe(1);
+    expect(dot().hidden).toBe(false);
+    expect(rows().length).toBe(1);
   });
 
   it("未読行はaccの点+「未読」の視覚隠し補読を持つ(UI v2 Phase 5)", async () => {
-    const { el, notice } = mountNotice(async () => ({
+    const { notice } = mountNoticeList(async () => ({
       items: [
         item("proposal", notificationLatch("proposed")), // 未読
         item("proposal", notificationLatch("proposed"), {
@@ -183,17 +214,17 @@ describe("createNotice(design §2.1〜§2.2)", () => {
       ],
       next_cursor: null,
     }));
-    await notice.preload();
-    const unread = el.list.querySelector(".notice-item.unread");
+    await act(async () => { await notice().preload(); });
+    const unread = document.querySelector(".notice-item.unread");
     expect(unread.querySelector(".notice-dot")).not.toBeNull();
     expect(unread.querySelector(".vh").textContent).toBe("未読");
-    const read = el.list.querySelectorAll(".notice-item")[1];
+    const read = rows()[1];
     expect(read.querySelector(".notice-dot")).toBeNull();
-    expect(read.classList.contains("unread")).toBe(false);
+    expect(read.className.includes("unread")).toBe(false);
   });
 
   it("全件既読・0件ならドットは非表示のまま", async () => {
-    const { el, notice } = mountNotice(async () => ({
+    const { notice } = mountWithDot(async () => ({
       items: [
         item("proposal", notificationLatch("proposed"), {
           read_at: "2026-10-01T08:00:00+09:00",
@@ -201,12 +232,12 @@ describe("createNotice(design §2.1〜§2.2)", () => {
       ],
       next_cursor: null,
     }));
-    await notice.preload();
-    expect(el.dot.hidden).toBe(true);
+    await act(async () => { await notice().preload(); });
+    expect(dot().hidden).toBe(true);
   });
 
   it("openは未読行へだけPOST readする(既読行には呼ばない)", async () => {
-    const { client, notice } = mountNotice(async (method) => {
+    const { client, notice } = mountNoticeList(async (method) => {
       if (method === "POST") return null; // 204
       return {
         items: [
@@ -219,27 +250,27 @@ describe("createNotice(design §2.1〜§2.2)", () => {
         next_cursor: null,
       };
     });
-    await notice.open();
+    await act(async () => { await notice().open(); });
     const posts = client.call.mock.calls.filter(([method]) => method === "POST");
     expect(posts).toEqual([["POST", "/v1/notifications/n1/read"]]);
   });
 
   it("read完了後にドットを再判定する(全未読→既読化で消灯)", async () => {
-    const { el, notice } = mountNotice(async (method) => {
+    const { notice } = mountWithDot(async (method) => {
       if (method === "POST") return null;
       return { items: [item("proposal", notificationLatch("proposed"))], next_cursor: null };
     });
-    await notice.open();
-    expect(el.dot.hidden).toBe(true); // 開いた=見た
+    await act(async () => { await notice().open(); });
+    expect(dot().hidden).toBe(true); // 開いた=見た
   });
 
   it("POST readに失敗した行は握る(ドット点灯維持・次回開いた時の未読対象)", async () => {
-    const { el, notice } = mountNotice(async (method) => {
+    const { notice } = mountWithDot(async (method) => {
       if (method === "POST") throw new Error("x");
       return { items: [item("proposal", notificationLatch("proposed"))], next_cursor: null };
     });
-    await notice.open(); // throwされてもopen自体は正常終了
-    expect(el.dot.hidden).toBe(false);
+    await act(async () => { await notice().open(); }); // throwされてもopen自体は正常終了
+    expect(dot().hidden).toBe(false);
   });
 
   it("next_cursorが残れば「もっと見る」を表示し追頁でcursorを渡す", async () => {
@@ -255,43 +286,46 @@ describe("createNotice(design §2.1〜§2.2)", () => {
         next_cursor: null,
       },
     ];
-    const { client, el, notice } = mountNotice(async (method) => {
+    const { client, notice } = mountNoticeList(async (method) => {
       if (method === "POST") return null;
       return pages.shift();
     });
-    await notice.open();
-    expect(el.moreButton.hidden).toBe(false);
-    await notice.loadMore();
-    expect(client.call.mock.calls.at(-1)).toEqual([
-      "GET",
-      "/v1/notifications?limit=20&cursor=c1",
-    ]);
-    expect(el.list.querySelectorAll(".notice-item").length).toBe(2);
-    expect(el.moreButton.hidden).toBe(true);
+    await act(async () => { await notice().open(); });
+    expect(document.getElementById("noticeMoreButton").hidden).toBe(false);
+    fireEvent.click(document.getElementById("noticeMoreButton"));
+    await waitFor(() => {
+      expect(client.call.mock.calls.at(-1)).toEqual([
+        "GET",
+        "/v1/notifications?limit=20&cursor=c1",
+      ]);
+      expect(rows().length).toBe(2);
+      expect(document.getElementById("noticeMoreButton").hidden).toBe(true);
+    });
   });
 
   it("0件で空状態文言(まだ新しい候補はありません)", async () => {
-    const { el, notice } = mountNotice();
-    await notice.open();
-    expect(el.list.textContent).toContain(NOTICE_EMPTY_TITLE);
-    expect(el.list.textContent).toContain(NOTICE_EMPTY_NOTE);
+    const { notice } = mountNoticeList();
+    await act(async () => { await notice().open(); });
+    const list = document.getElementById("noticeList");
+    expect(list.textContent).toContain(NOTICE_EMPTY_TITLE);
+    expect(list.textContent).toContain(NOTICE_EMPTY_NOTE);
   });
 
   it("取得失敗は前回表示を維持(空状態も出さない)", async () => {
     let fail = false;
-    const { el, notice } = mountNotice(async () => {
+    const { notice } = mountNoticeList(async () => {
       if (fail) throw new Error("x");
       return { items: [item("proposal", notificationLatch("proposed"))], next_cursor: null };
     });
-    await notice.preload();
-    const before = el.list.innerHTML;
+    await act(async () => { await notice().preload(); });
+    const before = document.getElementById("noticeList").innerHTML;
     fail = true;
-    await notice.open();
-    expect(el.list.innerHTML).toBe(before);
+    await act(async () => { await notice().open(); });
+    expect(document.getElementById("noticeList").innerHTML).toBe(before);
   });
 
   it("preload後の初回openはGETしない(二重取得なし)・nearby行はリンク化しない", async () => {
-    const { client, el, notice } = mountNotice(async (method) => {
+    const { client, notice } = mountNoticeList(async (method) => {
       if (method === "POST") return null;
       return {
         items: [
@@ -302,11 +336,11 @@ describe("createNotice(design §2.1〜§2.2)", () => {
         next_cursor: null,
       };
     });
-    await notice.preload();
-    await notice.open();
+    await act(async () => { await notice().preload(); });
+    await act(async () => { await notice().open(); });
     expect(client.call).toHaveBeenCalledTimes(1); // preloadのGETのみ
-    expect(el.list.querySelectorAll("a.notice-item").length).toBe(0); // nearbyは<div>
-    expect(el.list.querySelectorAll(".notice-item").length).toBe(1);
+    expect(document.querySelectorAll("a.notice-item").length).toBe(0); // nearbyは<div>
+    expect(rows().length).toBe(1);
   });
 });
 

@@ -288,11 +288,15 @@ describe("a11y総点検(UI v2 Phase 5)", () => {
     expect(container.querySelector('a.skip[href="#main"]').textContent).toBe("本文へスキップ");
   });
 
-  it("popoverボタンはaria-expanded+aria-controls+aria-haspopupを持つ", () => {
+  it("popoverボタンはaria-expanded+aria-controls+aria-haspopupを持つ", async () => {
     renderApp();
     expect(document.getElementById("noticeButton").getAttribute("aria-controls")).toBe("noticePopover");
     expect(document.getElementById("accountButton").getAttribute("aria-controls")).toBe("accountPopover");
-    // dialogを開くボタンはaria-haspopup="dialog"(解除・取り下げ・通報/取り消し)
+    // dialogを開くボタンはaria-haspopup="dialog"(解除・取り下げ・通報/取り消し)。
+    // 解除の確認dialog(unblockDialog)は設定画面(BlocksSection)が担う
+    window.location.hash = "#/settings";
+    window.dispatchEvent(new Event("hashchange"));
+    await act(async () => {});
     expect(document.getElementById("unblockDialog").getAttribute("aria-labelledby")).toBe("unblockTitle");
   });
 
