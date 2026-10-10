@@ -155,6 +155,18 @@ describe("popoverの挙動(お知らせ・アカウント)", () => {
     expect(document.getElementById("accountPopover").hidden).toBe(true);
   });
 
+  it("アカウントpopoverの[設定]はpopoverを閉じて設定画面へ遷移する", async () => {
+    renderApp();
+    fireEvent.click(document.getElementById("accountButton"));
+    await act(async () => {});
+    expect(document.getElementById("accountPopover").hidden).toBe(false);
+    fireEvent.click(document.getElementById("settingsButton"));
+    await act(async () => {});
+    expect(document.getElementById("accountPopover").hidden).toBe(true);
+    expect(document.getElementById("accountButton").getAttribute("aria-expanded")).toBe("false");
+    expect(window.location.hash).toBe("#/settings");
+  });
+
   it("Escでpopoverを閉じて起動ボタンへフォーカスを戻す", async () => {
     renderApp();
     const accountButton = document.getElementById("accountButton");

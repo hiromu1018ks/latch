@@ -43,7 +43,7 @@ const usePopovers = () => {
     setOpenName((current) => (current === name ? null : name));
   };
 
-  return { openName, toggle, registerButton: (name, el) => { buttons.current[name] = el; } };
+  return { openName, toggle, setOpenName, registerButton: (name, el) => { buttons.current[name] = el; } };
 };
 
 const CountPill = ({ count, tone }) => {
@@ -59,7 +59,7 @@ const CountPill = ({ count, tone }) => {
 
 export const Header = ({ client, noticeEnabled = false }) => {
   const { currentNav, accountInitial } = useChrome();
-  const { openName, toggle, registerButton } = usePopovers();
+  const { openName, toggle, setOpenName, registerButton } = usePopovers();
   // お知らせ: 起動時1回のpreloadでドット判定・popoverを開くたびに取得+既読化
   const notice = useNotice(client);
   useEffect(() => {
