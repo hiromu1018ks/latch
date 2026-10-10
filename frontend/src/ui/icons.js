@@ -5,7 +5,8 @@
 
 // 各アイコン: { viewBox, sw(stroke-width), body } — bodyはプロトタイプの
 // 子要素マークアップをそのまま記載する(currentColorで描画)。
-const ICONS = {
+// Phase 6(React載せ替え)からはsrc/ui/Icon.jsxがこの表を消費する
+export const ICONS = {
   // 01 ヘッダーベル・02 公開範囲と通知(stroke 1.6)
   bell: {
     viewBox: "0 0 24 24",

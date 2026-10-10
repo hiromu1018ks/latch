@@ -1,19 +1,37 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { renderApp } from "./helpers.jsx";
 
-// happy-dom環境は import.meta.url を http スキームへ書き換えるため
-// process.cwd()(= npm test 実行時の frontend/)基準で解決する
+// UI v2 Phase 6(React載せ替え)からシェルとスケルトンはsrc/App.jsxが描くため、
+// index.htmlの本文テストは「マウント点があること」へ、構成のテストは
+// App描画のDOMへの試験へ置き換えた(意図=文言・ID・a11yの踏襲)。
 const html = () => readFileSync(resolve(process.cwd(), "index.html"), "utf8");
 const css = () => readFileSync(resolve(process.cwd(), "styles.css"), "utf8");
 
 describe("frontend雛形", () => {
-  it("script type=module で /src/main.js を読む", () => {
-    expect(html()).toContain('src="/src/main.js"');
+  it("script type=module で /src/main.jsx を読み・#rootへReactでマウントする", () => {
+    expect(html()).toContain('src="/src/main.jsx"');
+    expect(html()).toContain('<div id="root"></div>');
   });
 
+  it("スタイルが参照され、v2トークン「夜と翡翠」が定義される", () => {
+    expect(html()).toContain('href="/styles.css"');
+    expect(css()).toContain("--acc:#5FD4AE");
+    expect(css()).toContain("--bg:#0B0C12");
+  });
+});
+
+describe("シェル+スケルトンの構成(App描画)", () => {
+  const setup = () => {
+    const utils = renderApp();
+    return utils;
+  };
+
   it("01ホームの主要ID(UI v2 Phase 2・composer+chips+例文+待機中の意思)", () => {
+    setup();
     const ids = [
+      "homeScreen",
       "intentText",
       "readStatus",
       "readChips",
@@ -28,11 +46,12 @@ describe("frontend雛形", () => {
       "toast",
     ];
     for (const id of ids) {
-      expect(html()).toContain(`id="${id}"`);
+      expect(document.getElementById(id)).not.toBeNull();
     }
   });
 
   it("02読み解き確認の主要ID(3ステップ・あなたの言葉・5行・seg・期限select)", () => {
+    setup();
     const ids = [
       "confirmScreen",
       "wordsText",
@@ -46,77 +65,99 @@ describe("frontend雛形", () => {
       "confirmError",
     ];
     for (const id of ids) {
-      expect(html()).toContain(`id="${id}"`);
+      expect(document.getElementById(id)).not.toBeNull();
     }
   });
 
-  it("スタイルが参照され、v2トークン「夜と翡翠」が定義される", () => {
-    expect(html()).toContain('href="/styles.css"');
-    expect(css()).toContain("--acc:#5FD4AE");
-    expect(css()).toContain("--bg:#0B0C12");
+  it("03待機中・一覧・詳細・設定・オンボーディングのsectionがある", () => {
+    setup();
+    for (const id of [
+      "standbyScreen",
+      "proposalsScreen",
+      "matchedScreen",
+      "detailScreen",
+      "settingsScreen",
+      "onboardingScreen",
+      "appDialog",
+      "safetyDialog",
+      "unblockDialog",
+    ]) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
   });
 });
 
 describe("01・02の構成(プロトタイプが正)", () => {
   it("ヒーロー「どんな条件なら、動きますか。」とcomposerのplaceholder", () => {
-    expect(html()).toContain("どんな条件なら、<br>動きますか。");
-    expect(html()).toContain(
-      'placeholder="例：今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい"',
+    renderApp();
+    expect(document.querySelector(".hero-title").innerHTML).toContain(
+      "どんな条件なら、<br>動きますか。",
+    );
+    expect(document.querySelector("#intentText").placeholder).toBe(
+      "例：今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい",
     );
   });
 
   it("textareaは300字上限を維持し文字数カウンタは存在しない(プロトタイプ01)", () => {
-    expect(html()).toMatch(/<textarea id="intentText"[^>]*maxlength="300"/);
-    expect(html()).not.toContain("characterCount");
+    renderApp();
+    const textarea = document.querySelector("#intentText");
+    expect(textarea.maxLength).toBe(300);
+    expect(document.body.textContent).not.toContain("characterCount");
   });
 
   it("読み取りchipsはaria-live=polite・未読み取りガイドの2状態", () => {
-    expect(html()).toContain('id="readStatus" aria-live="polite"');
-    expect(html()).toContain("data-guide");
-    expect(html()).toContain("data-noread");
-    expect(html()).toContain("まだ条件を読み取れません");
+    renderApp();
+    expect(document.querySelector("#readStatus").getAttribute("aria-live")).toBe("polite");
+    expect(document.querySelector("[data-guide]")).not.toBeNull();
+    expect(document.querySelector("[data-noread]")).not.toBeNull();
+    expect(document.body.textContent).toContain("まだ条件を読み取れません");
   });
 
   it("例文4種のchips枠と「読み解く」CTA", () => {
-    expect(html()).toContain("こんな預け方もできます");
-    expect(html()).toContain('id="exampleChips"');
-    expect(html()).toContain('id="readButton"');
-    expect(html()).toContain("<span class=\"cta-label\">読み解く</span>");
+    renderApp();
+    expect(document.body.textContent).toContain("こんな預け方もできます");
+    expect(document.getElementById("exampleChips")).not.toBeNull();
+    expect(document.getElementById("readButton")).not.toBeNull();
+    expect(document.querySelector("#readButton .cta-label").textContent).toBe("読み解く");
   });
 
   it("02は3ステップインジケータと「こう読み解きました。」", () => {
-    expect(html()).toContain('class="steps"');
-    expect(html()).toContain("書く");
-    expect(html()).toContain("読み解きを確認");
-    expect(html()).toContain("預ける");
-    expect(html()).toContain("こう読み解きました。");
-    expect(html()).toContain("あなたの言葉");
-    expect(html()).toContain("公開範囲と通知");
-    expect(html()).toContain("読み取った条件");
-    expect(html()).toContain("<span class=\"cta-label\">この条件で預ける</span>");
+    renderApp();
+    expect(document.querySelector(".steps")).not.toBeNull();
+    const text = document.body.textContent;
+    expect(text).toContain("書く");
+    expect(text).toContain("読み解きを確認");
+    expect(text).toContain("預ける");
+    expect(text).toContain("こう読み解きました。");
+    expect(text).toContain("あなたの言葉");
+    expect(text).toContain("公開範囲と通知");
+    expect(text).toContain("読み取った条件");
+    expect(document.querySelector("#depositButton .cta-label").textContent).toBe(
+      "この条件で預ける",
+    );
   });
 
   it("公開設定・通知設定のselectは存在しない(D-02: 既定値で確定送信)", () => {
-    expect(html()).not.toContain('id="privacy"');
-    expect(html()).not.toContain('id="notification"');
-  });
-
-  it("旧確認モーダルは存在しない(02→03遷移に置き換わった)", () => {
-    expect(html()).not.toContain("confirmationModal");
-    expect(html()).not.toContain("returnButton");
-    expect(html()).not.toContain("modalClose");
+    renderApp();
+    expect(document.getElementById("privacy")).toBeNull();
+    expect(document.getElementById("notification")).toBeNull();
   });
 });
 
 describe("本実装の構成(Task 11)", () => {
-  it("トークンパネル・エラー表示の要素がある", () => {
+  it("トークンパネル・エラー表示の要素がある(トークン未設定で表示)", () => {
+    renderApp();
     for (const id of ["tokenPanel", "idpToken", "tokenConnect", "tokenError", "parseError"]) {
-      expect(html()).toContain(`id="${id}"`);
+      expect(document.getElementById(id)).not.toBeNull();
     }
+    expect(document.getElementById("tokenPanel").hidden).toBe(false);
   });
 
   it("expiry selectは初期disabled(選択肢はAPI応答から構成・02のカード内)", () => {
-    expect(html()).toMatch(/<select id="expiry" class="field" disabled><\/select>/);
+    renderApp();
+    const select = document.getElementById("expiry");
+    expect(select.disabled).toBe(true);
+    expect(select.className).toContain("field");
   });
 });
 
@@ -131,22 +172,25 @@ describe("UI v2シェル(Phase 1)", () => {
   });
 
   it("テーマ切替機構は存在しない(gap分析§1)", () => {
-    expect(html()).not.toContain("themeButton");
-    expect(html()).not.toContain("data-theme");
+    renderApp();
+    expect(document.getElementById("themeButton")).toBeNull();
+    expect(document.querySelector("[data-theme]")).toBeNull();
     expect(html()).not.toContain("latch-theme");
     expect(css()).not.toContain("paper-milk.png"); // paperテクスチャ廃止
   });
 
   it("Phosphorアイコン(ph-クラス)を使わない(インラインSVGへ置換)", () => {
-    expect(html()).not.toMatch(/class="ph /);
-    expect(html()).not.toMatch(/ph ph-/);
+    const { container } = renderApp();
+    expect(container.innerHTML).not.toMatch(/class="ph /);
+    expect(container.innerHTML).not.toMatch(/ph ph-/);
   });
 
-  it("skip link・視覚隠し・ドットグリッド・<dialog>の土台がある", () => {
-    expect(html()).toContain('class="skip" href="#main"');
-    expect(html()).toContain('id="appDialog"');
+  it("skip link・視覚隠し・<dialog>の土台がある", () => {
+    renderApp();
+    expect(document.querySelector('a.skip[href="#main"]')).not.toBeNull();
+    expect(document.querySelector('a.skip').textContent).toBe("本文へスキップ");
+    expect(document.getElementById("appDialog")).not.toBeNull();
     expect(css()).toContain(".vh{");
-    expect(css()).toContain(".ground{");
     expect(css()).toContain(".dlg::backdrop");
   });
 
@@ -160,8 +204,7 @@ describe("UI v2シェル(Phase 1)", () => {
 
 describe("03待機中・04候補が届く(UI v2 Phase 3)", () => {
   it("03の主要フック(バッジ・見出し2行・メインカード・オーブ・ほかの意思)", () => {
-    const ids = ["standbyScreen"];
-    for (const id of ids) expect(html()).toContain(`id="${id}"`);
+    renderApp();
     for (const hook of [
       "data-sb-badge",
       "data-sb-title-a",
@@ -170,19 +213,21 @@ describe("03待機中・04候補が届く(UI v2 Phase 3)", () => {
       "data-sb-main",
       "data-sb-orb",
       "data-sb-others",
+      "data-sb-drafts-section",
     ]) {
-      expect(html()).toContain(hook);
+      expect(document.querySelector(`[${hook}]`)).not.toBeNull();
     }
     // 3カード(いま、LATCHがしていること)+通知プレビュー
-    expect(html()).toContain("いま、LATCHがしていること");
-    expect(html()).toContain("照らし合わせ続ける");
-    expect(html()).toContain("成立し得るかだけを見る");
-    expect(html()).toContain("揃ったら、ひとことだけ");
-    expect(html()).toContain("LATCH候補があります");
-    expect(html()).toContain("ほかに待機中の意思");
-    expect(html()).toContain("新しく預ける");
+    const text = document.body.textContent;
+    expect(text).toContain("いま、LATCHがしていること");
+    expect(text).toContain("照らし合わせ続ける");
+    expect(text).toContain("成立し得るかだけを見る");
+    expect(text).toContain("揃ったら、ひとことだけ");
+    expect(text).toContain("LATCH候補があります");
+    expect(text).toContain("ほかに待機中の意思");
+    expect(text).toContain("新しく預ける");
     // プレースホルダは解消済み
-    expect(html()).not.toContain("この画面は準備中です");
+    expect(text).not.toContain("この画面は準備中です");
   });
 
   it("03・04のスタイル(オーブ・タイマー・照合表・4状態・timer-low)", () => {

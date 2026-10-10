@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { act } from "react";
 import {
   PERMISSION_DEFAULT_TEXT,
   PERMISSION_DENIED_TEXT,
@@ -14,6 +13,7 @@ import {
   permissionText,
 } from "../src/latch/permission.js";
 import { createSettings } from "../src/latch/settings.js";
+import { renderApp } from "./helpers.jsx";
 
 const mountPermission = (notificationApi) => {
   const mount = document.createElement("div");
@@ -118,7 +118,7 @@ describe("createPermissionControl(design §2.5・D-18)", () => {
   });
 });
 
-describe("settings画面骨組(design §2.4)", () => {
+describe("settings画面骨組(design §2.4・UI v2 Phase 6からApp描画)", () => {
   it("showはpermissionControl.render・blocks.load・consent.loadを呼ぶ", () => {
     const permissionControl = { render: vi.fn() };
     const blocks = { load: vi.fn(async () => {}) };
@@ -130,8 +130,8 @@ describe("settings画面骨組(design §2.4)", () => {
     expect(consent.load).toHaveBeenCalledTimes(1);
   });
 
-  it("index.html構造: settingsScreen(3カード)・解除dialog・noticeList・notificationDot初期hidden", () => {
-    const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
+  it("App描画: settingsScreen(3カード)・解除dialog・noticeList・notificationDot初期hidden", () => {
+    renderApp();
     for (const id of [
       "settingsScreen", "permissionControl", "blockList", "blockMoreButton",
       "settingsButton", "noticeList", "noticeMoreButton",
@@ -142,34 +142,24 @@ describe("settings画面骨組(design §2.4)", () => {
       // D-11簡易一覧(候補・成立タブ)
       "proposalsScreen", "matchedScreen",
     ]) {
-      expect(html).toContain(`id="${id}"`);
+      expect(document.getElementById(id)).not.toBeNull();
     }
-    expect(html).toContain('class="notification-dot" id="notificationDot" hidden');
+    expect(document.getElementById("notificationDot").hidden).toBe(true);
     // 旧モーダル方式は廃止(<dialog class="dlg">へ統一)
-    expect(html).not.toContain('id="unblockModal"');
-    expect(html).not.toContain('class="modal-backdrop"');
+    expect(document.getElementById("unblockModal")).toBeNull();
+    expect(document.querySelector(".modal-backdrop")).toBeNull();
     // 候補・成立タブは一覧ルートへ(D-11)
-    expect(html).toContain('data-nav="proposals" href="#/proposals"');
-    expect(html).toContain('data-nav="matched" href="#/matched"');
+    expect(document.querySelector('a[data-nav="proposals"]').getAttribute("href")).toBe("#/proposals");
+    expect(document.querySelector('a[data-nav="matched"]').getAttribute("href")).toBe("#/matched");
   });
 
-  it("main.js配線: 6モジュールのimport・screensへsettings・noticeButton追加リスナ・preload", () => {
-    const mainJs = readFileSync(resolve(process.cwd(), "src/main.js"), "utf8");
-    expect(mainJs).toContain('from "./latch/notice.js"');
-    expect(mainJs).toContain('from "./latch/permission.js"');
-    expect(mainJs).toContain('from "./latch/blocks.js"');
-    expect(mainJs).toContain('from "./latch/settings.js"');
-    expect(mainJs).toContain('from "./latch/safety.js"'); // UI v2 Phase 4(統合dialog)
-    expect(mainJs).toContain('from "./latch/lists.js"'); // UI v2 Phase 5(D-11)
-    expect(mainJs).toContain('dialog: $("#unblockDialog")');
-    expect(mainJs).toContain('settings: $("#settingsScreen")');
-    expect(mainJs).toContain('proposals: $("#proposalsScreen")');
-    expect(mainJs).toContain('matched: $("#matchedScreen")');
-    expect(mainJs).toContain('notice.preload()');
-    expect(mainJs).toContain('if (!$("#noticePopover").hidden) notice.open()');
-    expect(mainJs).toContain('from "./latch/consent.js"');
-    expect(mainJs).toContain('onboarding: $("#onboardingScreen")');
-    expect(mainJs).toContain('CONSENT_REQUIRED');
+  it("App配線: hash遷移で設定画面へ入る(3カードのマウント点が揃う)", async () => {
+    renderApp();
+    window.location.hash = "#/settings";
+    window.dispatchEvent(new Event("hashchange"));
+    await act(async () => {});
+    expect(document.getElementById("settingsScreen").hidden).toBe(false);
+    expect(document.getElementById("permissionControl").childElementCount).toBeGreaterThan(0);
   });
 
   it("router: 候補・成立の一覧ルートを解析する(D-11)", async () => {
