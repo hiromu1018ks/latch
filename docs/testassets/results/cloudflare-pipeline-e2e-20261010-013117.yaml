@@ -1,0 +1,54 @@
+date: '2026-10-10T01:26:46.684384+00:00'
+base_url: https://latch-api.hiromu1018ks.workers.dev
+actors:
+  alpha:
+    subject: pipe-e2e-alpha-8ed32a26
+    user_id: 8848e1a3-f7ea-4a81-85a1-240aa3a2659f
+  beta:
+    subject: pipe-e2e-beta-639c8f50
+    user_id: ba341d24-3311-4879-bcee-566fe52b802d
+timings_s:
+  intents_created: 1.9
+  proposal_generated: 25.9
+  matched: 26.6
+  total: 269.2
+checks:
+  proposal_auto_generated: true
+  matched: true
+  notifications_visible: true
+  notification_delivery_records: 4
+intent_ids:
+  alpha: 9e56cd19-4144-4b70-b781-2e47a1f3a234
+  beta: 80ca52d5-03ef-4a19-8de4-2d60180d94d6
+d1_state:
+  jobs_unsucceeded: 0
+  outbox_unsent: 0
+  match_candidates_evaluated: 3
+  llm_attempts_jev: 3
+worker_probe_events:
+  created_at: 1791595871978000
+  payload:
+    cron: '*/5 * * * *'
+    scheduled_time: '1791595804000'
+    outcome:
+      ok: true
+      at: '2026-10-10T01:30:05.004000+00:00'
+      schedule:
+        claimed: 77
+        completed: 77
+        superseded: 0
+      jobs_recovered: 0
+      outbox:
+        pending: 0
+        sent: 0
+        send_failed: 0
+      jobs:
+        claimed: 2
+        notify: 2
+        retention: 0
+        evaluation: 0
+        failed: 0
+      retention:
+        candidates_deleted: 0
+        cache_expired: 0
+        snapshots_deleted: 2
