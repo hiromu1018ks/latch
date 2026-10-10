@@ -108,8 +108,20 @@ async def build_state(app: FastAPI, env) -> None:
         clock, user_lookup, consent_service.consented
     )
     geo = D1GeoService(db)
+    from latch.adapters.d1.schedule import D1ScheduleRepository
+
+    from latch_worker.pipeline import QueueDispatcher
+
+    schedule_repo = D1ScheduleRepository(db)
+    queue_producer = getattr(env, "JOBS", None)
     app.state.intent_service = D1IntentService(
-        clock=clock, db=db, atomic=atomic, geocoder=geo, limiter=limiter
+        clock=clock,
+        db=db,
+        atomic=atomic,
+        geocoder=geo,
+        limiter=limiter,
+        schedule=schedule_repo,
+        dispatcher=QueueDispatcher(db, queue_producer, clock),
     )
     app.state.safety_service = D1SafetyService(clock=clock, db=db, atomic=atomic)
     app.state.latches_service = D1LatchesService(

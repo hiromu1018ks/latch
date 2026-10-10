@@ -1,0 +1,52 @@
+date: '2026-10-10T00:53:01.031258+00:00'
+base_url: https://latch-api.hiromu1018ks.workers.dev
+actors:
+  alpha:
+    subject: pipe-e2e-alpha-352e0766
+    user_id: a4be049c-b719-4cb6-81c7-8094b17f854a
+  beta:
+    subject: pipe-e2e-beta-de794048
+    user_id: e0e6daad-b448-4880-a843-db77ec378758
+timings_s:
+  intents_created: 4.8
+  proposal_generated: 17.0
+  matched: 17.7
+  total: 196.1
+checks:
+  proposal_auto_generated: true
+  matched: true
+  notifications_visible: true
+  notification_delivery_records: 4
+intent_ids:
+  alpha: e5eda61c-c941-4cc8-8c8b-e5af4057be9a
+  beta: d07256cf-6ffd-41a7-bdb4-cf69030f1972
+d1_state:
+  jobs_unsucceeded: 0
+  outbox_unsent: 0
+  match_candidates_evaluated: 1
+  llm_attempts_jev: 1
+worker_probe_events:
+  created_at: 1791593756718000
+  payload:
+    cron: '*/5 * * * *'
+    scheduled_time: '1791593742000'
+    outcome:
+      ok: true
+      at: '2026-10-10T00:55:51.891000+00:00'
+      schedule:
+        claimed: 0
+        completed: 0
+        superseded: 0
+      jobs_recovered: 0
+      outbox:
+        pending: 0
+        sent: 0
+        send_failed: 0
+      jobs:
+        claimed: 4
+        notify: 2
+        retention: 0
+        evaluation: 0
+        failed: 0
+      retention_error: 'JsException: Error: D1_ERROR: FOREIGN KEY constraint failed:
+        SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_FOREIGNKEY)'

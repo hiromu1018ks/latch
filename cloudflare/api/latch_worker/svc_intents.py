@@ -165,14 +165,63 @@ def _fields_from_cols(cols: ResolvedColumns, *, status: str) -> dict:
 
 
 class D1IntentService(IntentService):
-    """intents CRUDのD1版(本体検証規則 + atomic.apply_intent書込)。"""
+    """intents CRUDのD1版(本体検証規則 + atomic.apply_intent書込)。
 
-    def __init__(self, *, clock, db, atomic: D1AtomicRepository, geocoder, limiter=None) -> None:  # noqa: E501
+    schedule/dispatcher(任意): 意図確定後のパイプラインhook
+    (request_evaluation/mark_paused + outbox envelopeのベストエフォート配送)。
+    hook失敗はAPI応答に影響しない(cronのoutbox掃きとschedule dueが評価を保証)。
+    """
+
+    def __init__(
+        self,
+        *,
+        clock,
+        db,
+        atomic: D1AtomicRepository,
+        geocoder,
+        limiter=None,
+        schedule=None,
+        dispatcher=None,
+    ) -> None:
         self._clock = clock
         self._d1 = db
         self._atomic = atomic
         self._geocoder = geocoder
         self._limiter = limiter
+        self._schedule = schedule
+        self._dispatcher = dispatcher
+
+    async def _after_pipeline_event(
+        self, intent_id: str, version: int, event: str, now
+    ) -> None:
+        """意図確定後のpipeline hook(§4配送・§5.4 I3・ベストエフォート)。"""
+        if self._schedule is None and self._dispatcher is None:
+            return
+        try:
+            if self._schedule is not None:
+                if event in ("created", "updated", "resumed"):
+                    await self._schedule.request_evaluation(
+                        intent_id,
+                        version,
+                        "initial" if event == "created" else "updated",
+                        now,
+                    )
+                else:  # paused / deleted
+                    await self._schedule.mark_paused(intent_id, True)
+            if self._dispatcher is not None and event in (
+                "created",
+                "updated",
+                "resumed",
+            ):
+                reason = "updated" if event == "resumed" else event
+                await self._dispatcher.dispatch_event(
+                    event_id=f"{reason}:{intent_id}:{version}",
+                    intent_id=intent_id,
+                    intent_version=version,
+                    reason=reason,
+                )
+        except Exception:  # noqa: BLE001 — cron(outbox掃き+schedule due)が保証
+            pass
 
     # -- 共通ヘルパー(本体IntentServiceと同一規則) --
 
@@ -387,6 +436,12 @@ class D1IntentService(IntentService):
                 now,
             )
             intent_id = uuid_mod.UUID(result.response["intent"]["id"])
+            await self._after_pipeline_event(
+                result.response["intent"]["id"],
+                int(result.response["intent"]["version"]),
+                "created",
+                now,
+            )
             return _row_from_cols(
                 cols,
                 intent_id=intent_id,
@@ -604,6 +659,7 @@ class D1IntentService(IntentService):
                 now=now,
             )
         )
+        await self._after_pipeline_event(str(row.id), new_version, "updated", now)
         out = _row_from_cols(
             cols,
             intent_id=row.id,
@@ -679,6 +735,7 @@ class D1IntentService(IntentService):
                 now=now,
             )
         )
+        await self._after_pipeline_event(str(row.id), new_version, "updated", now)
         return _row_from_cols(
             cols,
             intent_id=row.id,
@@ -798,6 +855,10 @@ class D1IntentService(IntentService):
                     )
                 )
             self._map_conflict(result)
+            event = {"pause": "paused", "resume": "resumed", "delete": "deleted"}.get(
+                op, "updated"
+            )
+            await self._after_pipeline_event(str(row.id), new_version, event, now)
             return replace(
                 row,
                 status=new_status,

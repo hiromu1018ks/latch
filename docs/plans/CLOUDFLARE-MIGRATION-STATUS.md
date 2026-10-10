@@ -4,14 +4,16 @@
 本書は実装セッション横断の作業状態記録。最終報告書は
 docs/reviews/cloudflare-migration-implementation-report.md。
 
-## 現在のフェーズ: 本体実装(D1版LATCH API)完了 ✅(2026-10-09)
+## 現在のフェーズ: バックグラウンド処理(マッチングパイプライン)組込み完了 ✅(2026-10-10)
 
-実環境(https://latch-api.hiromu1018ks.workers.dev)で /v1 API一式が動作し、
-**契約116ケースが実環境で全green**(PostgreSQL参照実装と同じ応答)。
-backend全套2104 passed(test-ci互換)。実測記録:
-docs/testassets/results/cloudflare-api-parity-20261009.yaml
+実環境(https://latch-api.hiromu1018ks.workers.dev)で**意図保存からLATCH成立・
+通知記録までの非同期パイプラインが稼働**。実測:
+docs/testassets/results/cloudflare-pipeline-e2e-20261010-010604.yaml
+(意図2件→提案自動生成11.7秒→回答→matched・通知配送記録4件・全job収束)。
 
-残るのは別承認待ち項目(実LLM品質比較・実push・本番切替)と最終報告書更新。
+- LLMはstubのまま(実LLM呼出しは承認待ち・外部送信なし)
+- 契約116ケースは組込み後も実環境で全green(2026-10-10・336秒)
+- 残るのは別承認待ち項目(実LLM品質比較・実push・本番切替)と最終報告書更新
 
 ## 本体実装の成果(2026-10-09)
 
@@ -38,8 +40,37 @@ docs/testassets/results/cloudflare-api-parity-20261009.yaml
   - remote(実環境 https://latch-api...): **116/116 passed**(532秒)
   - backend全套(LATCH_LLM_MODE=stub): **2104 passed / 0 failed**
   - cf-unit(cloudflare資産試験): 107 passed(既存資産無傷)
-- 最終deploy version: 68a8e9d9-62a2-4977-b2e7-eaa0346bc585
-  (初回3b89e393からstate.pyのJWKS差し替え条件化のみ変更・挙動同一)
+- 2026-10-09当時のdeploy version: 68a8e9d9-62a2-4977-b2e7-eaa0346bc585
+
+## パイプライン組込みの成果(2026-10-10)
+
+- **pipeline.py**(cloudflare/api/latch_worker/): outbox掃き(post-commit
+  ベストエフォート+cron・at-least-once・envelopeはIDのみ)・評価
+  (embedding stub生成→T4検索snapshot→layer3 cheap judge→match_candidates
+  UNIQUE(a,b,va,vb)→EvaluationJobRunner+stub jev(I1 claim・llm_attempts
+  記録)→latch_score→閾値超えをatomic.apply_proposal(D-08・通知job同時保存))
+  ・run_cron(ScheduledEvaluator・jobs lease回収・outbox掃き・notify/
+  retention job・run_retention)・handle_queue_message(consumer)
+- **svc_intents.py hooks**: 意図確定後(request_evaluation/mark_paused+
+  post-commit配送)。**atomic.apply_response**: matched時に評価scheduleを
+  一時化(guard従属)。**entry.py**: scheduled/queueを実装へ差し替え
+  (cron結果はprobe_eventsへ稼働証跡として記録・observability off維持)
+- **stub JEV応答**: 両方向noul 0.9で固定(決定的・score=0.9≥閾値0.60で
+  提案成立。実LLMとは無関係・コンストラクタ差替えはstubの正規機能)
+- **修正1件**: run_retentionのsnapshot掃きは実D1のFK強制により子行
+  (retrieval_snapshot_rows)を親より先に削除するよう修正(初回E2Eの
+  cron証跡で発見→修正後のcron証跡で解消確認)
+- **新規試験**: tests/cloudflare/test_pipeline_e2e.py(in-process 4試験:
+  E2E一貫性・outbox再送at-least-once・再配送/cron重複で提案・Jev試行とも
+  1件のまま・cron単独で提案到達)+ test_pipeline_remote_e2e.py(実環境
+  ゲート付き・結果YAML自動生成)
+- **実測(最終)**: 意図2件作成1.4秒→提案自動生成11.7秒(queue即時経路・
+  cronは*/5フォールバック)→matched 12.1秒→cron通知配送記録4件。
+  jobs未収束0・outbox未送0・cron全段ok(retention_error解消)
+- 最終deploy version: 47b68bbe-3577-44dc-bbb1-aaf2af611c03
+  (初回e2ff75c9はretention FK修正前・挙動はretention段以外同一)
+- **テスト現況**: backend全套 **2108 passed / 0 failed**(2104+パイプライン4)
+  ・cf-unit **111 passed**(107+4)・契約remote 116/116(2026-10-10)
 
 ## 実環境契約試験の再実行手順(回帰確認に使う)
 
@@ -52,24 +83,15 @@ LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
 # miniflare検証時は LATCH_CF_D1_SQLITE=<devのD1 sqliteパス> を代わりに指定
 ```
 
-## 実配備環境(2026-10-09時点・稼働中)
+## 実配備環境(2026-10-10時点・稼働中)
 
 - Worker(API本体+probe併設): https://latch-api.hiromu1018ks.workers.dev
-  (cloudflare/api — gzip 7.9MB・cron */5・observability off・
-  vars: LATCH_ENV=api, LATCH_LLM_MODE=stub)
+  (cloudflare/api — gzip 7925KiB(上限10MB)・cron */5・observability off・
+  vars: LATCH_ENV=api, LATCH_LLM_MODE=stub・queue consumer稼働)
 - D1: latch-core(id: f40367ac-7631-4506-a083-c52e7ab51787)
   マイグレーション0001〜0004適用済み+geofeatures 7行+probe_events表
-- Queues: latch-jobs-probe(producer/consumer稼働)
-- 認証: .envのCLOUDFLARE_API_TOKEN・アカウント67e928741c8e73415fe206699d0f1667
-- プラン: Workers Paid(2026-10のみ契約・ユーザー申告)
-
-## 実配備環境(2026-10-09時点・稼働中)
-
-- Worker(probe): https://latch-api.hiromu1018ks.workers.dev
-  (cloudflare/api — FastAPI/Pyodide・gzip 7.3MB・cron */5・observability off)
-- D1: latch-core(id: f40367ac-7631-4506-a083-c52e7ab51787)
-  マイグレーション0001〜0003適用済み+probe_events表
-- Queues: latch-jobs-probe(producer/consumer稼働)
+  (cron稼働証跡として継続記録)
+- Queues: latch-jobs-probe(producer=env.JOBS・consumer=パイプライン評価)
 - 認証: .envのCLOUDFLARE_API_TOKEN・アカウント67e928741c8e73415fe206699d0f1667
 - プラン: Workers Paid(2026-10のみ契約・ユーザー申告)
 

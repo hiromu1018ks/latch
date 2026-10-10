@@ -61,15 +61,20 @@ async def run_retention(
         .bind(now_us)
         .run()
     )
+    # 実D1はFK強制のため子行(snapshot_rows)を親(snapshots)より先に消す
+    await (
+        db.prepare(
+            "DELETE FROM retrieval_snapshot_rows WHERE snapshot_id IN"
+            " (SELECT id FROM retrieval_snapshots WHERE expires_at <= ?)"
+        )
+        .bind(now_us)
+        .run()
+    )
     snaps = (
         await db.prepare("DELETE FROM retrieval_snapshots WHERE expires_at <= ?")
         .bind(now_us)
         .run()
     )
-    await db.prepare(
-        "DELETE FROM retrieval_snapshot_rows WHERE snapshot_id NOT IN"
-        " (SELECT id FROM retrieval_snapshots)"
-    ).run()
     tombs = (
         await db.prepare(
             "UPDATE deletion_tombstones SET state = 'done'"

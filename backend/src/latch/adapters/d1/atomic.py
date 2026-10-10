@@ -339,6 +339,16 @@ class D1AtomicRepository:
                         " WHERE intent_id = ? AND latch_id = ?)"
                     ).bind(now_us, iid, iid, latch_id)
                 )
+                # 成立Intentは再評価機会から外す(§5.4。claimed中の行も
+                # 一時化→claim完了の条件付きUPDATEが不成立=次回置かれない)
+                stmts.append(
+                    self.db.prepare(
+                        "UPDATE intent_evaluation_schedule SET status = 'paused',"
+                        " lease_owner = NULL, lease_expires_at = NULL,"
+                        " next_evaluate_at = 9223372036854775807, updated_at = ?"
+                        " WHERE intent_id = ? AND status != 'paused' AND " + guard
+                    ).bind(now_us, iid, *guard_params)
+                )
             # 競合cancel(既にclosedになったものはguardで0行)
             for conf in conflicts:
                 stmts.append(

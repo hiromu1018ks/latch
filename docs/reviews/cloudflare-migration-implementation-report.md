@@ -1,11 +1,13 @@
 # Cloudflare移行 実装・検証・リハーサル報告書
 
-- 日付: 2026-10-09
+- 日付: 2026-10-09(2026-10-10更新: 本体実装・パイプライン組込み実測を追加)
 - 対象計画: docs/superpowers/plans/2026-10-08-cloudflare-migration.md
-- 範囲: T0〜T12の実装・ローカル検証・seedリハーサル。
-  **本番デプロイ・実データ移行・実Workers実測・実LLM比較は未実施(承認待ち)**
+- 範囲: T0〜T12の実装・ローカル検証・seedリハーサルに加え、本体LATCH APIの
+  実Workers配備とマッチングパイプライン組込みまで実施(§8)。
+  **実データ移行・実LLM比較・実push・本番切替は未実施(承認待ち)**
 - 検証環境: ローカル(compose ci PostgreSQL + LocalD1Database[D1 API互換] +
-  pywrangler[Pyodide 3.14.2] + stub LLM)。実測値の出所は各節に明記
+  pywrangler[Pyodide 3.14.2] + stub LLM)+ 実環境(Workers/D1/Queues/Cron)。
+  実測値の出所は各節に明記
 
 ## 1. 変更内容(全タスク実装完了)
 
@@ -106,11 +108,13 @@ test-ci全套(worker停止+load DB起動+`LATCH_LLM_MODE=stub`):
 
 ## 4. 残る課題(承認待ち・未実施)
 
-1. **実配備probe(T1別承認)**: 実Workersでの性能・制限・コールドスタート
-2. **実D1確認(T3別承認)**: LocalD1DatabaseはD1 API互換だが、実D1での
-   並行・batch意味の最終確認
+1. ~~**実配備probe(T1別承認)**: 実Workersでの性能・制限・コールドスタート~~
+   → 2026-10-09実施済み(cloudflare-prod-probe-20261009.yaml・承認済み)
+2. ~~**実D1確認(T3別承認)**: LocalD1DatabaseはD1 API互換だが、実D1での
+   並行・batch意味の最終確認~~ → 2026-10-09実施済み(契約116ケースが
+   実D1・実Workersで全green・§8)
 3. **実環境UX・費用実測(T11 unresolved)**: 日本からのcold/warm・burst・
-   障害後回収・実LLM品質比較(G1/G2資産再利用)
+   障害後回収・実LLM品質比較(G1/G2資産再利用)。stub E2Eは§8で実施
 4. **実push(ws-9資材待ち)**: FCM実装はstubのまま(既存課題の引継ぎ)
 5. **履歴匿名化(D-13二段階目)**: 未実装のまま別受入項目(計画§5.6)
 6. **D1所在地・委託先告知**: APAC配置hintは日本国内保存の保証ではない —
@@ -150,3 +154,61 @@ frontend vitest: 236 passed(24 files)
 - 完了条件3(リハーサル+回答・履歴・削除・認証整合): **達成**(seed)
 - 完了条件4(報告書): **本書**
 - 本番切替: **ユーザーの明示的承認を待って停止**(§5手順書あり)
+
+## 8. 本体配備とマッチングパイプライン組込み(2026-10-09〜10・実環境)
+
+初版報告(§1〜§7)はローカル検証まで。以降の実施分を追記する。
+進行記録: docs/plans/CLOUDFLARE-MIGRATION-STATUS.md
+
+### 8.1 本体LATCH APIの実Workers配備(2026-10-09)
+
+- 組立: cloudflare/api/latch_worker/(本体routes/schemas/domain計算を再利用・
+  読取はsvc_*.pyのD1化・書込はatomic.apply_*・認証は純Python JWT shim)
+- 実測: 契約116ケースをlocal in-process・miniflare・実環境の3経路で全green
+  (docs/testassets/results/cloudflare-api-parity-20261009.yaml)
+- backend全套 2104 passed / cf-unit 107 passed(既存資産無傷)
+
+### 8.2 バックグラウンド処理(マッチングパイプライン)の組込み(2026-10-10)
+
+同期APIだけだった Workers へ、意図保存からLATCH成立・通知記録までの
+非同期一連を接続した(LLMはstubのまま・実LLM呼出しは承認待ち・外部送信なし)。
+
+配線(計画§4配送・§5設計規律どおり):
+
+| 経路 | 実装 | 保証 |
+|---|---|---|
+| 意図確定時 | svc_intents hooks(schedule登録+post-commitベストエフォート配送) | 失敗してもcron掃き+schedule dueが評価を保証 |
+| outbox→Queues | pipeline.dispatch_outbox(cron掃き・envelopeはIDのみ) | at-least-once・重複実行は評価冪等性で吸収 |
+| queue consumer | handle_queue_message→evaluate_intent | embedding stub生成→T4検索snapshot→layer3→match_candidates(UNIQUE)→EvaluationJobRunner+stub jev(I1 claim・llm_attempts記録)→apply_proposal(D-08・通知job同時保存) |
+| cron(*/5) | run_cron | ScheduledEvaluator(T8)・jobs lease回収(T5)・outbox掃き・notify/retention job(T10)・run_retention |
+| 回答成立 | atomic.apply_response(matched時にschedule一時化を従属追加) | 成立Intentは再評価機会から外れる |
+
+- stub JEV応答は両方向noul 0.9に固定(決定的・score=0.9≥閾値0.60。
+  stubのコンストラクタ応答差替えは正規機能 — 実LLM品質とは無関係)
+- 修正1件: run_retentionのsnapshot掃きは実D1のFK強制のため子行→親の順に
+  削除するよう修正(初回E2Eのcron証跡で発見・修正後証跡で解消確認)
+
+### 8.3 実環境実測(最終・version 47b68bbe)
+
+docs/testassets/results/cloudflare-pipeline-e2e-20261010-010604.yaml
+
+- 意図2件(matching)作成 1.4秒 → **LATCH提案自動生成 11.7秒**(queue即時経路。
+  cron */5はフォールバック) → 回答yes×2 → matched 12.1秒
+- 通知: API面で両者にproposal+latch_matched・**cron配送記録4件**
+  (notification_deliveries・安定ID冪等)
+- D1状態: jobs未収束0・outbox未送信0・llm_attempts(jev)記録あり
+  ・cron全段ok(schedule回収52件含む・retention正常)
+- 契約116ケースは組込み後も実環境で全green(336秒)
+
+### 8.4 試験(2026-10-10時点)
+
+| スイート | 件数 | 内容 |
+|---|---|---|
+| backend全套 | **2108 passed / 0 failed** | 2104+新規パイプライン4(worker停止・LATCH_LLM_MODE=stub) |
+| cf-unit | **111 passed** | 107+新規4(in-process E2E一貫性・outbox再送at-least-once・再配送/cron重複で提案・Jev試行とも1件・cron単独で提案到達) |
+| 契約(remote) | **116/116 passed** | 実環境・組込み後回帰 |
+| 実環境E2E | 1 passed(約3分) | test_pipeline_remote_e2e.py(LATCH_CF_REMOTE=1・結果YAML自動生成) |
+
+バンドル: gzip 7925KiB(上限10MB内・本体実装から+7KiB)・cron */5維持・
+observability off維持(cron結果はprobe_eventsへ稼働証跡として記録)。
+費用: 実測範囲(契約×2+デプロイ×2+E2E×2+cron数百回)はWorkers Paid $5枠内。
