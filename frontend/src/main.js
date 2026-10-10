@@ -13,12 +13,11 @@ import { createRouter } from "./router.js";
 import { createHome } from "./latch/home.js";
 import { createDetail } from "./latch/detail.js";
 import { createStandby } from "./latch/standby.js";
-import { createReportFlow } from "./latch/report.js";
 import { createNotice } from "./latch/notice.js";
 import { createPermissionControl } from "./latch/permission.js";
 import { createBlocksSection } from "./latch/blocks.js";
 import { createSettings } from "./latch/settings.js";
-import { createBlockFlow } from "./latch/blockFlow.js";
+import { createSafetyFlow } from "./latch/safety.js";
 import { createConsent } from "./latch/consent.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -149,20 +148,19 @@ $("#noticeButton").addEventListener("click", () => {
   if (!$("#noticePopover").hidden) notice.open().catch(() => {});
 });
 
-const reportFlow = createReportFlow({ client, chrome, modal: $("#reportModal") });
-const blockFlow = createBlockFlow({
+// 通報・ブロックの統合dialog(UI v2 Phase 4・D-09)。成立=aside「安全のために」・
+// 提案1対1=reportee_id省略(案X)。ブロック成功は詳細再取得で収束(D-23)
+const safetyFlow = createSafetyFlow({
   client,
-  chrome,
-  modal: $("#blockModal"),
-  onBlocked: () => detail.refresh(), // ブロック成功で詳細再取得(D-23収束)
+  dialog: $("#safetyDialog"),
+  onBlocked: () => detail.refresh(),
 });
 const detail = createDetail({
   client,
   appState,
   chrome,
   root: $("#detailScreen"),
-  reportFlow,
-  blockFlow,
+  safety: safetyFlow,
 });
 
 // 設定画面(ws-8 design §2.4〜§2.6): 通知許可(DI)+ブロック管理

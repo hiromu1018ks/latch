@@ -346,3 +346,83 @@ describe("照合表(fitRows・自分の条件×候補)", () => {
     expect(pickMyIntent([intents[1]], latch())).toBeNull();
   });
 });
+
+// --- UI v2 Phase 4追記: 05成立・チャットの純関数 ------------------------------
+import {
+  AVATAR_COLORS,
+  cancelDialogLines,
+  chatHeadText,
+  chatMembers,
+  latchedRows,
+  latchedTags,
+} from "../src/latch/view.js";
+
+const ME_ID = "22222222-2222-4222-8222-222222222222";
+const PEER_ID = "33333333-3333-4333-8333-333333333333";
+const THIRD_ID = "44444444-4444-4444-8444-444444444444";
+
+describe("05の純関数(chatMembers・chatHeadText・タグ・dl・取消dialog)", () => {
+  const matched = latch(
+    {
+      status: "matched",
+      participants: [
+        { user_id: PEER_ID, display_name: "ゆうき", profile: {} },
+        { user_id: THIRD_ID, display_name: "Mika", profile: {} },
+        { user_id: ME_ID, display_name: "自見", profile: {} },
+      ],
+    },
+    { ...fullProposal, headcount: 3 },
+  );
+
+  it("chatMembers: 他者は参加順でパレット色・自分は末尾にme", () => {
+    const members = chatMembers(matched, ME_ID);
+    expect(members.map((m) => m.name)).toEqual(["ゆうき", "Mika", "自見"]);
+    expect(members.map((m) => m.color)).toEqual([
+      AVATAR_COLORS[0],
+      AVATAR_COLORS[1],
+      null, // 自分はme様式(色なし)
+    ]);
+    expect(members[2].me).toBe(true);
+    expect(members[0].initial).toBe("ゆ");
+  });
+
+  it("chatHeadText: 「今夜の3人」+「20:00 · 天文館周辺」(日付語は実行日で替わる)", () => {
+    const head = chatHeadText(matched);
+    expect(head.title).toMatch(/の3人$/);
+    expect(head.sub).toBe("20:00 · 天文館周辺");
+    // 時刻の取れない形は「N人のチャット」へ落ちる(minimal形はheadcount 2)
+    const bare = chatHeadText(latch({ time_summary: null, area_name: null }, minimalProposal));
+    expect(bare.title).toBe("2人のチャット");
+    expect(bare.sub).toBe("");
+  });
+
+  it("latchedTags: 時間(mono)・場所・人数・予算(mono・前後)。欠けは組まない", () => {
+    expect(latchedTags(matched)).toEqual([
+      { text: "20:00〜", mono: true },
+      { text: "天文館周辺", mono: false },
+      { text: "3人", mono: false },
+      { text: "¥5,000前後", mono: true },
+    ]);
+    const sparse = latchedTags(latch({ time_summary: null, area_name: null }, minimalProposal));
+    expect(sparse).toEqual([{ text: "2人", mono: false }]);
+  });
+
+  it("latchedRows: 時間({日付語} 20:00〜)・場所(subつき)・人数・予算(1人 5,000円前後)", () => {
+    const rows = latchedRows(matched);
+    expect(rows[0].label).toBe("時間");
+    expect(rows[0].value).toMatch(/ 20:00〜$/); // 日付語は実行日で替わる(今夜/明日/M/D（dow）)
+    expect(rows[1].label).toBe("場所");
+    expect(rows[1].sub).toBe(true);
+    expect(rows[2]).toEqual({ label: "人数", value: "3人" });
+    expect(rows[3]).toEqual({ label: "予算", value: "1人 5,000円前後" });
+  });
+
+  it("cancelDialogLines: 影響3行(ほかのメンバーの名前+さん・残り人数)", () => {
+    const lines = cancelDialogLines(matched, ME_ID);
+    expect(lines).toEqual([
+      "チャットに「あなたが参加を取り消しました」と表示され、ゆうきさん・Mikaさんに伝わります",
+      "あなたはこのチャットに書き込めなくなります",
+      "残りの2人で会うかどうかは、2人が決めます",
+    ]);
+  });
+});

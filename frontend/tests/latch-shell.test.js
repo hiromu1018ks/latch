@@ -41,10 +41,13 @@ describe("画面構成(UI v2 Phase 2・01ホーム+02読み解き確認)", () =>
     expect(html()).toContain('class="count-pill acc" data-count="matched"');
   });
 
-  it("右上toast(toast-pos)とwordmarkのhrefは#/ ・reportModalがある", () => {
+  it("右上toast(toast-pos)とwordmarkのhrefは#/ ・通報・ブロックの統合dialog(safetyDialog)がある", () => {
     expect(html()).toContain('class="toast-pos" id="toast"');
     expect(html()).toContain('href="#/"');
-    expect(html()).toContain('id="reportModal"');
+    // UI v2 Phase 4(D-09): 旧のreportModal/blockModalは統合dialogへ
+    expect(html()).toContain('id="safetyDialog"');
+    expect(html()).not.toContain('id="reportModal"');
+    expect(html()).not.toContain('id="blockModal"');
   });
 
   it("main.jsはscreen.js・confirm.jsとrouter.jsをimportして画面群を配線する", () => {
@@ -53,7 +56,9 @@ describe("画面構成(UI v2 Phase 2・01ホーム+02読み解き確認)", () =>
     expect(mainJs()).toContain('from "./router.js"');
     expect(mainJs()).toContain('from "./latch/home.js"');
     expect(mainJs()).toContain('from "./latch/detail.js"');
-    expect(mainJs()).toContain('from "./latch/report.js"');
+    expect(mainJs()).toContain('from "./latch/safety.js"'); // UI v2 Phase 4(統合dialog)
+    expect(mainJs()).not.toContain('from "./latch/report.js"');
+    expect(mainJs()).not.toContain('from "./latch/blockFlow.js"');
     expect(mainJs()).toContain('from "./appState.js"');
     expect(mainJs()).toContain('confirm: $("#confirmScreen")');
     expect(mainJs()).toContain('standby: $("#standbyScreen")');

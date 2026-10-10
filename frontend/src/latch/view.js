@@ -338,3 +338,109 @@ const shortDayWord = (startIso, nowIso) => {
   );
   return diff === 0 ? "今日" : diff === 1 ? "明日" : "";
 };
+
+// --- UI v2 Phase 4追記: 05成立・チャット(プロトタイプ05が正源の純関数群) ------
+
+// メンバーの色付きイニシャルアバター。プロトタイプ05は2色(#F2B880/#F09AC0)の
+// 固定例のため、3人目以降はトークン系の色(--stb/--acc)で拡張する(グループの
+// 参加上限3人・上限超過は先頭に戻る)。自分は色を持たない(s3+枠の自分様式)
+export const AVATAR_COLORS = ["#F2B880", "#F09AC0", "#9DB2DB", "#5FD4AE"];
+
+const initialOf = (name) => Array.from(String(name ?? "?"))[0] ?? "?";
+
+// 成立後のメンバー一覧(他者=参加者順で色を割当て・自分=末尾に自分様式で追加)。
+// チャットのアバタースタック・メンバーカード・通報対象の共通データ
+export const chatMembers = (latch, meId) => {
+  const participants = latch?.participants ?? [];
+  let colorIndex = 0;
+  const others = participants
+    .filter((p) => p.user_id !== meId)
+    .map((p) => ({
+      id: p.user_id,
+      name: p.display_name,
+      initial: initialOf(p.display_name),
+      color: AVATAR_COLORS[colorIndex++ % AVATAR_COLORS.length],
+      me: false,
+    }));
+  const me = participants.find((p) => p.user_id === meId);
+  if (me) {
+    others.push({
+      id: me.user_id,
+      name: me.display_name,
+      initial: initialOf(me.display_name),
+      color: null, // 自分=s3+枠(chatMembersの描画側で分岐)
+      me: true,
+    });
+  }
+  return others;
+};
+
+// チャットヘッダー(「今夜の3人」+「20:30 · 天文館周辺」)。日付語は
+// proposalDateTextの先頭語(今夜/明日/10/12（月）)を借りる。時刻不明
+// (最小形の名残)は「N人のチャット」へ落とす
+export const chatHeadText = (latch) => {
+  const total =
+    latch?.proposal?.headcount ?? latch?.participants?.length ?? 2;
+  const summary = latch?.time_summary ?? latch?.proposal?.time_summary ?? null;
+  const parts = summary ? proposalTimeParts(summary) : null;
+  const dateWord = parts?.date?.split(" · ")[0] ?? null;
+  const area = latch?.area_name ?? latch?.proposal?.area_name ?? null;
+  return {
+    title: dateWord ? `${dateWord}の${total}人` : `${total}人のチャット`,
+    sub: [parts?.clock, area].filter(Boolean).join(" · "),
+  };
+};
+
+// 成立ヒーローの条件タグ(「20:30〜」「天文館周辺」「3人」「¥4,000前後」。
+// mono=IBM Plex Mono。値のない行は組まない)
+export const latchedTags = (latch) => {
+  const p = latch?.proposal ?? {};
+  const time = proposalTimeParts(latch?.time_summary ?? p.time_summary);
+  const tags = [];
+  if (time?.clock) tags.push({ text: `${time.clock}〜`, mono: true });
+  const area = latch?.area_name ?? p.area_name;
+  if (area) tags.push({ text: area, mono: false });
+  if (p.headcount != null) tags.push({ text: `${p.headcount}人`, mono: false });
+  if (p.budget?.max != null) {
+    tags.push({ text: `${formatYen(p.budget.max)}前後`, mono: true });
+  }
+  return tags;
+};
+
+// 「成立した内容」dlの行(値の取れない行は組まない・プロトタイプ05の4行構成)
+export const latchedRows = (latch) => {
+  const p = latch?.proposal ?? {};
+  const summary = latch?.time_summary ?? p.time_summary ?? null;
+  const time = summary ? proposalTimeParts(summary) : null;
+  const rows = [];
+  if (time?.clock) {
+    // 日付語は「今夜」「明日」等の先頭語のみ(プロトタイプ05の「今夜 20:30〜」様式)
+    const word = time.date?.split(" · ")[0] ?? "";
+    rows.push({ label: "時間", value: `${word} ${time.clock}〜`.trim() });
+  } else if (summary) {
+    rows.push({ label: "時間", value: summary });
+  }
+  const area = latch?.area_name ?? p.area_name;
+  if (area) rows.push({ label: "場所", value: area, sub: true }); // sub=「集合場所はチャットで」
+  if (p.headcount != null) rows.push({ label: "人数", value: `${p.headcount}人` });
+  if (p.budget?.max != null) {
+    rows.push({
+      label: "予算",
+      value: `1人 ${Number(p.budget.max).toLocaleString("ja-JP")}円前後`,
+    });
+  }
+  return rows;
+};
+
+// 取り消しdialogの説明3行(D-08・プロトタイプ05の影響説明。ほかのメンバーの
+// 表示名を名前+さんで列挙する)
+export const cancelDialogLines = (latch, meId) => {
+  const others = (latch?.participants ?? []).filter((p) => p.user_id !== meId);
+  const names = others.map((p) => `${p.display_name}さん`).join("・");
+  const total = latch?.proposal?.headcount ?? others.length + 1;
+  return [
+    `チャットに「あなたが参加を取り消しました」と表示され、${names}に伝わります`,
+    "あなたはこのチャットに書き込めなくなります",
+    `残りの${total - 1}人で会うかどうかは、${total - 1}人が決めます`,
+  ];
+};

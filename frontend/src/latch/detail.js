@@ -1,6 +1,6 @@
-// LATCH詳細 — 04「候補が届く」提案姿の全面再構成(UI v2 Phase 3・プロトタイプ04が
-// 正源)+成立姿・不成立(Phase 4で05に再構成)。1画面3姿 — statusで分岐し、
-// ページ内で状態が変わる場面(回答・undo・締切)はすべて再取得で収束する
+// LATCH詳細 — 04「候補が届く」提案姿+05「成立・チャット」の全面再構成(UI v2
+// Phase 3/4・プロトタイプ04/05が正源)。1画面3姿 — statusで分岐し、ページ内で
+// 状態が変わる場面(回答・undo・締切・成立取消)はすべて再取得で収束する
 // (表示の唯一の真実は詳細応答・design §2.5)。
 // 提案姿: ヒーロー・4情報カード・照合表(自分の条件×候補の対比較)・回答期限
 // タイマー(残5分でdng色)・回答2択(D-05)・4状態(open/joined/allIn/declined)・
@@ -8,14 +8,25 @@
 // 見送りは「今回は見送る」で即座には送らない — 理由chipsはdefer回答のbodyに
 // のみ受理される(05 §5)ため、declined状態の離脱時(「待機中に戻る」・画面遷移)
 // に理由といっしょに送る。取り消し(送信前)は画面上の取消のみでAPI呼び出しなし。
+// 成立姿: ヒーロー(snap/burstアニメ・条件タグ)+aside(成立した内容+カレンダーに
+// 追加=D-10・メンバー・安全のために)+チャット。成立の取り消し(D-08)は
+// POST /v1/latches/{id}/leave — サーバがチャットへシステム行を挿入し、自分は
+// 以後書込不可(CHAT_READONLY)。詳細応答にleft_user_idsは出ないため取消後の
+// 姿はセッション内のフラグで保持する(ALREADY_LEFTでも同様に切替える)。
 import { createAttendanceFlow } from "./attendance.js";
 import { createChat } from "./chat.js";
 import { createRespondFlow } from "./respond.js";
+import { calendarButtonHtml, downloadIcs } from "./calendar.js";
 import {
   ALL_IN_LEAD_TEXT,
   ALL_IN_TITLE,
   BACK_TO_STANDBY_LABEL,
-  BLOCK_ENTRY_TEXT,
+  CANCEL_DIALOG_CONFIRM,
+  CANCEL_DIALOG_DISMISS,
+  CANCEL_DIALOG_INTRO,
+  CANCEL_DIALOG_NOTE,
+  CANCEL_DIALOG_TITLE,
+  CANCEL_ENTRY_TEXT,
   DEADLINE_LINE_SUFFIX,
   DECLINED_NOTE_TEXT,
   DECLINED_TITLE,
@@ -27,21 +38,35 @@ import {
   HOME_LINK_TEXT,
   JOINED_TITLE,
   JOINED_WAIT_NOTE,
+  LATCHED_DETAILS_TITLE,
+  LATCHED_PLACE_SUB_TEXT,
+  LATCHED_TITLE,
+  LEFT_LEAD_TEXT,
+  LEFT_TITLE,
   LATCH_NOT_FOUND_TEXT,
+  MEMBER_JOINED_TEXT,
+  MEMBER_LEFT_TEXT,
+  MEMBER_NOTE_TEXT,
   MINIMAL_PROPOSAL_NOTE,
-  NEXT_ACTION_TEXT,
   OPEN_CHAT_LABEL,
   PROPOSAL_LEAD_TEXT,
+  RATE_LIMIT_TEXT,
   REASON_CHIPS,
   REASON_LABEL_TEXT,
   REASON_NOTE_TEXT,
   RESPONSE_BUTTONS,
   RESPONSE_NOTE_TEXT,
+  SAFETY_ENTRY_TEXT,
+  SAFETY_GUIDE_ITEMS,
+  SAFETY_GUIDE_TITLE,
+  SAFETY_HEADING_TEXT,
   UNDO_BLOCKED_TOAST_TEXT,
   UNDO_DECLINED_LABEL,
   UNDO_JOINED_LABEL,
 } from "./texts.js";
 import {
+  cancelDialogLines,
+  chatMembers,
   clockText,
   closedText,
   countdownText,
@@ -51,6 +76,8 @@ import {
   isMinimalProposal,
   joinedWaitText,
   latchMode,
+  latchedRows,
+  latchedTags,
   pickMyIntent,
   proposalStateOf,
   proposalTimeParts,
@@ -64,7 +91,7 @@ const TIMER_LOW_MS = 5 * 60 * 1000; // 残5分でdng色(timer-low)
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 
-export const createDetail = ({ client, appState, chrome, root, reportFlow, blockFlow = null }) => {
+export const createDetail = ({ client, appState, chrome, root, safety }) => {
   let latchId = null;
   let timer = null;
   let chat = null;
@@ -72,6 +99,8 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow, block
   let declinePending = false; // 見送り未送信(離脱時に送る)
   let declineReasons = new Set();
   let showAllInOnce = false; // yes回答で成立した直後=04のallIn状態を見せてから05へ
+  let matchedAtIso = null; // 成立時刻(yes直後のみ実時刻。APIにmatched_atはない)
+  let leftLatch = false; // 参加持取り消し済み(D-08・詳細応答に出ないため画面保持)
 
   const stopTimers = () => {
     if (timer) clearInterval(timer);
@@ -130,32 +159,23 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow, block
     if (declinePending) void sendDecline({});
   };
 
-  // -- 通報導線(design §2.7): 成立済み=両画面・提案は1対1のみ --
+  // -- 通報・ブロック導線(D-09統合dialog): 提案1対1のみ単独導線・成立=aside内 --
   const reportEntryHtml = (mode, isGroup) => {
-    if (mode === "matched") return "このLATCHを通報する";
+    if (mode === "matched") return null; // 成立は安全のためにカードへ統合(Phase 4)
     if (mode === "proposal" && !isGroup) return "この提案を通報する";
     return null; // グループ提案: 参加者非開示のため導線なし
   };
 
-  const wireReportEntry = (section, latch, participants) => {
+  const wireReportEntry = (section, latch) => {
     const entry = section.querySelector("[data-role=report-entry]");
     if (!entry) return;
     entry.addEventListener("click", () => {
-      // participants=null(提案1対1)はreportee_id省略body(案X)
-      reportFlow.open({
+      // participants=null(提案1対1)はreportee_id省略body(案X)+ブロック導線なし
+      safety.open({
         latchId: latch.id,
-        participants: participants ?? null,
+        participants: null,
         meId: appState.me?.id ?? null,
       });
-    });
-  };
-
-  // -- ブロック登録導線(ws-8 design §2.7・§5-1承認): 成立済み詳細のみ --
-  const wireBlockEntry = (section, participants) => {
-    const entry = section.querySelector("[data-role=block-entry]");
-    if (!entry) return;
-    entry.addEventListener("click", () => {
-      blockFlow?.open({ participants, meId: appState.me?.id ?? null });
     });
   };
 
@@ -439,7 +459,7 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow, block
 
     wireRespond(section, latch);
     startDeadlineTimer(latch);
-    wireReportEntry(section, latch, null);
+    wireReportEntry(section, latch);
   };
 
   // -- 回答・undo・chipsの配線 --------------------------------------------------
@@ -462,6 +482,7 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow, block
         if (button.dataset.value === "yes") {
           // 全員がそろった成立は04のallIn状態(チャットを開く→05)へ一度だけ寄り道する
           showAllInOnce = true;
+          matchedAtIso = new Date().toISOString(); // 成立時刻(APIにmatched_atはない)
           void respondFlow.submit("yes", { buttons });
         } else {
           // 見送る=即座には送らない(理由chips→離脱時に送信・D-07)
@@ -511,47 +532,199 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow, block
     });
   };
 
-  // -- 成立姿(05・Phase 4で全面再構成) ------------------------------------------
+  // -- 成立姿(05・プロトタイプ05が正源) ------------------------------------------
+  // ヒーロー(snap/burstアニメ・条件タグ)+lt-grid(チャット→aside/PC=aside|チャット)
+  const heroMarkHtml = () => `
+    <div aria-hidden="true" class="lt-mark">
+      <div class="lt-burst"></div>
+      <div class="lt-mark-glow"></div>
+      <svg viewBox="0 0 100 100" fill="none" class="lt-mark-svg">
+        <g class="snapL"><path d="M50 22 A28 28 0 0 0 50 78" style="stroke: var(--acc)" stroke-width="7" stroke-linecap="round"></path></g>
+        <g class="snapR"><path d="M50 22 A28 28 0 0 1 50 78" style="stroke: var(--t1)" stroke-width="7" stroke-linecap="round"></path></g>
+      </svg>
+    </div>`;
+
+  const heroHtml = (latch) => {
+    const lead = leftLatch
+      ? LEFT_LEAD_TEXT
+      : `${latch.proposal?.headcount ?? 2}人全員が「参加する」と答えました。ここからは、お互いの姿が見えます。`;
+    return `
+      ${heroMarkHtml()}
+      <div class="lt-hero-text">
+        <p class="lt-hero-kicker">成立${
+          matchedAtIso ? ` · ${escapeHtml(clockText(matchedAtIso))}` : ""
+        }</p>
+        <h1 id="h-latched" class="lt-hero-title">${leftLatch ? LEFT_TITLE : LATCHED_TITLE}</h1>
+        <p class="lt-hero-lead">${escapeHtml(lead)}</p>
+      </div>
+      <div class="lt-hero-tags" aria-hidden="true">${latchedTags(latch)
+        .map(
+          (tag) =>
+            `<span class="lt-tag${tag.mono ? " mono" : ""}">${escapeHtml(tag.text)}</span>`,
+        )
+        .join("")}</div>`;
+  };
+
+  // aside 1: 成立した内容(details+dl+カレンダーに追加=D-10)
+  const detailsCardHtml = (latch) => {
+    const wide = window.matchMedia?.("(min-width: 960px)").matches ?? true;
+    return `
+      <details class="lt-card lt-details"${wide ? " open" : ""}>
+        <summary>
+          <h2 class="lt-card-title">${LATCHED_DETAILS_TITLE}</h2>
+          ${iconHtml("chevronDown", 18, "chev")}
+        </summary>
+        <div class="lt-details-body">
+          <dl class="lt-dl">${latchedRows(latch)
+            .map(
+              (row) => `
+            <dt>${escapeHtml(row.label)}</dt>
+            <dd>${escapeHtml(row.value)}${
+              row.sub
+                ? `<span class="lt-dd-sub">${LATCHED_PLACE_SUB_TEXT}</span>`
+                : ""
+            }</dd>`,
+            )
+            .join("")}</dl>
+          ${calendarButtonHtml(latch)}
+        </div>
+      </details>`;
+  };
+
+  // aside 2: メンバー(色付きイニシャルアバター・自分=末尾にあなた行)
+  const membersCardHtml = (latch, meId) => `
+    <section class="lt-card" aria-labelledby="h-members">
+      <h2 id="h-members" class="lt-card-title">メンバー</h2>
+      <ul class="lt-members">
+        ${chatMembers(latch, meId)
+          .map(
+            (m) => `
+          <li>
+            <span aria-hidden="true" class="lt-avatar lt-avatar--member${
+              m.me ? " me" : ""
+            }"${m.me ? "" : ` style="background:${m.color}"`}>${escapeHtml(m.initial)}</span>
+            <span class="lt-member-name">${escapeHtml(m.me ? "あなた" : m.name)}</span>
+            ${
+              m.me && leftLatch
+                ? `<span class="lt-member-status left">${MEMBER_LEFT_TEXT}</span>`
+                : `<span class="lt-member-status">${iconHtml("check", 13)}${MEMBER_JOINED_TEXT}</span>`
+            }
+          </li>`,
+          )
+          .join("")}
+      </ul>
+      <p class="lt-member-note">${MEMBER_NOTE_TEXT}</p>
+    </section>`;
+
+  // aside 3: 安全のために(安全ガイド+通報・ブロック=D-09統合dialog)
+  const safetyCardHtml = () => `
+    <section class="lt-card" aria-labelledby="h-safety">
+      <h2 id="h-safety" class="lt-card-title">${iconHtml("shield", 16)}${SAFETY_HEADING_TEXT}</h2>
+      <details class="lt-guide">
+        <summary>${SAFETY_GUIDE_TITLE}${iconHtml("chevronDown", 16, "chev")}</summary>
+        <ul>${SAFETY_GUIDE_ITEMS.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      </details>
+      <button type="button" class="ghost danger lt-safety" aria-haspopup="dialog" data-role="safety-entry">
+        ${iconHtml("flag", 16)}${SAFETY_ENTRY_TEXT}
+      </button>
+    </section>`;
+
+  // 成立の取り消し(D-08)dialog — 既存の<dialog class="dlg">#appDialogを使う
+  const openCancelDialog = (latch) => {
+    const body = document.createElement("div");
+    body.className = "dlg-desc";
+    const intro = document.createElement("p");
+    intro.textContent = CANCEL_DIALOG_INTRO;
+    const list = document.createElement("ul");
+    list.className = "dlg-list";
+    list.innerHTML = cancelDialogLines(latch, appState.me?.id ?? null)
+      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .join("");
+    const note = document.createElement("p");
+    note.className = "dlg-note";
+    note.textContent = CANCEL_DIALOG_NOTE;
+    body.append(intro, list, note);
+    chrome.openAppDialog({
+      title: CANCEL_DIALOG_TITLE,
+      body,
+      actions: [
+        { label: CANCEL_DIALOG_DISMISS, variant: "ghost" },
+        {
+          label: CANCEL_DIALOG_CONFIRM,
+          variant: "danger",
+          onClick: () => void confirmLeave(),
+        },
+      ],
+    });
+  };
+
+  const confirmLeave = async () => {
+    try {
+      await client.call("POST", `/v1/latches/${latchId}/leave`, { body: {} });
+    } catch (err) {
+      if (err?.status === 409 && err?.code === "ALREADY_LEFT") {
+        leftLatch = true; // 取り消し済み — 取り消し後の姿へ収束させる
+        await refresh();
+        return;
+      }
+      chrome.showToast(
+        err?.code === "RATE_LIMITED" ? RATE_LIMIT_TEXT : "取り消せませんでした。",
+      );
+      return;
+    }
+    leftLatch = true;
+    await refresh(); // 再取得で05の取り消し後姿へ(チャット再同期でシステム行も出る)
+  };
+
   const renderMatched = async (latch) => {
     stopTimers();
-    const me = await appState.ensureMe();
-    root.className = "detail-view";
+    const me = await appState.ensureMe().catch(() => null);
+    const meId = me?.id ?? null;
+    root.className = "page-main page-main--latched";
     const section = document.createElement("section");
-    section.className = "latch-detail";
-    const participants = latch.participants ?? [];
-    const participantsHtml = participants
-      .map(
-        (p) =>
-          `<li class="participant"><strong>${escapeHtml(p.display_name)}</strong>${
-            p.profile?.bio ? `<span>${escapeHtml(p.profile.bio)}</span>` : ""
-          }</li>`,
-      )
-      .join("");
+    section.className = "lt-detail";
+    section.setAttribute("aria-labelledby", "h-latched");
     section.innerHTML = `
-      <p class="section-kicker"><span></span>LATCH</p>
-      <h2 class="latch-heading">集合情報</h2>
-      <p class="latch-summary">${escapeHtml(latch.time_summary ?? "")}${
-        latch.area_name ? `<br>${escapeHtml(latch.area_name)}` : ""
-      }</p>
-      <ul class="participants">${participantsHtml}</ul>
-      <p class="next-action">${NEXT_ACTION_TEXT}</p>
-      <div class="chat-area" data-role="chat"></div>
-      ${
-        latch.status === "completed"
-          ? `<div class="attendance" data-role="attendance"></div>`
-          : ""
-      }
-      <button type="button" class="report-entry" data-role="report-entry">${reportEntryHtml("matched", latch.is_group)}</button>
-      <button type="button" class="block-entry" data-role="block-entry">${BLOCK_ENTRY_TEXT}</button>
-    `;
+      <div class="haze haze-latched" aria-hidden="true"></div>
+      <section class="lt-hero">${heroHtml(latch)}</section>
+      <div class="lt-grid">
+        <section class="lt-chat-slot" aria-labelledby="h-chat" data-role="chat"></section>
+        <aside aria-label="成立の詳細" class="lt-aside">
+          ${detailsCardHtml(latch)}
+          ${membersCardHtml(latch, meId)}
+          <div class="lt-attendance" data-role="attendance" hidden></div>
+          ${safetyCardHtml()}
+          ${
+            leftLatch
+              ? ""
+              : `<button type="button" class="danger lt-cancel" aria-haspopup="dialog" data-role="cancel-entry">${CANCEL_ENTRY_TEXT}</button>`
+          }
+        </aside>
+      </div>`;
     root.replaceChildren(section);
-    chat = createChat({
-      client,
-      latch,
-      meId: me.id,
-      mount: section.querySelector('[data-role="chat"]'),
-    });
+
+    // チャット(ヘッダー+log+フォームはchat.jsが構成する)
+    chat = createChat({ client, latch, meId, mount: section.querySelector('[data-role="chat"]') });
+    if (leftLatch) chat.markLeft(); // 取り消し後の再描画でも書込不可を維持(D-08)
     await chat.start();
+
+    // aside内の導線
+    section
+      .querySelector("[data-role=safety-entry]")
+      ?.addEventListener("click", () => {
+        safety.open({
+          latchId: latch.id,
+          participants: latch.participants ?? [],
+          meId,
+        });
+      });
+    section
+      .querySelector("[data-role=cancel-entry]")
+      ?.addEventListener("click", () => openCancelDialog(latch));
+    section.querySelector("[data-role=calendar-add]")?.addEventListener("click", () => {
+      downloadIcs(latch);
+    });
+
     if (latch.status === "completed") {
       // 表示条件はstatusのみ(詳細応答のcompleted_atは常にnull・§9-6①。
       // 3日窓・二重回答はサーバの409で切替える)
@@ -562,8 +735,6 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow, block
       });
       attendanceFlow.renderQuestion();
     }
-    wireReportEntry(section, latch, participants);
-    wireBlockEntry(section, participants);
   };
 
   // -- 不成立(自分の見送り=declined状態カード・それ以外は統一文言) --------------
@@ -624,6 +795,8 @@ export const createDetail = ({ client, appState, chrome, root, reportFlow, block
   const show = async (id) => {
     latchId = id;
     showAllInOnce = false;
+    matchedAtIso = null;
+    leftLatch = false; // 再訪時はセッションフラグを捨てる(サーバの真実に揃える)
     try {
       const data = await fetchLatch();
       await render(data.latch);

@@ -3,7 +3,9 @@ import { ApiError } from "../src/api/session.js";
 import {
   ATTENDANCE_ALREADY_TEXT,
   ATTENDANCE_DONE_TEXT,
+  ATTENDANCE_NO_LABEL,
   ATTENDANCE_QUESTION,
+  ATTENDANCE_YES_LABEL,
 } from "../src/latch/texts.js";
 import { createAttendanceFlow } from "../src/latch/attendance.js";
 
@@ -17,13 +19,19 @@ const mountFlow = (callImpl) => {
   return { client, mount, flow };
 };
 
-describe("attendance(D-09・design §2.7)", () => {
-  it("質問と2択([会いました]/[会えていません])を描画する", () => {
+describe("attendance(D-09・v2様式化=D-14・UI v2 Phase 4)", () => {
+  it("質問と2択(会いました=cta・会えていません=ghost)を描画する", () => {
     const { mount, flow } = mountFlow(async () => ({}));
     flow.renderQuestion();
+    expect(mount.hidden).toBe(false); // asideのattendance枠を可視化
     expect(mount.textContent).toContain(ATTENDANCE_QUESTION);
-    const labels = [...mount.querySelectorAll("button")].map((b) => b.textContent);
-    expect(labels).toEqual(["会いました", "会えていません"]);
+    const buttons = [...mount.querySelectorAll("button")];
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      ATTENDANCE_YES_LABEL,
+      ATTENDANCE_NO_LABEL,
+    ]);
+    expect(buttons[0].className).toContain("attendance-yes");
+    expect(buttons[1].className).toContain("attendance-no");
   });
 
   it("[会いました]は{attended:true}を送る(ボタンclick経由)", async () => {

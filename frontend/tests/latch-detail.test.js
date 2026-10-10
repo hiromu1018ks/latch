@@ -1,13 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/session.js";
-import { CLOSED_TEXT, LATCH_NOT_FOUND_TEXT } from "../src/latch/texts.js";
+import {
+  CANCEL_DIALOG_TITLE,
+  CLOSED_TEXT,
+  LATCHED_TITLE,
+  LEFT_LEAD_TEXT,
+  LEFT_TITLE,
+  LATCH_NOT_FOUND_TEXT,
+  SAFETY_ENTRY_TEXT,
+} from "../src/latch/texts.js";
 import { createDetail } from "../src/latch/detail.js";
 
 const LATCH_ID = "11111111-1111-4111-8111-111111111111";
 const ME = "22222222-2222-4222-8222-222222222222";
 const PEER = "33333333-3333-4333-8333-333333333333";
 const DEADLINE = "2026-12-01T12:00:00+09:00"; // 遠い未来(残時間テストを安定化)
-const NOW = "2026-10-10T12:00:00+09:00"; // proposalTimePartsの「今夜/明日」を安定化
 
 const fullProposal = {
   time_summary: "2026-10-10 20:30",
@@ -57,11 +64,11 @@ const makeDetail = (callImpl) => {
     me: { id: ME, display_name: "自見", profile: {} },
     ensureMe: vi.fn(async () => ({ id: ME, display_name: "自見", profile: {} })),
   };
-  const chrome = { showToast: vi.fn() };
+  const chrome = { showToast: vi.fn(), openAppDialog: vi.fn() };
   const root = document.createElement("section");
-  const reportFlow = { open: vi.fn() };
-  const detail = createDetail({ client, appState, chrome, root, reportFlow });
-  return { client, appState, chrome, root, reportFlow, detail };
+  const safety = { open: vi.fn() };
+  const detail = createDetail({ client, appState, chrome, root, safety });
+  return { client, appState, chrome, root, safety, detail };
 };
 
 // GET詳細・GET intents一覧・GET messagesに応答する既定モック
@@ -70,6 +77,7 @@ const apiFor = (latch, intents = []) => async (method, path) => {
     return { items: [], next_cursor: null };
   }
   if (path === "/v1/intents?status=active") return { items: intents, next_cursor: null };
+  if (path.endsWith("/leave")) return { latch: { id: latch.id, status: "matched", left: true } };
   if (path.startsWith("/v1/latches/") && path.endsWith("/response")) {
     return { latch };
   }
@@ -290,23 +298,12 @@ describe("04 提案姿(全面再構成・プロトタイプ04)", () => {
       expect(root.textContent).toContain("全員が参加しました。");
     });
     expect(root.textContent).toContain("チャットを開く");
-    // チャットを開く→05(チャット画面)
+    // チャットを開く→05(成立ヒーロー+チャット)
     root.querySelector("[data-role=open-chat]").click();
     await vi.waitFor(() => {
-      expect(root.querySelector(".chat-messages")).not.toBeNull();
+      expect(root.querySelector(".lt-log")).not.toBeNull();
+      expect(root.querySelector("h1").textContent).toBe(LATCHED_TITLE);
     });
-  });
-
-  it("matchedへ直行(再訪・再読み込み)は05のチャット画面", async () => {
-    const matched = baseLatch(
-      { status: "matched", my_response: "yes", remaining_responses: 0 },
-      minimalProposal,
-    );
-    matched.participants = participants;
-    const { root, detail } = makeDetail(apiFor(matched));
-    await detail.show(LATCH_ID);
-    expect(root.querySelector(".chat-messages")).not.toBeNull();
-    expect(root.querySelectorAll("[data-role=respond]").length).toBe(0);
   });
 
   it("flush: 未送信の見送りを画面離脱時に送る(理由つき)", async () => {
@@ -352,7 +349,7 @@ describe("04 提案姿(全面再構成・プロトタイプ04)", () => {
 
   it("undo不可(409)はトーストで伝える", async () => {
     const latch = baseLatch({ status: "rejected", my_response: "defer" });
-    const chrome = { showToast: vi.fn() };
+    const chrome = { showToast: vi.fn(), openAppDialog: vi.fn() };
     const client = {
       call: vi.fn(async (method, path) => {
         if (path.endsWith("/response/undo")) {
@@ -367,7 +364,7 @@ describe("04 提案姿(全面再構成・プロトタイプ04)", () => {
       appState: { me: { id: ME, display_name: "自" }, ensureMe: async () => ({ id: ME, display_name: "自" }) },
       chrome,
       root,
-      reportFlow: { open: vi.fn() },
+      safety: { open: vi.fn() },
     });
     await detail.show(LATCH_ID);
     root.querySelector("[data-role=undo]").click();
@@ -393,22 +390,219 @@ describe("04 提案姿(全面再構成・プロトタイプ04)", () => {
     expect(root.textContent).toContain(LATCH_NOT_FOUND_TEXT);
   });
 
-  it("通報導線: 提案1対1=あり/グループ提案=なし/成立済み=あり", async () => {
-    // 提案1対1
+  it("通報導線: 提案1対1=あり(safety統合dialog)/グループ提案=なし", async () => {
+    // 提案1対1 → safety.open(participants: null)
     const oneOnOne = makeDetail(apiFor(baseLatch(), [myIntent]));
     await oneOnOne.detail.show(LATCH_ID);
     expect(oneOnOne.root.textContent).toContain("この提案を通報する");
+    oneOnOne.root.querySelector("[data-role=report-entry]").click();
+    expect(oneOnOne.safety.open).toHaveBeenCalledWith({
+      latchId: LATCH_ID,
+      participants: null,
+      meId: ME,
+    });
     // グループ提案(参加者非開示のため導線なし)
     const group = makeDetail(
       apiFor(baseLatch({ is_group: true, remaining_responses: 2 }), [myIntent]),
     );
     await group.detail.show(LATCH_ID);
     expect(group.root.textContent).not.toContain("通報");
-    // 成立済み
-    const matched = baseLatch({ status: "matched" }, minimalProposal);
-    matched.participants = participants;
-    const done = makeDetail(apiFor(matched));
-    await done.detail.show(LATCH_ID);
-    expect(done.root.textContent).toContain("このLATCHを通報する");
+  });
+});
+
+// --- UI v2 Phase 4: 05成立姿(全面再構成・プロトタイプ05) -----------------------
+const matchedLatch = (overrides = {}, proposal = fullProposal) =>
+  baseLatch(
+    { status: "matched", my_response: "yes", remaining_responses: 0, participants, ...overrides },
+    proposal,
+  );
+
+describe("05 成立姿(全面再構成・プロトタイプ05)", () => {
+  const mountMatched = (latch = matchedLatch(), callImpl) => {
+    const impl =
+      callImpl ??
+      ((method, path) => {
+        if (path === `/v1/latches/${LATCH_ID}/messages?limit=100`) {
+          return { items: [], next_cursor: null };
+        }
+        if (path === "/v1/intents?status=active") return { items: [myIntent], next_cursor: null };
+        return { latch };
+      });
+    return makeDetail(impl);
+  };
+
+  it("ヒーロー: 「LATCHしました。」+成立kicker+条件タグ4種+snapアニメの弧", async () => {
+    const { root, detail } = mountMatched();
+    await detail.show(LATCH_ID);
+    expect(root.querySelector("h1").textContent).toBe(LATCHED_TITLE);
+    expect(root.querySelector(".lt-hero-kicker").textContent).toBe("成立");
+    const tags = [...root.querySelectorAll(".lt-tag")].map((el) => el.textContent);
+    expect(tags).toEqual(["20:30〜", "天文館周辺", "2人", "¥5,000前後"]);
+    expect(root.querySelector(".snapL")).not.toBeNull();
+    expect(root.querySelector(".snapR")).not.toBeNull();
+    expect(root.querySelector(".lt-burst")).not.toBeNull();
+  });
+
+  it("aside: 成立した内容(details+dl)+カレンダーに追加+メンバー+安全のために+取り消し", async () => {
+    const { root, detail } = mountMatched();
+    await detail.show(LATCH_ID);
+    // 成立した内容(dl 4行+カレンダーに追加=D-10)
+    const details = root.querySelector(".lt-details");
+    expect(details).not.toBeNull();
+    expect(details.querySelector("summary").textContent).toContain("成立した内容");
+    expect(details.textContent).toContain("今夜 20:30〜");
+    expect(details.textContent).toContain("天文館周辺");
+    expect(details.textContent).toContain("集合場所はチャットで");
+    expect(details.textContent).toContain("1人 5,000円前後");
+    expect(root.querySelector("[data-role=calendar-add]").textContent).toContain("カレンダーに追加");
+    // メンバー(他者=色付き・自分=あなた+参加)
+    const names = [...root.querySelectorAll(".lt-member-name")].map((el) => el.textContent);
+    expect(names).toEqual(["相手", "あなた"]);
+    expect(root.querySelectorAll(".lt-member-status").length).toBe(2);
+    expect(root.textContent).toContain("お互いの表示名が見えるようになりました");
+    // 安全のために+通報・ブロック(D-09統合dialogの入口)
+    expect(root.textContent).toContain("会う前の安全ガイド");
+    expect(root.textContent).toContain(SAFETY_ENTRY_TEXT);
+    // この成立を取り消す(D-08)
+    expect(root.querySelector("[data-role=cancel-entry]").textContent).toBe("この成立を取り消す");
+  });
+
+  it("メンバーの色付きイニシャル: 相手はパレット色・自分はme様式(枠つき)", async () => {
+    const { root, detail } = mountMatched();
+    await detail.show(LATCH_ID);
+    const avatars = [...root.querySelectorAll(".lt-avatar--member")];
+    expect(avatars[0].textContent).toBe("相");
+    expect(avatars[0].getAttribute("style")).toContain("background:#F2B880");
+    expect(avatars[1].className).toContain("me");
+  });
+
+  it("通報・ブロック(aside)はsafety統合dialogをparticipantsつきで開く(D-09)", async () => {
+    const { root, safety, detail } = mountMatched();
+    await detail.show(LATCH_ID);
+    root.querySelector("[data-role=safety-entry]").click();
+    expect(safety.open).toHaveBeenCalledWith({
+      latchId: LATCH_ID,
+      participants,
+      meId: ME,
+    });
+  });
+
+  it("カレンダーに追加のクリックで.icsダウンロード(anchor click)", async () => {
+    const { root, detail } = mountMatched();
+    await detail.show(LATCH_ID);
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    root.querySelector("[data-role=calendar-add]").click();
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    clickSpy.mockRestore();
+  });
+
+  it("成立の取り消し(D-08): dialogの影響3行を開き、取り消すでPOST leave→取り消し後姿", async () => {
+    const calls = [];
+    const { root, detail, chrome } = mountMatched(matchedLatch(), async (method, path, opts) => {
+      calls.push([method, path, opts]);
+      if (path === `/v1/latches/${LATCH_ID}/messages?limit=100`) {
+        return { items: [], next_cursor: null };
+      }
+      if (path.endsWith("/leave")) return { latch: { id: LATCH_ID, status: "matched", left: true } };
+      return { latch: matchedLatch() };
+    });
+    await detail.show(LATCH_ID);
+    root.querySelector("[data-role=cancel-entry]").click();
+    // openAppDialog(題+影響3行+元に戻せない)
+    expect(chrome.openAppDialog).toHaveBeenCalledTimes(1);
+    const dialogArg = chrome.openAppDialog.mock.calls[0][0];
+    expect(dialogArg.title).toBe(CANCEL_DIALOG_TITLE);
+    expect(dialogArg.body.textContent).toContain("あなたが参加を取り消しました");
+    expect(dialogArg.body.textContent).toContain("あなたはこのチャットに書き込めなくなります");
+    expect(dialogArg.body.textContent).toContain("残りの1人で会うかどうかは、1人が決めます");
+    expect(dialogArg.body.textContent).toContain("この操作は元に戻せません。");
+    // 取り消す=POST /v1/latches/{id}/leave(空body)
+    const confirm = dialogArg.actions.find((a) => a.variant === "danger");
+    expect(confirm.label).toBe("取り消す");
+    confirm.onClick();
+    await vi.waitFor(() => {
+      const posted = calls.find(([m, p]) => m === "POST" && p.endsWith("/leave"));
+      expect(posted).toBeTruthy();
+    });
+    expect(calls.find(([m, p]) => p.endsWith("/leave"))[2]).toEqual({ body: {} });
+    // 取り消し後の姿(ヒーロー・メンバー・チャット入力・導線)
+    await vi.waitFor(() => {
+      expect(root.querySelector("h1").textContent).toBe(LEFT_TITLE);
+    });
+    expect(root.textContent).toContain(LEFT_LEAD_TEXT);
+    expect(root.querySelector("[data-role=cancel-entry]")).toBeNull(); // 導線は消える
+    const leftStatus = root.querySelector(".lt-member-status.left");
+    expect(leftStatus.textContent).toBe("取り消し済み");
+    const input = root.querySelector("input");
+    expect(input.disabled).toBe(true);
+    expect(input.placeholder).toBe("取り消したため、書き込めません");
+  });
+
+  it("leaveの409 ALREADY_LEFTでも取り消し後姿へ収束する", async () => {
+    const { root, detail, chrome } = mountMatched(matchedLatch(), async (method, path) => {
+      if (path === `/v1/latches/${LATCH_ID}/messages?limit=100`) {
+        return { items: [], next_cursor: null };
+      }
+      if (path.endsWith("/leave")) {
+        throw new ApiError(409, "ALREADY_LEFT", "already left");
+      }
+      return { latch: matchedLatch() };
+    });
+    await detail.show(LATCH_ID);
+    root.querySelector("[data-role=cancel-entry]").click();
+    const dialogArg = chrome.openAppDialog.mock.calls[0][0];
+    const confirm = dialogArg.actions.find((a) => a.variant === "danger");
+    confirm.onClick();
+    await vi.waitFor(() => {
+      expect(root.querySelector("h1").textContent).toBe(LEFT_TITLE);
+    });
+    expect(root.querySelector("[data-role=cancel-entry]")).toBeNull();
+  });
+
+  it("完了(completed)ではattendance(実際に会いましたか?)がasideに出る(D-14)", async () => {
+    const { root, detail } = mountMatched(
+      matchedLatch({ status: "completed" }),
+    );
+    await detail.show(LATCH_ID);
+    expect(root.textContent).toContain("実際に会いましたか?");
+    expect(root.querySelectorAll(".attendance-yes,.attendance-no").length).toBe(2);
+  });
+
+  it("matchedへ直行(再訪・再読み込み)は05のチャット画面(回答UIは出ない)", async () => {
+    const { root, detail } = mountMatched();
+    await detail.show(LATCH_ID);
+    expect(root.querySelector(".lt-log")).not.toBeNull();
+    expect(root.querySelectorAll("[data-role=respond]").length).toBe(0);
+  });
+
+  it("コメント送信(チャット): 成立直後の05でメッセージを送れる", async () => {
+    let posted = null;
+    const { root, detail } = mountMatched(matchedLatch(), async (method, path) => {
+      if (path === `/v1/latches/${LATCH_ID}/messages?limit=100`) {
+        return {
+          items: posted ? [posted] : [],
+          next_cursor: null,
+        };
+      }
+      if (method === "POST" && path.endsWith("/messages")) {
+        posted = { id: "m1", sender_id: ME, body: "よろしく", created_at: "2026-10-01T20:05:00+09:00" };
+        return { message: posted };
+      }
+      return { latch: matchedLatch() };
+    });
+    await detail.show(LATCH_ID);
+    const input = root.querySelector("input");
+    input.value = "よろしく";
+    input.dispatchEvent(new Event("input"));
+    root
+      .querySelector("form.lt-chat-form")
+      .dispatchEvent(new Event("submit", { cancelable: true })); // 単行input+円形送信
+    await vi.waitFor(() => {
+      expect(root.querySelectorAll(".lt-bubble").length).toBe(1);
+    });
+    expect(root.querySelector(".lt-bubble").textContent).toBe("よろしく");
+    expect(root.querySelectorAll(".lt-msg.mine").length).toBe(1); // 自分=右
   });
 });

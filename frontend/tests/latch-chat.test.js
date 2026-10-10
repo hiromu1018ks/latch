@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/session.js";
 import {
   CHAT_COMPLETED_TEXT,
+  CHAT_LEFT_PLACEHOLDER_TEXT,
+  CHAT_OPENING_TEXT,
   CHAT_UNAVAILABLE_TEXT,
 } from "../src/latch/texts.js";
 import { createChat } from "../src/latch/chat.js";
@@ -20,12 +22,12 @@ const matchedLatch = {
 };
 const message = (id, senderId, body) => ({
   id, latch_id: LATCH_ID, sender_id: senderId, body,
-  created_at: "2026-10-01T20:00:00+09:00",
+  created_at: "2026-10-01T20:05:00+09:00",
 });
 
 const mountChat = (latch = matchedLatch, callImpl) => {
   const client = { call: vi.fn(callImpl) };
-  const mount = document.createElement("div");
+  const mount = document.createElement("section");
   const chat = createChat({ client, latch, meId: ME, mount });
   return { client, mount, chat };
 };
@@ -34,7 +36,41 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("chat(デザイン§2.6)", () => {
+describe("chat 05再構成(プロトタイプ05・UI v2 Phase 4)", () => {
+  it("ヘッダー: 「N人のチャット」+条件サブ+アバタースタック(自分=me様式)", async () => {
+    const latched = {
+      ...matchedLatch,
+      proposal: { headcount: 3 },
+      time_summary: "2026-10-10 20:30",
+      area_name: "天文館周辺",
+      participants: [
+        { user_id: PEER, display_name: "ゆうき", profile: {} },
+        { user_id: ME, display_name: "自分", profile: {} },
+      ],
+    };
+    const { mount, chat } = mountChat(latched, async () => ({
+      items: [], next_cursor: null,
+    }));
+    await chat.start();
+    expect(mount.querySelector(".lt-chat-title").textContent).toMatch(/の3人$/);
+    expect(mount.querySelector(".lt-chat-sub").textContent)
+      .toBe("20:30 · 天文館周辺");
+    const stack = [...mount.querySelectorAll(".lt-avatar-stack .lt-avatar")];
+    expect(stack.map((el) => el.textContent)).toEqual(["ゆ", "自"]);
+    expect(stack[1].className).toContain("me"); // 自分=末尾・me様式
+    chat.stop();
+  });
+
+  it("role=log+開始システム行(acc pill)で会話が始まる", async () => {
+    const { mount, chat } = mountChat(matchedLatch, async () => ({
+      items: [], next_cursor: null,
+    }));
+    await chat.start();
+    expect(mount.querySelector(".lt-log").getAttribute("role")).toBe("log");
+    expect(mount.querySelector(".lt-opening").textContent).toContain(CHAT_OPENING_TEXT);
+    chat.stop();
+  });
+
   it("初回取得はnext_cursorが尽きるまで頁を進め昇順連結する", async () => {
     const pages = [
       { items: [message("m1", PEER, "1通目")], next_cursor: "c1" },
@@ -53,8 +89,8 @@ describe("chat(デザイン§2.6)", () => {
       "GET",
       `/v1/latches/${LATCH_ID}/messages?limit=100&cursor=${encodeURIComponent("c1")}`,
     ]);
-    const bodies = [...mount.querySelectorAll(".chat-body")].map((el) => el.textContent);
-    expect(bodies).toEqual(["1通目", "2通目", "3通目"]); // 昇順
+    const bubbles = [...mount.querySelectorAll(".lt-bubble")].map((el) => el.textContent);
+    expect(bubbles).toEqual(["1通目", "2通目", "3通目"]); // 昇順
     chat.stop();
   });
 
@@ -89,7 +125,7 @@ describe("chat(デザイン§2.6)", () => {
     expect(calls).toBe(3); // stop後は増えない
   });
 
-  it("送信はPOST後に再取得しローカル追記しない", async () => {
+  it("送信はPOST後に再取得しローカル追記しない(入力はクリア)", async () => {
     let page = { items: [message("m1", PEER, "既存")], next_cursor: null };
     const posts = [];
     const { client, mount, chat } = mountChat(matchedLatch, async (method, path) => {
@@ -101,11 +137,59 @@ describe("chat(デザイン§2.6)", () => {
       return page;
     });
     await chat.start();
-    mount.querySelector(".chat-input").value = "新着";
+    const input = mount.querySelector("input");
+    input.value = "新着";
+    input.dispatchEvent(new Event("input")); // 空でなければ送信可
+    expect(mount.querySelector(".lt-send").disabled).toBe(false);
     await chat.send();
     expect(posts).toEqual([`/v1/latches/${LATCH_ID}/messages`]);
-    const bodies = [...mount.querySelectorAll(".chat-body")].map((el) => el.textContent);
-    expect(bodies).toEqual(["既存", "新着"]); // サーバ再取得の順序どおり
+    expect(input.value).toBe(""); // 送信後クリア
+    const bubbles = [...mount.querySelectorAll(".lt-bubble")].map((el) => el.textContent);
+    expect(bubbles).toEqual(["既存", "新着"]); // サーバ再取得の順序どおり
+    chat.stop();
+  });
+
+  it("空入力は送信ボタン無効・1字入力で有効になる", async () => {
+    const { mount, chat } = mountChat(matchedLatch, async () => ({
+      items: [], next_cursor: null,
+    }));
+    await chat.start();
+    const input = mount.querySelector("input");
+    const send = mount.querySelector(".lt-send");
+    expect(send.disabled).toBe(true);
+    input.value = "やあ";
+    input.dispatchEvent(new Event("input"));
+    expect(send.disabled).toBe(false);
+    chat.stop();
+  });
+
+  it("自分=右(名前なし・あなた)+相手=左(アバター+名前+時間)", async () => {
+    const { mount, chat } = mountChat(matchedLatch, async () => ({
+      items: [
+        message("m1", ME, "自分の発言"),
+        message("m2", PEER, "相手の発言"),
+      ],
+      next_cursor: null,
+    }));
+    await chat.start();
+    const rows = [...mount.querySelectorAll(".lt-msg")];
+    expect(rows[0].className).toContain("mine");
+    expect(rows[0].querySelector(".lt-msg-meta").textContent).toContain("あなた · ");
+    expect(rows[1].className).toContain("theirs");
+    expect(rows[1].querySelector(".lt-msg-meta").textContent).toContain("相手 · ");
+    expect(rows[1].querySelector(".lt-avatar--msg").textContent).toBe("相"); // イニシャル
+    chat.stop();
+  });
+
+  it("システム行(sender_id=NULL)は中央のdng pillでbodyのまま出す(D-08)", async () => {
+    const { mount, chat } = mountChat(matchedLatch, async () => ({
+      items: [message("m1", null, "あなたが参加を取り消しました")],
+      next_cursor: null,
+    }));
+    await chat.start();
+    const system = mount.querySelector(".lt-system");
+    expect(system.textContent).toBe("あなたが参加を取り消しました");
+    expect(mount.querySelector(".lt-bubble")).toBeNull(); // bubble扱いにしない
     chat.stop();
   });
 
@@ -115,8 +199,9 @@ describe("chat(デザイン§2.6)", () => {
       return { items: [], next_cursor: null };
     });
     await chat.start();
+    mount.querySelector("input").value = "x";
     await chat.send();
-    const input = mount.querySelector(".chat-input");
+    const input = mount.querySelector("input");
     const notice = mount.querySelector(".chat-notice");
     expect(input.disabled).toBe(true);
     expect(notice.textContent).toBe(CHAT_UNAVAILABLE_TEXT);
@@ -130,25 +215,22 @@ describe("chat(デザイン§2.6)", () => {
       items: [], next_cursor: null,
     }));
     await chat.start();
-    expect(mount.querySelector(".chat-input").disabled).toBe(true);
+    expect(mount.querySelector("input").disabled).toBe(true);
+    expect(mount.querySelector(".lt-send").disabled).toBe(true);
     expect(mount.querySelector(".chat-notice").textContent).toBe(CHAT_COMPLETED_TEXT);
     chat.stop();
   });
 
-  it("自分=右・相手=左・相手の送信者名はparticipantsから解決する", async () => {
+  it("markLeft(D-08): 取り消し後は入力disabled+専用placeholder", async () => {
     const { mount, chat } = mountChat(matchedLatch, async () => ({
-      items: [
-        message("m1", ME, "自分の発言"),
-        message("m2", PEER, "相手の発言"),
-      ],
-      next_cursor: null,
+      items: [], next_cursor: null,
     }));
     await chat.start();
-    const rows = [...mount.querySelectorAll(".chat-message")];
-    expect(rows[0].className).toContain("chat-mine");
-    expect(rows[1].className).toContain("chat-theirs");
-    expect(rows[1].querySelector(".chat-sender").textContent).toBe("相手");
-    expect(rows[0].querySelector(".chat-sender")).toBeNull(); // 自分は名前なし
+    chat.markLeft();
+    const input = mount.querySelector("input");
+    expect(input.disabled).toBe(true);
+    expect(input.placeholder).toBe(CHAT_LEFT_PLACEHOLDER_TEXT);
+    expect(mount.querySelector(".lt-send").disabled).toBe(true);
     chat.stop();
   });
 
@@ -183,9 +265,9 @@ describe("chat(デザイン§2.6)", () => {
       next_cursor: null,
     }));
     await chat.start();
-    expect(mount.querySelector(".chat-body").innerHTML)
+    expect(mount.querySelector(".lt-bubble").innerHTML)
       .not.toContain("<img");
-    expect(mount.querySelector(".chat-body").textContent)
+    expect(mount.querySelector(".lt-bubble").textContent)
       .toBe('<img src=x onerror="alert(1)">');
     chat.stop();
   });
@@ -208,10 +290,10 @@ describe("chat(デザイン§2.6)", () => {
     await chat.start(); // 頁1〜5(m1..m500)
     await vi.advanceTimersByTimeAsync(30_000); // poll1: 頁6〜8で終端まで
     await vi.advanceTimersByTimeAsync(30_000); // poll2: 差分同期(順序崩壊の回帰対象)
-    const bodies = [...mount.querySelectorAll(".chat-body")].map((el) => el.textContent);
-    expect(bodies.length).toBe(500); // 表示は末尾500件(先頭省略)
-    expect(bodies[0]).toBe("msg301");
-    expect(bodies.at(-1)).toBe("msg800"); // 昇順が維持される
+    const bubbles = [...mount.querySelectorAll(".lt-bubble")].map((el) => el.textContent);
+    expect(bubbles.length).toBe(500); // 表示は末尾500件(先頭省略)
+    expect(bubbles[0]).toBe("msg301");
+    expect(bubbles.at(-1)).toBe("msg800"); // 昇順が維持される
     chat.stop();
   });
 });

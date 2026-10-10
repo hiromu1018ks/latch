@@ -18,8 +18,9 @@ export const DEADLINE_CLOSED_TEXT = "締切";
 export const DEADLINE_SOON_TEXT = "まもなく締切";
 export const RATE_LIMIT_TEXT =
   "操作が集中しています。少し時間をおいてもう一度お試しください。";
-export const REPORT_TOAST_TEXT = "通報を受け付けました";
 export const ATTENDANCE_QUESTION = "実際に会いましたか?"; // D-09
+export const ATTENDANCE_YES_LABEL = "会いました";
+export const ATTENDANCE_NO_LABEL = "会えていません";
 export const ATTENDANCE_DONE_TEXT = "回答を送りました";
 export const ATTENDANCE_ALREADY_TEXT = "回答済みです";
 export const ATTENDANCE_ERROR_TEXT = "送信できませんでした。";
@@ -117,13 +118,71 @@ export const WITHDRAWN_TOAST_TEXT = "取り下げました";
 export const CANDIDATE_TOAST_TEXT = "LATCH候補があります"; // 03の右上トースト
 export const CANDIDATE_TOAST_SEE_LABEL = "見る";
 
-// 通報理由の選択式4値(08 §5.2・API値はws-5実装の英語コード)
+// 見送り理由の選択式4値(08 §5.2・API値はws-5実装の英語コード)
 export const REPORT_REASON_OPTIONS = [
   ["inappropriate_content", "不適切な内容"],
   ["unpleasant_behavior", "不快な対応"],
   ["suspected_impersonation", "なりすまし疑い"],
   ["other", "その他"],
 ];
+
+// --- UI v2 Phase 4追記: 05成立・チャット(D-08〜D-10・プロトタイプ05が正源) ---
+
+// 成立ヒーロー(kicker=「成立」・取消後は題とリードを差し替える)
+export const LATCHED_TITLE = "LATCHしました。";
+export const LEFT_TITLE = "参加を取り消しました。";
+export const LEFT_LEAD_TEXT =
+  "このチャットには書き込めません。条件は待機に戻していません。必要なら、もう一度預けてください。";
+
+// 成立した内容(details+dl)
+export const LATCHED_DETAILS_TITLE = "成立した内容";
+export const LATCHED_PLACE_SUB_TEXT = "集合場所はチャットで";
+export const CALENDAR_BUTTON_TEXT = "カレンダーに追加"; // D-10(クライアント完結)
+
+// メンバー(色付きイニシャルアバター)
+export const MEMBER_NOTE_TEXT =
+  "成立したので、お互いの表示名が見えるようになりました。";
+export const MEMBER_JOINED_TEXT = "参加";
+export const MEMBER_LEFT_TEXT = "取り消し済み";
+
+// 安全のために+通報・ブロック(D-09: 理由4択はdialog内ステップ)
+export const SAFETY_HEADING_TEXT = "安全のために";
+export const SAFETY_GUIDE_TITLE = "会う前の安全ガイド";
+export const SAFETY_GUIDE_ITEMS = [
+  "はじめは人通りの多いお店で会いましょう",
+  "連絡先の交換は、会ってからでも遅くありません",
+  "違和感があれば、無理せず帰って大丈夫です",
+];
+export const SAFETY_ENTRY_TEXT = "通報・ブロック"; // aria-haspopup=dialog
+export const SAFETY_DIALOG_TITLE = "通報・ブロック";
+export const SAFETY_TARGET_LABEL = "対象のメンバー";
+export const SAFETY_NOTE_TEXT =
+  "ブロックすると、この相手とは今後LATCHが成立しなくなります。相手には通知されません。通報は運営が確認し、必要に応じて対応します。";
+export const SAFETY_REASON_LEGEND = "理由を選んでください";
+export const SAFETY_REASON_NOTE = "通報の理由は運営の確認に使います(相手には伝わりません)";
+export const SAFETY_BACK_LABEL = "もどる";
+export const SAFETY_BLOCK_LABEL = "ブロックする";
+export const SAFETY_REPORT_LABEL = "通報する";
+export const SAFETY_CANCEL_LABEL = "キャンセル";
+export const SAFETY_CLOSE_LABEL = "閉じる";
+export const SAFETY_REASON_ERROR_TEXT = "理由を選んでください。";
+export const SAFETY_TARGET_ERROR_TEXT = "相手を選んでください。";
+export const SAFETY_ERROR_TEXT = "送信できませんでした。";
+
+// この成立を取り消す(D-08: POST /v1/latches/{id}/leave・自分の参加のみ)
+export const CANCEL_ENTRY_TEXT = "この成立を取り消す";
+export const CANCEL_DIALOG_TITLE = "この成立を取り消しますか？";
+export const CANCEL_DIALOG_INTRO = "取り消すと、次のようになります。";
+export const CANCEL_DIALOG_NOTE = "この操作は元に戻せません。";
+export const CANCEL_DIALOG_DISMISS = "やめておく";
+export const CANCEL_DIALOG_CONFIRM = "取り消す";
+
+// チャット(プロトタイプ05の構成)
+export const CHAT_OPENING_TEXT = "LATCHが成立し、チャットが開きました";
+export const CHAT_PLACEHOLDER_TEXT = "メッセージを送る";
+export const CHAT_LEFT_PLACEHOLDER_TEXT = "取り消したため、書き込めません";
+export const CHAT_SEND_ERROR_TEXT = "送信できませんでした。";
+export const CHAT_EMPTY_ERROR_TEXT = "メッセージを入力してください。";
 
 // --- M3 ws-8追記: お知らせ・設定(design §2.8) -----------------------------
 
@@ -150,12 +209,8 @@ export const BLOCKS_EMPTY_TEXT = "ブロックしているユーザーはいま�
 export const BLOCK_UNBLOCK_LABEL = "解除する";
 export const BLOCK_CANCEL_LABEL = "やめる";
 export const BLOCK_CONFIRM_SUFFIX = "さんのブロックを解除しますか?"; // 前に表示名を結合
-export const BLOCK_ENTRY_TEXT = "このユーザーをブロックする"; // 成立済み詳細の導線
 export const BLOCK_CONFIRM_TEXT = "ブロックすると、このやりとりは利用できなくなります。";
-export const BLOCK_SUBMIT_LABEL = "ブロックする";
-export const BLOCK_SELECT_LABEL = "ブロックする相手";
 export const BLOCK_SELECT_ERROR_TEXT = "相手を選んでください。";
-export const BLOCK_TOAST_TEXT = "ブロックしました";
 export const BLOCK_ERROR_TEXT = "送信できませんでした。";
 
 // --- M4 ws-5追記: 告知・同意(08 D-14・2026-10-03ユーザー承認済み文言) -----

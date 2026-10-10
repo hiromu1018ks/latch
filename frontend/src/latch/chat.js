@@ -1,8 +1,22 @@
-// チャット(M3 ws-7 design §2.6)。30秒ポーリング+送信後即時再取得+
-// visibilitychange。初回はlimit=100でnext_cursorが尽きるまで(上限5頁=500件・
-// 超過時は先頭を省略)。順序の真実はサーバ(ローカル追記しない)。
-import { CHAT_COMPLETED_TEXT, CHAT_UNAVAILABLE_TEXT } from "./texts.js";
-import { escapeHtml, senderName } from "./view.js";
+// チャット(05成立・チャット・プロトタイプ05が正源+M3 ws-7 design §2.6)。
+// 構成は全面再構成(UI v2 Phase 4): ヘッダー(「今夜の3人」+条件+アバタースタック)・
+// role="log"・開始システム行(acc pill)・相手=アバター+名前+時間+bubble・
+// 自分=右bubble・システム行(sender_id NULL=参加取り消し告知・dng pill)・
+// 単行input+円形送信ボタン・読み取り専用表示。
+// 同期ロジックは現行踏襲: 30秒ポーリング+送信後即時再取得+visibilitychange。
+// 初回はlimit=100でnext_cursorが尽きるまで(上限5頁=500件・超過時は先頭を省略)。
+// 順序の真実はサーバ(ローカル追記しない)。
+import {
+  CHAT_COMPLETED_TEXT,
+  CHAT_EMPTY_ERROR_TEXT,
+  CHAT_LEFT_PLACEHOLDER_TEXT,
+  CHAT_OPENING_TEXT,
+  CHAT_PLACEHOLDER_TEXT,
+  CHAT_SEND_ERROR_TEXT,
+  CHAT_UNAVAILABLE_TEXT,
+} from "./texts.js";
+import { chatHeadText, chatMembers, clockText, escapeHtml } from "./view.js";
+import { iconHtml } from "../ui/icons.js";
 
 const POLL_MS = 30_000;
 const PAGE_LIMIT = 100;
@@ -12,29 +26,58 @@ export const createChat = ({ client, latch, meId, mount }) => {
   let messages = [];
   let cursor = null;
   let timer = null;
+  let left = false; // 参加持取り消し済み(D-08・leave成功時にmarkLeft)
   // matchedのみ書込可(それ以外は閲覧のみ・03 §6)
-  const readonlyReason =
-    latch.status === "matched" ? null : CHAT_COMPLETED_TEXT;
+  let readonlyReason = latch.status === "matched" ? null : CHAT_COMPLETED_TEXT;
 
-  const listEl = document.createElement("div");
-  listEl.className = "chat-messages";
-  listEl.setAttribute("aria-live", "polite");
-  const noticeEl = document.createElement("p");
-  noticeEl.className = "chat-notice";
-  noticeEl.hidden = true;
-  const formEl = document.createElement("form");
-  formEl.className = "chat-form";
-  const inputEl = document.createElement("textarea");
-  inputEl.className = "chat-input";
-  inputEl.maxLength = 1000; // trim後1〜1000字の上限(空白のみはサーバ422)
-  inputEl.rows = 2;
-  inputEl.setAttribute("aria-label", "メッセージ");
-  const sendButton = document.createElement("button");
-  sendButton.type = "submit";
-  sendButton.className = "chat-send";
-  sendButton.textContent = "送信";
-  formEl.append(inputEl, sendButton);
-  mount.replaceChildren(listEl, noticeEl, formEl);
+  const members = chatMembers(latch, meId);
+  const head = chatHeadText(latch);
+  const memberById = new Map(members.map((m) => [m.id, m]));
+
+  // -- 骨格(ヘッダー+log+フォーム・プロトタイプ05の構成) ------------------------
+  mount.classList.add("lt-chat");
+  mount.innerHTML = `
+    <div class="lt-chat-head">
+      <div class="lt-chat-titlewrap">
+        <h2 class="lt-chat-title"></h2>
+        <span class="lt-chat-sub">${escapeHtml(head.sub)}</span>
+      </div>
+      <div aria-hidden="true" class="lt-avatar-stack">
+        ${members
+          .map(
+            (m) =>
+              `<span class="lt-avatar${m.me ? " me" : ""}" style="${
+                m.me ? "" : `background:${m.color}`
+              }">${escapeHtml(m.initial)}</span>`,
+          )
+          .join("")}
+      </div>
+    </div>
+    <div id="chatlog" class="lt-log" role="log" aria-label="チャット" tabindex="0"></div>
+    <p class="chat-notice" hidden></p>
+    <form class="lt-chat-form">
+      <label for="msg" class="vh">メッセージ</label>
+      <input id="msg" class="field" type="text" autocomplete="off" enterkeyhint="send" maxlength="1000" placeholder="${escapeHtml(
+        CHAT_PLACEHOLDER_TEXT,
+      )}" />
+      <button type="submit" class="cta lt-send" aria-label="送信" disabled>${iconHtml(
+        "send",
+        20,
+      )}</button>
+    </form>`;
+
+  mount.querySelector(".lt-chat-title").textContent = head.title;
+  const logEl = mount.querySelector(".lt-log");
+  const noticeEl = mount.querySelector(".chat-notice");
+  const inputEl = mount.querySelector("input");
+  const formEl = mount.querySelector("form");
+  const sendButton = mount.querySelector(".lt-send");
+
+  const setSendDisabled = () => {
+    sendButton.disabled = Boolean(readonlyReason) || left || !inputEl.value.trim();
+  };
+
+  inputEl.addEventListener("input", setSendDisabled);
 
   const setReadonly = (text) => {
     inputEl.disabled = true;
@@ -43,28 +86,55 @@ export const createChat = ({ client, latch, meId, mount }) => {
     noticeEl.hidden = false;
   };
 
+  // 参加持取り消し後(D-08): 書込不可+取り消し専用のplaceholder
+  const markLeft = () => {
+    left = true;
+    inputEl.disabled = true;
+    inputEl.placeholder = CHAT_LEFT_PLACEHOLDER_TEXT;
+    sendButton.disabled = true;
+  };
+
+  const openingHtml = () => `
+    <p class="msg lt-opening">
+      <svg width="14" height="14" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M20.5 5 A15 15 0 0 0 20.5 35" style="stroke: var(--acc)" stroke-width="4.5" stroke-linecap="round"></path><path d="M20.5 5 A15 15 0 0 1 20.5 35" style="stroke: var(--acc)" stroke-width="4.5" stroke-linecap="round"></path></svg>
+      ${escapeHtml(CHAT_OPENING_TEXT)}
+    </p>`;
+
+  const rowHtml = (m) => {
+    const time = clockText(m.created_at);
+    if (m.sender_id === null) {
+      // システム行(参加取り消しの告知・05 §5 leave)。文言はサーバのbodyのまま
+      return `<p class="msg lt-system">${escapeHtml(m.body)}</p>`;
+    }
+    if (m.sender_id === meId) {
+      return `
+        <div class="msg lt-msg mine">
+          <span class="lt-msg-meta">あなた · ${escapeHtml(time)}</span>
+          <p class="lt-bubble">${escapeHtml(m.body)}</p>
+        </div>`;
+    }
+    const member = memberById.get(m.sender_id);
+    const name = member?.name ?? "";
+    return `
+      <div class="msg lt-msg theirs">
+        <span aria-hidden="true" class="lt-avatar lt-avatar--msg" style="background:${
+          member?.color ?? "var(--s3)"
+        }">${escapeHtml(member?.initial ?? "?")}</span>
+        <div class="lt-msg-body">
+          <span class="lt-msg-meta">${escapeHtml(name)} · ${escapeHtml(time)}</span>
+          <p class="lt-bubble">${escapeHtml(m.body)}</p>
+        </div>
+      </div>`;
+  };
+
   const render = () => {
     // 保持(messages)は昇順の全量・「先頭を省略して表示」はここだけ(design §2.6)。
     // 保持側を切り詰めると差分同期のid排除と不整合を起こす(順序崩壊)。
     const visible = messages.length > MAX_PAGES * PAGE_LIMIT
       ? messages.slice(messages.length - MAX_PAGES * PAGE_LIMIT)
       : messages;
-    listEl.replaceChildren(
-      ...visible.map((m) => {
-        const row = document.createElement("div");
-        const mine = m.sender_id === meId;
-        row.className = `chat-message ${mine ? "chat-mine" : "chat-theirs"}`;
-        // 自分=右(名前なし)・相手=左(送信者名は詳細応答participantsから)
-        const name = mine
-          ? ""
-          : `<span class="chat-sender">${escapeHtml(
-              senderName(m.sender_id, latch.participants ?? []),
-            )}</span>`;
-        row.innerHTML = `${name}<span class="chat-body">${escapeHtml(m.body)}</span>`;
-        return row;
-      }),
-    );
-    listEl.scrollTop = listEl.scrollHeight;
+    logEl.innerHTML = `${openingHtml()}${visible.map(rowHtml).join("")}`;
+    logEl.scrollTop = logEl.scrollHeight;
   };
 
   const sync = async () => {
@@ -107,17 +177,19 @@ export const createChat = ({ client, latch, meId, mount }) => {
         body: { body: inputEl.value }, // フロントではtrimしない(§2.6)
       });
       inputEl.value = "";
+      setSendDisabled();
       await sync(); // 201でローカルに追記せず再取得
     } catch (err) {
       if (err?.code === "CHAT_READONLY") {
         // D-23: 理由はこれ以上表示しない(ブロック事実の推察を避ける)
+        readonlyReason = CHAT_UNAVAILABLE_TEXT;
         setReadonly(CHAT_UNAVAILABLE_TEXT);
         return;
       }
       noticeEl.textContent =
         err?.code === "VALIDATION_ERROR"
-          ? "メッセージを入力してください。" // 空白のみ等(§2.6)
-          : "送信できませんでした。";
+          ? CHAT_EMPTY_ERROR_TEXT // 空白のみ等(§2.6)
+          : CHAT_SEND_ERROR_TEXT;
       noticeEl.hidden = false;
     }
   };
@@ -133,6 +205,7 @@ export const createChat = ({ client, latch, meId, mount }) => {
 
   const start = async () => {
     await sync();
+    setSendDisabled();
     if (readonlyReason) setReadonly(readonlyReason);
     timer = setInterval(() => sync().catch(() => {}), POLL_MS);
     document.addEventListener("visibilitychange", onVisible);
@@ -144,5 +217,5 @@ export const createChat = ({ client, latch, meId, mount }) => {
     document.removeEventListener("visibilitychange", onVisible);
   };
 
-  return { start, stop, send };
+  return { start, stop, send, markLeft };
 };

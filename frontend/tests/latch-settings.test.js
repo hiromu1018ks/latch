@@ -124,7 +124,8 @@ describe("settings画面骨組(design §2.4)", () => {
     for (const id of [
       "settingsScreen", "permissionControl", "blockList", "blockMoreButton",
       "settingsButton", "noticeList", "noticeMoreButton",
-      "notificationDot", "unblockModal", "blockModal",
+      // UI v2 Phase 4(D-09): blockModalはsafetyDialogへ統合された
+      "notificationDot", "unblockModal", "safetyDialog",
       "onboardingScreen", "consentOnboarding", "consentControl", "consentSettingsTitle",
     ]) {
       expect(html).toContain(`id="${id}"`);
@@ -138,7 +139,7 @@ describe("settings画面骨組(design §2.4)", () => {
     expect(mainJs).toContain('from "./latch/permission.js"');
     expect(mainJs).toContain('from "./latch/blocks.js"');
     expect(mainJs).toContain('from "./latch/settings.js"');
-    expect(mainJs).toContain('from "./latch/blockFlow.js"');
+    expect(mainJs).toContain('from "./latch/safety.js"'); // UI v2 Phase 4(統合dialog)
     expect(mainJs).toContain('settings: $("#settingsScreen")');
     expect(mainJs).toContain('notice.preload()');
     expect(mainJs).toContain('if (!$("#noticePopover").hidden) notice.open()');

@@ -241,13 +241,13 @@ h2{font-family:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif}
 .centered{justify-content:center;margin-bottom:8px}
 
 /* --- 入力部品(field・02のselect/input値・プロトタイプ02) ------------------- */
-.field, .chat-input, .token-panel textarea {
+.field, .token-panel textarea {
   min-height:44px;padding:8px 12px;
   border:1px solid var(--line-strong);border-radius:12px;
   background:var(--s1);color:var(--t1);font-family:inherit;font-size:16px;
 }
 .token-panel textarea{font-size:13px;font-family:monospace;min-height:0}
-.field:focus, .chat-input:focus{border-color:var(--acc) !important}
+.field:focus{border-color:var(--acc) !important}
 textarea::placeholder, input::placeholder{color:var(--t3)}
 
 /* ===========================================================================
@@ -639,7 +639,7 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
 }
 .token-error{margin:0;font-size:13px;color:var(--dng)}
 
-/* --- 詳細画面 -------------------------------------------------------------- */
+/* --- 詳細画面(04の提案姿=pv-・05の成立姿=lt-。本体は各章) -------------------- */
 .detail-view{max-width:720px;width:100%;margin:0 auto;display:block}
 .latch-detail{display:grid;gap:20px}
 .latch-summary{margin:0;font-size:17px;line-height:1.8}
@@ -663,54 +663,28 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
 }
 .group-note{margin:0;color:var(--t2);font-size:14px}
 .latch-heading{margin:0;font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2)}
-.participants{display:grid;gap:12px;list-style:none;margin:0;padding:0}
-.participant{
-  display:grid;gap:4px;padding:16px 20px;border:1px solid var(--line);
-  border-radius:22px;background:#10121A;
-}
-.participant span{font-size:14px;color:var(--t2)}
-.next-action{font-weight:700}
 .home-link{color:var(--acc);font-weight:700}
 .detail-error{color:var(--dng);font-weight:700}
 
-/* --- チャット(05のbubble・入力欄の値) --------------------------------------- */
-.chat-area{display:grid;gap:12px}
-.chat-messages{
-  display:grid;gap:14px;align-content:start;max-height:380px;overflow-y:auto;
-  padding:20px;border:1px solid var(--line);border-radius:24px;background:#10121A;
-}
-.chat-message{max-width:80%;padding:12px 16px;font-size:15px;line-height:1.7}
-.chat-mine{
-  justify-self:end;border-radius:18px 18px 6px 18px;
-  background:#262B42;border:1px solid #343A56;color:var(--t1);
-}
-.chat-theirs{
-  justify-self:start;border-radius:18px 18px 18px 6px;
-  background:var(--s2);border:1px solid var(--line);
-}
-.chat-sender{display:block;font-size:13px;color:var(--t2);margin-bottom:4px}
-.chat-notice{color:var(--t3);font-size:13px;text-align:center}
-.chat-form{display:flex;gap:10px}
-.chat-input{flex:1;min-width:0;border-radius:999px;padding:0 20px;min-height:50px}
-.chat-input:disabled{opacity:0.6}
-.chat-send{
-  width:50px;height:50px;flex:none;padding:0;border:none;border-radius:999px;
-  background:var(--acc);color:var(--on-acc);display:grid;place-items:center;cursor:pointer;
-  box-shadow:0 10px 30px -10px var(--acc-glow);
-}
-.chat-send:disabled{background:var(--s3);color:var(--t3);box-shadow:none;cursor:not-allowed}
-
 /* --- 参加確認・通報・ブロック(暫定モーダル・Phase 4/5で<dialog>へ統合) -------- */
 .attendance-field{
-  display:grid;gap:10px;padding:20px;border:1px solid var(--line);border-radius:22px;background:#10121A;
+  margin:0;display:flex;flex-direction:column;gap:14px;
+  padding:24px 26px;border:1px solid var(--line);border-radius:22px;background:#10121A;
 }
-.attendance-field legend{font-weight:700;padding:0 8px;font-size:14px}
-.attendance-field button{
-  min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--line-strong);
-  background:var(--s1);font-weight:700;cursor:pointer;color:var(--t1);
+.attendance-legend{
+  padding:0;font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2);
+}
+.attendance-actions{display:flex;flex-wrap:wrap;gap:8px}
+.attendance-yes{
+  min-height:46px;padding:0 18px;border:none;border-radius:999px;
+  background:var(--acc);color:var(--on-acc);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;
+}
+.attendance-no{
+  min-height:46px;padding:0 18px;border-radius:999px;border:1px solid var(--line-strong);
+  background:transparent;color:var(--t1);font-family:inherit;font-size:14px;cursor:pointer;
 }
 .attendance-note{color:var(--t2);font-weight:700}
-.report-entry,.block-entry{
+.report-entry{
   justify-self:start;min-height:44px;padding:0 4px;font-size:14px;
   border:none;background:none;color:var(--t2);
   text-decoration:underline;text-underline-offset:4px;cursor:pointer;
@@ -734,19 +708,13 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   font-size:22px;font-weight:700;
 }
 .confirmation > p:not(.section-kicker){margin:0 auto;max-width:380px;color:var(--t2);font-size:14px;line-height:1.8}
-.report-dialog,.block-dialog{display:grid;gap:16px;text-align:left}
-.report-target,.block-target,.block-confirm{font-size:14.5px}
-.report-target-select,.report-reasons,.block-target-select{
-  display:grid;gap:8px;border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--s2);
-}
-.report-target-select legend,.report-reasons legend,.block-target-select legend{font-weight:700;padding:0 8px;font-size:14px}
-.report-target-select label,.report-reasons label,.block-target-select label{display:block;font-size:15px;min-height:32px}
-.report-error,.block-error{color:var(--dng);font-weight:700}
-.report-submit,.block-submit{
+.block-dialog{display:grid;gap:16px;text-align:left}
+.block-confirm{font-size:14.5px}
+.block-error{color:var(--dng);font-weight:700}
+.block-submit{
   min-height:48px;padding:0 20px;border:none;border-radius:999px;
   background:var(--dng);color:#1A0A08;font-weight:700;cursor:pointer;
 }
-.report-submit:disabled{background:var(--s3);color:var(--t3);cursor:not-allowed}
 .block-actions{display:flex;gap:10px;justify-content:flex-end}
 .block-cancel,.dlg-cancel{
   min-height:48px;padding:0 18px;border-radius:999px;border:1px solid var(--line-strong);
@@ -1176,11 +1144,6 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
 .reason-chip[aria-pressed="true"]{background:var(--s3);border-color:var(--t2);color:var(--t1)}
 
 /* --- 暫定のレスポンシブ(旧800/560pxを720pxへ統合+02の520px) ----------------- */
-@media (max-width:720px){
-  .chat-message{max-width:92%}
-  .chat-form{flex-direction:column}
-  .chat-send{width:100%;height:44px}
-}
 @media (max-width:520px){
   .words-card,.privacy-card{padding-left:20px;padding-right:20px}
   .slots-card{padding-left:20px;padding-right:20px}
@@ -1191,4 +1154,250 @@ textarea::placeholder, input::placeholder{color:var(--t3)}
   .fit-row{grid-template-columns:minmax(0, 1fr) 16px minmax(0, 1fr) 28px;gap:6px 10px}
   .fit-row .fit-label{grid-column:1 / -1}
   .pv-fit,.pv-decide{padding-left:20px;padding-right:20px}
+}
+
+/* ===========================================================================
+   05 成立・チャット(詳細の成立姿) — プロトタイプ05のinline styleが正源(UI v2 Phase 4)
+   =========================================================================== */
+.page-main--latched{display:block;max-width:1240px;padding-top:clamp(20px, 5vw, 64px)}
+.haze-latched{top:-300px;left:-200px;width:1000px;height:900px}
+.lt-detail{position:relative;display:flex;flex-direction:column;gap:clamp(20px, 3vw, 28px)}
+
+/* 成立ヒーロー(snap/burstアニメ・成立時刻・条件タグ) */
+.lt-hero{
+  position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:20px 40px;
+  padding:clamp(20px, 3vw, 32px) clamp(20px, 3vw, 40px);
+  border-radius:28px;background:var(--s1);border:1px solid var(--acc-line);
+  box-shadow:0 50px 140px -70px var(--acc-glow);
+}
+.lt-mark{
+  position:relative;flex:none;width:clamp(72px, 12vw, 128px);aspect-ratio:1 / 1;
+  display:grid;place-items:center;
+}
+.lt-burst{
+  position:absolute;inset:11%;border-radius:50%;border:2px solid var(--acc);
+  animation:burst 1.5s cubic-bezier(.2,.7,.3,1) .9s both;
+}
+@keyframes burst{0%{transform:scale(.7);opacity:.9}100%{transform:scale(2);opacity:0}}
+.lt-mark-glow{
+  position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(closest-side, rgba(95, 212, 174, 0.3), rgba(18, 20, 29, 0) 75%);
+}
+.lt-mark-svg{
+  position:relative;width:78%;height:78%;
+  filter:drop-shadow(0 0 14px var(--acc-glow));
+}
+@keyframes snapL{0%{transform:translateX(-12px)}65%{transform:translateX(1.5px)}100%{transform:none}}
+@keyframes snapR{0%{transform:translateX(12px)}65%{transform:translateX(-1.5px)}100%{transform:none}}
+.snapL{animation:snapL .9s cubic-bezier(.3,.9,.3,1.2) .3s both}
+.snapR{animation:snapR .9s cubic-bezier(.3,.9,.3,1.2) .3s both}
+.lt-hero-text{flex:1 1 380px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.lt-hero-kicker{margin:0;font-size:14px;font-weight:700;color:var(--acc)}
+.lt-hero-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:clamp(28px, 3.4vw, 46px);line-height:1.25;letter-spacing:0.02em;
+}
+.lt-hero-lead{margin:0;font-size:16px;line-height:1.85;color:var(--t2);text-wrap:pretty}
+.lt-hero-tags{flex:0 1 340px;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start}
+.lt-tag{
+  padding:9px 14px;border-radius:12px;background:var(--s2);
+  border:1px solid var(--line);font-size:14px;
+}
+.lt-tag.mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+
+/* 並び順：スマホ＝チャット→詳細、PC＝詳細｜チャット */
+.lt-grid{
+  display:grid;grid-template-columns:minmax(0, 1fr);
+  grid-template-areas:"chat" "aside";gap:24px;align-items:start;
+}
+.lt-aside{grid-area:aside;min-width:0;display:flex;flex-direction:column;gap:16px}
+.lt-chat-slot{grid-area:chat;min-width:0}
+@media (min-width:960px){
+  .lt-grid{
+    grid-template-columns:minmax(300px, 360px) minmax(0, 1fr);
+    grid-template-areas:"aside chat";
+  }
+}
+.lt-chat{height:min(720px, calc(100vh - 140px));min-height:460px}
+
+/* aside共通カード(#10121A・22px角) */
+.lt-card{
+  border-radius:22px;background:#10121A;border:1px solid var(--line);
+  display:flex;flex-direction:column;gap:14px;padding:24px 26px;
+}
+.lt-card-title{margin:0;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2)}
+
+/* details(成立した内容・安全ガイド) */
+.lt-card summary{list-style:none;cursor:pointer}
+.lt-card summary::-webkit-details-marker{display:none}
+.lt-card details[open] > summary .chev{transform:rotate(180deg)}
+.chev{transition:transform .2s ease}
+.lt-details{padding:0;gap:0}
+.lt-details > summary{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  min-height:44px;padding:14px 26px;
+}
+.lt-details-body{padding:4px 26px 24px;display:flex;flex-direction:column;gap:16px}
+.lt-dl{
+  margin:0;display:grid;grid-template-columns:56px minmax(0, 1fr);
+  gap:12px 14px;font-size:15px;
+}
+.lt-dl dt{color:var(--t3)}
+.lt-dl dd{margin:0;font-weight:700}
+.lt-dd-sub{display:block;font-weight:400;font-size:13.5px;color:var(--t2)}
+.lt-cal,.lt-safety{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:46px;padding:0 18px;border-radius:999px;
+  border:1px solid var(--line-strong);background:transparent;color:var(--t1);
+  font-family:inherit;font-size:14px;cursor:pointer;
+}
+.lt-cal:disabled{opacity:.5;cursor:not-allowed}
+
+/* メンバー(色付きイニシャルアバター) */
+.lt-members{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.lt-members li{display:flex;align-items:center;gap:12px}
+.lt-avatar{
+  width:40px;height:40px;flex:none;border-radius:999px;display:grid;place-items:center;
+  background:var(--s3);color:var(--bg);
+  font-family:'IBM Plex Mono',ui-monospace,monospace;font-weight:600;
+}
+.lt-avatar.me{
+  box-sizing:border-box;background:var(--s3);border:2px solid var(--line-strong);color:var(--t1);
+}
+.lt-member-name{flex:1 1 auto;font-size:15px;font-weight:700}
+.lt-member-status{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--t2)}
+.lt-member-status.left{color:var(--dng)}
+.lt-member-note{margin:4px 0 0;font-size:13.5px;line-height:1.7;color:var(--t3)}
+
+/* 安全のために */
+.lt-guide{border-radius:14px;background:var(--s2)}
+.lt-guide > summary{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  min-height:44px;padding:4px 16px;font-size:14.5px;font-weight:700;
+}
+.lt-guide ul{
+  margin:0;padding:0 16px 16px 34px;display:flex;flex-direction:column;gap:8px;
+  font-size:14px;line-height:1.7;color:var(--t2);
+}
+
+/* この成立を取り消す(D-08の導線・danger文字ボタン) */
+.lt-cancel{
+  align-self:flex-start;min-height:44px;padding:0 16px;border-radius:999px;
+  border:1px solid transparent;background:transparent;color:var(--dng);
+  font-family:inherit;font-size:14px;text-decoration:underline;text-underline-offset:4px;
+  cursor:pointer;transition:background-color .2s ease, border-color .2s ease;
+}
+
+/* チャット(ヘッダー+log+フォーム) */
+.lt-chat{
+  display:flex;flex-direction:column;border-radius:24px;background:#10121A;
+  border:1px solid var(--line);overflow:hidden;
+}
+.lt-chat-head{
+  flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--s1);
+}
+.lt-chat-titlewrap{display:flex;flex-direction:column;gap:2px}
+.lt-chat-title{margin:0;font-size:16px;font-weight:700}
+.lt-chat-sub{font-size:13px;color:var(--t2)}
+.lt-avatar-stack{display:flex;align-items:center}
+.lt-avatar-stack .lt-avatar{
+  width:32px;height:32px;box-sizing:border-box;font-size:12px;
+  border:2px solid var(--s1);background:var(--s3);
+}
+.lt-avatar-stack .lt-avatar.me{background:var(--s3);color:var(--t1);border-color:var(--line-strong)}
+.lt-avatar-stack .lt-avatar:nth-child(1){position:relative;z-index:3}
+.lt-avatar-stack .lt-avatar:nth-child(2){position:relative;z-index:2;margin-left:-8px}
+.lt-avatar-stack .lt-avatar:nth-child(3){position:relative;z-index:1;margin-left:-8px}
+.lt-avatar-stack .lt-avatar:nth-child(n + 4){position:relative;z-index:0;margin-left:-8px}
+.lt-log{
+  flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:18px;
+  padding:24px clamp(14px, 2.4vw, 28px);
+}
+.lt-opening{
+  margin:0 0 4px;align-self:center;display:inline-flex;align-items:center;gap:8px;
+  padding:7px 14px;border-radius:999px;background:var(--acc-soft);
+  border:1px solid var(--acc-line);color:var(--t1);font-size:13px;text-align:center;
+}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.msg{animation:msgIn .3s cubic-bezier(.2,.8,.2,1) both}
+.lt-msg{max-width:min(80%, 560px)}
+.lt-msg.theirs{display:flex;align-items:flex-end;gap:10px}
+.lt-msg.mine{
+  align-self:flex-end;display:flex;flex-direction:column;align-items:flex-end;gap:6px;
+}
+.lt-avatar--msg{width:36px;height:36px;font-size:13px}
+.lt-msg-body{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lt-msg-meta{font-size:13px;color:var(--t2)}
+.lt-bubble{margin:0;padding:12px 16px;font-size:15px;line-height:1.7}
+.lt-msg.theirs .lt-bubble{
+  border-radius:18px 18px 18px 6px;background:var(--s2);border:1px solid var(--line);
+}
+.lt-msg.mine .lt-bubble{
+  border-radius:18px 18px 6px 18px;background:#262B42;border:1px solid #343A56;color:var(--t1);
+}
+.lt-system{
+  margin:0;align-self:center;padding:7px 14px;border-radius:999px;
+  background:var(--dng-soft);border:1px solid var(--dng-line);
+  color:var(--t1);font-size:13px;text-align:center;
+}
+.chat-notice{margin:0;flex:none;padding:8px 20px 0;color:var(--t3);font-size:13px;text-align:center}
+.lt-chat-form{
+  flex:none;display:flex;align-items:center;gap:10px;
+  padding:12px;border-top:1px solid var(--line);background:#0E1018;
+}
+.lt-chat-form .field{
+  flex:1 1 auto;min-width:0;min-height:50px;box-sizing:border-box;padding:0 20px;
+  border-radius:999px;background:var(--s1);font-size:16px;outline:none;
+  transition:border-color .2s ease;
+}
+.lt-chat-form .field:disabled{opacity:.6}
+.lt-send{
+  width:50px;height:50px;flex:none;padding:0;border:none;border-radius:999px;
+  display:grid;place-items:center;cursor:pointer;
+  box-shadow:0 10px 30px -10px var(--acc-glow);
+}
+.lt-send:disabled{background:var(--s3);color:var(--t3);box-shadow:none;cursor:not-allowed}
+
+/* 通報・ブロック統合dialog(D-09・2ステップ: 対象→理由) */
+.safety-body{display:flex;flex-direction:column;gap:16px}
+.safety-body h2{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-size:22px;font-weight:700;
+}
+.safety-targets{margin:0;padding:0;border:none;display:flex;flex-direction:column;gap:8px}
+.safety-targets legend{margin-bottom:8px;padding:0;font-size:14.5px;color:var(--t2)}
+.safety-opt{
+  display:flex;align-items:center;gap:12px;min-height:48px;padding:0 14px;
+  border-radius:14px;border:1px solid var(--line-strong);background:transparent;
+  font-size:15px;cursor:pointer;
+}
+.safety-opt.on{background:var(--s3);border-color:var(--t2)}
+.safety-opt input{width:18px;height:18px;margin:0;accent-color:#5FD4AE;cursor:pointer}
+.safety-reason-note{font-size:13px;color:var(--t3)}
+.safety-note{margin:0;font-size:13.5px;line-height:1.75;color:var(--t3)}
+.safety-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.safety-btn{
+  min-height:48px;padding:0 18px;border-radius:999px;font-family:inherit;
+  font-size:15px;cursor:pointer;
+}
+.safety-btn:disabled{background:var(--s3) !important;color:var(--t3) !important;cursor:not-allowed}
+.safety-dng{border:1px solid var(--dng-line);background:transparent;color:var(--dng);font-weight:700}
+.safety-solid{border:none;background:var(--dng);color:#1A0A08;font-weight:700}
+.safety-error{margin:0;color:var(--dng);font-weight:700}
+.safety-done{margin:0;font-size:15px;line-height:1.8}
+
+/* 取り消しdialogの説明(既存dlg-descの上にリストを重ねる) */
+.dlg-list{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.dlg-note{margin:0;color:var(--t3)}
+
+/* attendance(D-14・プロトタイプに画面がないためasideカードの部品で構成) */
+.lt-attendance{display:flex}
+
+/* 05のモバイル(プロトタイプ05: チャット高さ・タグ非表示) */
+@media (max-width:720px){
+  .lt-chat{height:calc(100dvh - 180px)}
+  .lt-hero-tags{display:none !important}
+  .lt-msg{max-width:92%}
 }

@@ -297,11 +297,11 @@
     <div class="toast-pos" id="toast" role="status" aria-live="polite"></div>
 
     <dialog class="dlg" id="appDialog"></dialog>
+    <!-- 通報・ブロックの統合dialog(UI v2 Phase 4・D-09)。中身はsafety.jsが構成する -->
+    <dialog class="dlg" id="safetyDialog" aria-label="通報・ブロック"></dialog>
 
-    <!-- 暫定: 通報・ブロックの旧モーダル(Phase 4/5で<dialog class="dlg">へ統合) -->
-    <div class="modal-backdrop" id="reportModal" role="presentation" hidden></div>
+    <!-- 暫定: ブロック解除の旧モーダル(設定・Phase 5で<dialog class="dlg">へ統合) -->
     <div class="modal-backdrop" id="unblockModal" role="presentation" hidden></div>
-    <div class="modal-backdrop" id="blockModal" role="presentation" hidden></div>
 
     <nav class="tabbar" aria-label="メインメニュー">
       <a class="tab" data-nav="deposit" href="#/"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8.5v7M8.5 12h7"></path></svg><span>預ける</span></a>
