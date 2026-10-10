@@ -6,7 +6,7 @@
 
 ## 現在
 
-- フェーズ: **M4完了・G4承認済み(2026-10-06)→ UI v2移行Phase 0完了(2026-10-10)→ UI v2 Phase 1完了(2026-10-10)→ UI v2 Phase 1B完了(2026-10-10)→ UI v2 Phase 2完了(2026-10-10)→ UI v2 Phase 3完了(2026-10-10)→ UI v2 Phase 4完了(2026-10-10)→ UI v2 Phase 5完了(2026-10-10)**。次は**UI v2 Phase 6(React載せ替え・XL)**。P3〜P7を経て11 Phase 0(内部α)へ(12 v0.4第3.1節・UI v2欄参照。2026-10-10にReact載せ替えP6を挿入し統合試験はP7へ繰り下げ)。ws-9(FCM実機送信)は資材待ちで独立挿入可
+- フェーズ: **M4完了・G4承認済み(2026-10-06)→ UI v2移行Phase 0完了(2026-10-10)→ UI v2 Phase 1完了(2026-10-10)→ UI v2 Phase 1B完了(2026-10-10)→ UI v2 Phase 2完了(2026-10-10)→ UI v2 Phase 3完了(2026-10-10)→ UI v2 Phase 4完了(2026-10-10)→ UI v2 Phase 5完了(2026-10-10)→ UI v2 Phase 6完了(2026-10-10)**。次は**UI v2 Phase 7(統合試験・実機E2E・配信検証・ゲート承認)**。P7を経て11 Phase 0(内部α)へ(12 v0.4第3.1節・UI v2欄参照)。ws-9(FCM実機送信)は資材待ちで独立挿入可
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認
@@ -28,7 +28,7 @@
 | 3 | 03待機中+04候補(回答2択・undo・理由) | P2 | 完了(2026-10-10・[phase3-report.md](ui-v2/phase3-report.md)) |
 | 4 | 05成立+チャット+通報/ブロック+参加取り消し+カレンダー | P3 | 完了(2026-10-10・[phase4-report.md](ui-v2/phase4-report.md)) |
 | 5 | 横断機能(同意・設定・お知らせ・終了状態)+a11y総点検 | P1〜P4 | 完了(2026-10-10・[phase5-report.md](ui-v2/phase5-report.md)) |
-| 6 | 実装のReact載せ替え(素のDOM実装→React・見た目不変) | P5 | 未着手(2026-10-10ユーザー指示で追加) |
+| 6 | 実装のReact載せ替え(素のDOM実装→React・見た目不変) | P5 | 完了(2026-10-10・[phase6-report.md](ui-v2/phase6-report.md)) |
 | 7 | 統合試験・実機E2E・配信検証・基準切替完了 | P1〜P6 | 未着手 |
 
 P0実施記録(2026-10-10): ユーザー指示「プロトタイプが正」(2回の確認。UI削除の推奨は取り下げ)により14項目すべて確定。docs改版(00 v1.2・01 v0.7・02 v0.4・03 v0.5・05 v0.6・07・12 v0.4)を実施。P1BのAPI拡張5件は05 v0.6に規定済み。経過はphase0-report.md。
@@ -36,6 +36,8 @@ P0実施記録(2026-10-10): ユーザー指示「プロトタイプが正」(2�
 P1実施記録(2026-10-10): デザイン基盤と新シェルを切替え完了。styles.css全面書換(「夜と翡翠」トークン+共通部品)・フォントを@fontsource 3書体のself-hostへ(D-12・Phosphor廃止・SVGアイコンをsrc/ui/icons.jsへ集約)・index.htmlを新ヘッダー(topnav4項目+バッジ)・モバイルtabbar・右上toast・`<dialog>`土台で再構築・`#/confirm`・`#/standby`を追加・chrome.js再構成(バッジ・aria-current・toast・dialog)・テーマ切替とpaperテクスチャを削除。旧画面は暫定表示として機能等価で維持(一覧と独自に構成した値はphase1-report.md)。vitest 244件緑・build緑・全ルートを実機確認済み。
 
 P1B実施記録(2026-10-10): API拡張5件(D-01・D-04・D-06・D-07・D-08)をbackend(PostgreSQL+D1/Workers両実装)へ実装し契約試験まで通した。undo・leaveの2経路新設・expiry-options 3択化・structured_data.participants_includes_owner・responses.reason_codes・latches.left_user_ids/messages.sender_id NULL可(alembic 0009+D1 0005)。`make test`1579・`make test-ci`2160・契約(参照132/D1 130・P1B追加13ケース)・miniflare probe緑。backend lint残留21件とprobe試験ドリフト・cutover変換の追随も回収。詳細はphase1b-report.md。
+
+P6実施記録(2026-10-10): frontendを実装ごとReact 19へ載せ替え(見た目・文言・API・a11y・デザイン値不変・styles.css無変更)。react/react-dom/@vitejs/plugin-react/@testing-library/react(dom)のみ追加。main.jsx=マウントのみ・App.jsx=parseHash契約の消費とシェル・chromeはChromeProvider+useChrome(toast・appDialog・nav・バッジ)・全画面をコンポーネント化(01↔02はフォームstateをAppで共有・03/一覧/04/05/チャット/safety/attendance/設定/同意/お知らせ)。純関数モジュール(format・state・parseFlow・highlight・expiry・view・texts・save)とAPIクライアント(session・client・appState)・respond・calendar・routerは無変更のままimport。DOM試験をRTLへ書き換え(純関数系の試験は無傷)。vitest 365緑・build緑・実API(compose local+実ブラウザ)で同意→01→02(行編集)→保存→03着地→一覧→04→回答→05チャット送信→PATCHまで往復。検証で発見したpopover閉じの不具合を修正+回帰試験。詳細はphase6-report.md。
 
 P4実施記録(2026-10-10): 05成立・チャットを全面再構成(成立ヒーローsnap/burst+条件タグ・aside 3カード=成立した内容/メンバー/安全のために・チャット=ヘッダー+role=log+開始行+相手/自分のbubble+単行input+円形送信)・通報とブロックを統合dialogへ(D-09・理由4択はdialog内ステップ・report.js/blockFlow.jsをsafety.jsへ統合)・参加取り消し(D-08・POST leave+取り消し後姿+サーバのシステム行表示)・カレンダーに追加(D-10・クライアント完結の.ics)・attendanceをv2様式へ(D-14)。同期ロジック(30秒poll・cursor差分)は現行踏襲。実API(compose local)で成立〜チャット往復・通報/ブロック・leave(残存メンバー継続・ALREADY_LEFT・CHAT_READONLY)まで確認。vitest 337緑・build緑。持ち帰りはmatched_at/left_user_idsの開示ほか(phase4-report.md)。
 
