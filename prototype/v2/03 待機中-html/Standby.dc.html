@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LATCH — 待機中</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+<style>
+/* ===== 色の定義：案A改「夜と翡翠」（全画面共通） ===== */
+:root{
+  color-scheme:dark;
+  /* 面：奥 → 手前ほど明るい */
+  --bg:#0B0C12;--s1:#12141D;--s2:#191C29;--s3:#20243A;
+  /* 枠線：淡＝区切り（装飾）／強＝入力欄・ボタン（3:1以上） */
+  --line:#23273A;--line-strong:#646A8A;
+  /* 文字：本文／補足／注記 */
+  --t1:#EDEBF3;--t2:#A9ACBF;--t3:#8A8DA0;
+  /* アクセント＝主要ボタン・候補・成立だけに使う */
+  --acc:#5FD4AE;--acc-hover:#7FDEBF;--on-acc:#06180F;
+  --acc-soft:rgba(95,212,174,.14);--acc-line:rgba(95,212,174,.4);--acc-glow:rgba(95,212,174,.45);--acc-haze:rgba(95,212,174,.1);
+  /* 待機＝月明かりの青 */
+  --stb:#9DB2DB;--stb-soft:rgba(157,178,219,.12);--stb-line:rgba(157,178,219,.3);
+  /* 危険＝取り下げ・取り消し・期限間近 */
+  --dng:#F2837A;--dng-soft:rgba(242,131,122,.12);--dng-line:rgba(242,131,122,.5);
+  /* 重なり順 */
+  --z-header:30;--z-tabbar:30;--z-toast:40;--z-skip:60;
+}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg)}
+a{color:var(--t1)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+main:focus{outline:none}
+.vh{position:absolute !important;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;z-index:var(--z-skip);left:16px;top:-100px;padding:12px 18px;border-radius:12px;background:var(--acc);color:var(--on-acc);font-weight:700;text-decoration:none}
+.skip:focus{top:12px}
+.ground{background-image:radial-gradient(circle at 1px 1px, rgba(237,235,243,0.05) 1px, transparent 0);background-size:28px 28px}
+.hdr{position:sticky;top:0;z-index:var(--z-header);background:rgba(11,12,18,.86);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.navlink{transition:background-color .2s ease,color .2s ease}
+.navlink:hover{background:var(--s2);color:var(--t1)}
+.ghost{transition:border-color .2s ease,color .2s ease,background-color .2s ease}
+.ghost:hover{border-color:#8A90AE !important;color:var(--t1) !important;background:var(--s2) !important}
+.danger:hover{border-color:var(--dng) !important;background:var(--dng-soft) !important;color:var(--dng) !important}
+.cta{transition:background-color .2s ease,box-shadow .2s ease}
+.cta:not(:disabled):hover{background:var(--acc-hover) !important}
+.cta:disabled{cursor:not-allowed}
+.lift{transition:border-color .2s ease,background-color .2s ease}
+.lift:hover{border-color:var(--line-strong) !important;background:#151826 !important}
+.tabbar{display:none}
+.tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:56px;border-radius:14px;color:var(--t2);text-decoration:none;font-size:12px;font-weight:500}
+.tab[aria-current="page"]{color:var(--t1);background:var(--s2);font-weight:700}
+.tab .tb{position:absolute;top:5px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;line-height:18px;text-align:center}
+.dlg{width:min(440px,calc(100% - 32px));box-sizing:border-box;padding:28px;border-radius:24px;border:1px solid var(--line-strong);background:var(--s1);color:var(--t1);font-family:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif}
+.dlg::backdrop{background:rgba(5,6,10,.72)}
+@media (max-width:720px){
+  .hdr{padding-top:12px !important;padding-bottom:12px !important}
+  .topnav{display:none !important}
+  .tabbar{display:grid;position:fixed;z-index:var(--z-tabbar);left:0;right:0;bottom:0;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:rgba(11,12,18,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+  .page-main{padding-bottom:calc(112px + env(safe-area-inset-bottom)) !important}
+}
+/* ===== この画面だけ ===== */
+.toast-pos{position:fixed;z-index:var(--z-toast);top:96px;right:clamp(16px,4vw,48px);width:min(400px,calc(100% - 32px))}
+@media (max-width:720px){.toast-pos{top:80px;right:16px}}
+@keyframes beacon{0%{transform:scale(1);opacity:.9}70%{transform:scale(2.8);opacity:0}100%{opacity:0}}
+.beacon{position:relative}
+.beacon::after{content:"";position:absolute;inset:0;border-radius:999px;background:inherit;animation:beacon 2.4s ease-out infinite}
+@keyframes ripple{0%{transform:scale(.55);opacity:0}15%{opacity:.75}100%{transform:scale(1.4);opacity:0}}
+.ripple{animation:ripple 4.2s cubic-bezier(.2,.6,.3,1) infinite}
+.ripple.d2{animation-delay:1.4s}.ripple.d3{animation-delay:2.8s}
+@keyframes breatheL{0%,100%{transform:translateX(-16px)}50%{transform:translateX(-9px)}}
+@keyframes breatheR{0%,100%{transform:translateX(16px)}50%{transform:translateX(9px)}}
+.arcL{animation:breatheL 4.2s ease-in-out infinite}
+.arcR{animation:breatheR 4.2s ease-in-out infinite}
+@keyframes toastIn{from{opacity:0;transform:translateY(-14px) scale(.98)}to{opacity:1;transform:none}}
+.toast{animation:toastIn .5s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none !important;transition:none !important}}
+</style>
+</helmet>
+<div class="ground" style="min-height: 100vh; position: relative; overflow-x: clip; background-color: var(--bg); color: var(--t1); font-family: 'Zen Kaku Gothic New', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+<a class="skip" href="#main">本文へスキップ</a>
+
+<header class="hdr" style="display: flex; align-items: center; justify-content: space-between; gap: 12px 32px; padding: 18px clamp(16px, 4vw, 48px); border-bottom: 1px solid var(--line)">
+<a href="../01 預ける（ホーム）-html/Main.dc.html" aria-label="LATCH ホーム" style="display: flex; align-items: center; gap: 12px; min-height: 44px; text-decoration: none; color: var(--t1)">
+<svg width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35" style="stroke: var(--t1)" stroke-width="3.4" stroke-linecap="round"></path><path d="M22 5 A15 15 0 0 1 22 35" style="stroke: var(--acc)" stroke-width="3.4" stroke-linecap="round"></path></svg>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 600; font-size: 17px; letter-spacing: 0.34em">LATCH</span>
+</a>
+<nav class="topnav" aria-label="メインメニュー" style="display: flex; align-items: center; gap: 4px">
+<a class="navlink" href="../01 預ける（ホーム）-html/Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">預ける</a>
+<a class="navlink" href="../03 待機中-html/Standby.dc.html" aria-current="page" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: var(--s2); color: var(--t1); text-decoration: none; font-size: 14px; font-weight: 700">待機中<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 2px 7px; border-radius: 999px; background: var(--stb-soft); color: var(--stb)">{{count}}<span class="vh">件</span></span></a>
+<a class="navlink" href="../04 候補が届く-html/Proposal.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">候補<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--acc); color: var(--on-acc)">1<span class="vh">件</span></span></a>
+<a class="navlink" href="../05 成立・チャット-html/Latched.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">成立</a>
+</nav>
+<div style="display: flex; align-items: center; gap: 10px">
+<button type="button" class="ghost" aria-label="通知（新着1件）" style="position: relative; width: 44px; height: 44px; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--t2); display: grid; place-items: center; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+<span style="position: absolute; top: 10px; right: 11px; width: 8px; height: 8px; border-radius: 999px; background: var(--acc); box-shadow: 0 0 0 2px var(--bg)"></span>
+</button>
+<button type="button" aria-label="アカウント" style="width: 44px; height: 44px; padding: 0; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--s3); color: var(--t1); font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; cursor: pointer">K</button>
+</div>
+</header>
+
+<div role="status" aria-live="polite" class="toast-pos">
+<sc-if value="{{toast}}" hint-placeholder-val="{{true}}">
+<div class="toast" style="display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 4px; padding: 8px; border-radius: 18px; background: rgba(24, 27, 39, 0.96); border: 1px solid var(--acc-line); box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), 0 0 48px -12px var(--acc-glow)">
+<a href="../04 候補が届く-html/Proposal.dc.html" style="display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 6px 8px; border-radius: 12px; color: var(--t1); text-decoration: none">
+<span aria-hidden="true" style="width: 44px; height: 44px; box-sizing: border-box; border-radius: 12px; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--line)">
+<svg width="24" height="24" viewBox="0 0 40 40" fill="none"><path d="M19 5 A15 15 0 0 0 19 35" style="stroke: var(--t1)" stroke-width="3.6" stroke-linecap="round"></path><path d="M22 5 A15 15 0 0 1 22 35" style="stroke: var(--acc)" stroke-width="3.6" stroke-linecap="round"></path></svg>
+</span>
+<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+<span style="font-size: 12.5px; color: var(--t2)">LATCH · いま</span>
+<span style="font-size: 15px; font-weight: 700">LATCH候補があります</span>
+</span>
+<span style="display: inline-flex; align-items: center; gap: 4px; color: var(--acc); font-size: 14px; font-weight: 700">見る
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+</span>
+</a>
+<button type="button" class="ghost" aria-label="通知を閉じる" onClick="{{closeToast}}" style="width: 44px; height: 44px; padding: 0; border-radius: 12px; border: 1px solid transparent; background: transparent; color: var(--t2); display: grid; place-items: center; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+</button>
+</div>
+</sc-if>
+</div>
+
+<main id="main" tabindex="-1" class="page-main" style="position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: clamp(32px, 6vw, 88px) clamp(16px, 4vw, 48px) 120px; display: flex; flex-direction: column; gap: clamp(56px, 8vw, 88px)">
+
+<section aria-labelledby="h-standby" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr)); gap: 48px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 26px; min-width: 0">
+<p style="margin: 0; align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; padding: 7px 14px; border-radius: 999px; background: var(--stb-soft); border: 1px solid var(--stb-line); font-size: 14px; font-weight: 700; color: var(--stb)">
+<span class="beacon" aria-hidden="true" style="width: 7px; height: 7px; border-radius: 999px; background: var(--stb)"></span>
+{{badge}}
+</p>
+<h1 id="h-standby" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-weight: 700; font-size: clamp(34px, 4.6vw, 64px); line-height: 1.25; letter-spacing: 0.02em">{{h1a}}<br>{{h1b}}</h1>
+<p style="margin: 0; max-width: 520px; font-size: 16.5px; line-height: 1.9; color: var(--t2); text-wrap: pretty">{{lead}}</p>
+
+<article aria-label="預けた条件（飲み）" style="display: flex; flex-direction: column; gap: 18px; padding: clamp(20px, 3vw, 26px) clamp(20px, 3vw, 28px); border-radius: 24px; background: var(--s1); border: 1px solid var(--line)">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--t2)">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12l-1.5 7a4.5 4.5 0 0 1-9 0z"></path><path d="M12 15.5V20"></path><path d="M8.5 20h7"></path></svg>
+飲み · 19:02 に預けた
+</span>
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border-radius: 999px; background: {{mainPillBg}}; color: {{mainPillFg}}; font-size: 13px; font-weight: 700"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 999px; background: currentColor"></span>{{mainPill}}</span>
+</div>
+<p style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: clamp(19px, 2vw, 21px); line-height: 1.7; color: {{mainTextColor}}">「今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい」</p>
+<sc-if value="{{mainActive}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<span style="padding: 6px 11px; border-radius: 8px; background: var(--s2); color: var(--t1); font-size: 13px">20:00〜</span>
+<span style="padding: 6px 11px; border-radius: 8px; background: var(--s2); color: var(--t1); font-size: 13px">天文館周辺</span>
+<span style="padding: 6px 11px; border-radius: 8px; background: var(--s2); color: var(--t1); font-size: 13px">2〜4人（あなたを含む）</span>
+<span style="padding: 6px 11px; border-radius: 8px; background: var(--s2); color: var(--t1); font-size: 13px">〜¥5,000</span>
+<span style="padding: 6px 11px; border-radius: 8px; background: var(--s2); color: var(--t1); font-size: 13px">軽く飲む</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; padding-top: 18px; border-top: 1px solid var(--line)">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span id="remain-label" style="font-size: 13.5px; color: var(--t3)">23:59 の取り下げまで</span>
+<span role="timer" aria-labelledby="remain-label" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 30px; font-weight: 500; letter-spacing: 0.04em; color: var(--t1)">{{remain}}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<a href="../02 読み解き確認-html/Confirm.dc.html" class="ghost" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--t2); font-size: 14px; text-decoration: none">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>
+条件を直す
+</a>
+<button type="button" class="ghost danger" aria-haspopup="dialog" onClick="{{askMain}}" style="min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--dng-line); background: transparent; color: var(--dng); font-family: inherit; font-size: 14px; cursor: pointer">取り下げる</button>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{mainGone}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 18px; border-top: 1px solid var(--line)">
+<span style="font-size: 14px; color: var(--t2)">この条件は取り下げました。もう誰とも照らし合わされません。</span>
+<a href="../01 預ける（ホーム）-html/Main.dc.html" class="ghost" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; box-sizing: border-box; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--t1); font-size: 14px; text-decoration: none">もう一度預ける</a>
+</div>
+</sc-if>
+</article>
+</div>
+
+<div aria-hidden="true" style="position: relative; width: min(100%, 440px); aspect-ratio: 1 / 1; margin: 0 auto">
+<div style="position: absolute; inset: -12%; border-radius: 50%; background: radial-gradient(closest-side, rgba(157, 178, 219, 0.14), rgba(11, 12, 18, 0) 70%)"></div>
+<div style="position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--line)"></div>
+<div style="position: absolute; inset: 13%; border-radius: 50%; border: 1px solid #262A3E"></div>
+<div style="position: absolute; inset: 26%; border-radius: 50%; border: 1px solid #2C3249; background: radial-gradient(closest-side, rgba(20, 23, 36, 0.9), rgba(14, 16, 24, 0.9))"></div>
+<div class="ripple" style="position: absolute; inset: 26%; border-radius: 50%; border: 1px solid rgba(157, 178, 219, 0.5)"></div>
+<div class="ripple d2" style="position: absolute; inset: 26%; border-radius: 50%; border: 1px solid rgba(157, 178, 219, 0.5)"></div>
+<div class="ripple d3" style="position: absolute; inset: 26%; border-radius: 50%; border: 1px solid rgba(157, 178, 219, 0.5)"></div>
+<svg viewBox="0 0 200 200" fill="none" style="position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 0 14px rgba(157, 178, 219, 0.45))">
+<circle cx="100" cy="100" r="74" stroke="#3A4260" stroke-width="1" stroke-dasharray="1.5 7"></circle>
+<g class="arcL"><path d="M100 70 A30 30 0 0 0 100 130" style="stroke: var(--stb)" stroke-width="7" stroke-linecap="round"></path></g>
+<g class="arcR"><path d="M100 70 A30 30 0 0 1 100 130" style="stroke: var(--t1)" stroke-width="7" stroke-linecap="round"></path></g>
+</svg>
+<span style="position: absolute; top: 9%; left: 2%; padding: 8px 14px; border-radius: 999px; background: rgba(18, 20, 29, 0.9); border: 1px solid var(--line); color: var(--t2); font-family: 'IBM Plex Mono', monospace; font-size: 13px">20:00〜</span>
+<span style="position: absolute; top: 15%; right: 0; padding: 8px 14px; border-radius: 999px; background: rgba(18, 20, 29, 0.9); border: 1px solid var(--line); color: var(--t2); font-size: 13px">天文館周辺</span>
+<span style="position: absolute; bottom: 14%; left: 0; padding: 8px 14px; border-radius: 999px; background: rgba(18, 20, 29, 0.9); border: 1px solid var(--line); color: var(--t2); font-size: 13px">2〜4人</span>
+<span style="position: absolute; bottom: 7%; right: 6%; padding: 8px 14px; border-radius: 999px; background: rgba(18, 20, 29, 0.9); border: 1px solid var(--line); color: var(--t2); font-family: 'IBM Plex Mono', monospace; font-size: 13px">〜¥5,000</span>
+</div>
+</section>
+
+<section aria-labelledby="h-doing" style="display: flex; flex-direction: column; gap: 24px">
+<h2 id="h-doing" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-weight: 700; font-size: clamp(24px, 3vw, 28px)">いま、LATCHがしていること</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px">
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 26px; border-radius: 22px; background: #10121A; border: 1px solid var(--line)">
+<span aria-hidden="true" style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; color: var(--stb)">01</span>
+<h3 style="margin: 0; font-size: 18px; font-weight: 700">照らし合わせ続ける</h3>
+<p style="margin: 0; font-size: 15px; line-height: 1.85; color: var(--t2)">あなたの条件を、ほかの待機中の意思と照らし合わせ続けています。そのあいだ、あなたの条件は誰にも表示されません。</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 26px; border-radius: 22px; background: #10121A; border: 1px solid var(--line)">
+<span aria-hidden="true" style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; color: var(--stb)">02</span>
+<h3 style="margin: 0; font-size: 18px; font-weight: 700">成立し得るかだけを見る</h3>
+<p style="margin: 0; font-size: 15px; line-height: 1.85; color: var(--t2)">見るのは人柄や相性ではなく、その時・その条件で二つの意思が成立し得るか。片方だけが大満足する提案は出しません。</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 26px; border-radius: 22px; background: #10121A; border: 1px solid var(--line)">
+<span aria-hidden="true" style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; color: var(--stb)">03</span>
+<h3 style="margin: 0; font-size: 18px; font-weight: 700">揃ったら、ひとことだけ</h3>
+<p style="margin: 0; font-size: 15px; line-height: 1.85; color: var(--t2)">通知の本文はこの一文だけ。ロック画面に意思が漏れることはありません。</p>
+<div style="display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 16px; background: var(--s2); border: 1px solid var(--line)">
+<span aria-hidden="true" style="width: 34px; height: 34px; box-sizing: border-box; border-radius: 9px; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--line)">
+<svg width="18" height="18" viewBox="0 0 40 40" fill="none"><path d="M19 5 A15 15 0 0 0 19 35" style="stroke: var(--t1)" stroke-width="4" stroke-linecap="round"></path><path d="M22 5 A15 15 0 0 1 22 35" style="stroke: var(--acc)" stroke-width="4" stroke-linecap="round"></path></svg>
+</span>
+<span style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+<span style="font-size: 13px; font-weight: 700; color: var(--t1)">LATCH</span>
+<span style="font-size: 14px; color: var(--t2)">LATCH候補があります</span>
+</span>
+<span style="font-size: 13px; color: var(--t3)">今</span>
+</div>
+</div>
+
+</div>
+</section>
+
+<section aria-labelledby="h-others" style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px">
+<h2 id="h-others" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-weight: 700; font-size: clamp(24px, 3vw, 28px)">ほかに待機中の意思</h2>
+<a href="../01 預ける（ホーム）-html/Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--t1); font-size: 14px; font-weight: 700; text-decoration: none">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+新しく預ける
+</a>
+</div>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-radius: 22px; background: #10121A; border: 1px solid var(--line); overflow: hidden">
+<sc-for list="{{others}}" as="o" hint-placeholder-count="2">
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; padding: 20px clamp(16px, 3vw, 24px); border-top: {{o.border}}">
+<span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--s2); color: var(--stb)">
+<sc-if value="{{o.isJob}}" hint-placeholder-val="{{true}}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7" width="17" height="12" rx="2"></rect><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"></path><path d="M3.5 12.5h17"></path></svg></sc-if>
+<sc-if value="{{o.isCar}}" hint-placeholder-val="{{false}}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l2-5h10l2 5"></path><rect x="3" y="12" width="18" height="5" rx="1.5"></rect><path d="M6.5 17v2M17.5 17v2"></path></svg></sc-if>
+</span>
+<div style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<span style="font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: 18px">{{o.text}}</span>
+<span style="font-size: 13.5px; color: var(--t3)">{{o.meta}}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border-radius: 999px; background: var(--stb-soft); color: var(--stb); font-size: 13px; font-weight: 700"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 999px; background: var(--stb)"></span>待機中</span>
+<a href="../02 読み解き確認-html/Confirm.dc.html" class="ghost" aria-label="{{o.editLabel}}" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; box-sizing: border-box; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--t2); font-size: 14px; text-decoration: none">直す</a>
+<button type="button" class="ghost danger" aria-haspopup="dialog" aria-label="{{o.dropLabel}}" onClick="{{o.ask}}" style="min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--dng-line); background: transparent; color: var(--dng); font-family: inherit; font-size: 14px; cursor: pointer">取り下げる</button>
+</div>
+</li>
+</sc-for>
+<sc-if value="{{noOthers}}" hint-placeholder-val="{{false}}">
+<li style="padding: 28px 24px; font-size: 14.5px; color: var(--t2)">ほかに待機中の意思はありません。</li>
+</sc-if>
+</ul>
+</section>
+</main>
+
+<dialog id="drop-dlg" class="dlg" aria-labelledby="drop-title" aria-describedby="drop-desc">
+<div style="display: flex; flex-direction: column; gap: 16px">
+<h2 id="drop-title" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: 22px; font-weight: 700">この条件を取り下げますか？</h2>
+<p style="margin: 0; padding: 14px 16px; border-radius: 14px; background: var(--s2); font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: 16px; line-height: 1.7">{{targetText}}</p>
+<p id="drop-desc" style="margin: 0; font-size: 14px; line-height: 1.8; color: var(--t2)">取り下げると、照らし合わせを止めます。届いている候補も消えます。相手に通知されることはありません。</p>
+<div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px">
+<button type="button" class="ghost" onClick="{{closeDlg}}" style="min-height: 48px; padding: 0 20px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t1); font-family: inherit; font-size: 15px; cursor: pointer">やめておく</button>
+<button type="button" onClick="{{confirmDrop}}" style="min-height: 48px; padding: 0 20px; border-radius: 999px; border: none; background: var(--dng); color: #1A0A08; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">取り下げる</button>
+</div>
+</div>
+</dialog>
+
+<nav class="tabbar" aria-label="メインメニュー">
+<a class="tab" href="../01 預ける（ホーム）-html/Main.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8.5v7M8.5 12h7"></path></svg><span>預ける</span></a>
+<a class="tab" href="../03 待機中-html/Standby.dc.html" aria-current="page"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"></path></svg><span>待機中</span><span class="tb" style="background: var(--stb-soft); color: var(--stb)">{{count}}<span class="vh">件</span></span></a>
+<a class="tab" href="../04 候補が届く-html/Proposal.dc.html"><svg width="22" height="22" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35"></path><path d="M22 5 A15 15 0 0 1 22 35"></path></svg><span>候補</span><span class="tb" style="background: var(--acc); color: var(--on-acc)">1<span class="vh">件</span></span></a>
+<a class="tab" href="../05 成立・チャット-html/Latched.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14A1.5 1.5 0 0 1 20.5 7v8.5A1.5 1.5 0 0 1 19 17h-7l-4 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z"></path></svg><span>成立</span></a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1480}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    var self = this;
+    this._t0 = Date.now();
+    this._iv = setInterval(function () { self.forceUpdate(); }, 1000);
+    this._toast = setTimeout(function () { self.setState({ toast: true }); }, 2600);
+  }
+
+  componentWillUnmount() {
+    clearInterval(this._iv);
+    clearTimeout(this._toast);
+  }
+
+  openDlg(target) {
+    this.setState({ target: target });
+    var el = document.getElementById('drop-dlg');
+    if (el && !el.open) { el.showModal(); }
+  }
+
+  closeDlg() {
+    var el = document.getElementById('drop-dlg');
+    if (el && el.open) { el.close(); }
+  }
+
+  renderVals() {
+    var self = this;
+    var st = this.state || {};
+    var gone = st.gone || {};
+    var deposited = /deposited=1/.test(window.location.search);
+    var elapsed = this._t0 ? Math.floor((Date.now() - this._t0) / 1000) : 0;
+    var left = Math.max(0, 17140 - elapsed);
+    var hh = Math.floor(left / 3600);
+    var mm = Math.floor((left % 3600) / 60);
+    var ss = left % 60;
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    var MAIN = { id: 'drink', text: '「今日20時以降、天文館で2〜4人、予算5,000円までなら軽く飲みたい」' };
+    var OTHERS = [
+      { id: 'job', text: '「年収1,000万円以上なら転職を考える」', meta: '転職 · 38日前に預けた · 期限なし', isJob: true },
+      { id: 'car', text: '「この車が190万円以上なら売ってもいい」', meta: '売買 · 6日前に預けた · 11/30 まで', isCar: true }
+    ];
+    var live = OTHERS.filter(function (o) { return !gone[o.id]; });
+    var mainGone = !!gone.drink;
+    return {
+      count: live.length + (mainGone ? 0 : 1),
+      badge: '待機中 · ' + (live.length + (mainGone ? 0 : 1)) + '件',
+      toast: !!st.toast,
+      closeToast: function () { self.setState({ toast: false }); },
+      h1a: deposited ? '預けました。' : '条件が揃うのを、',
+      h1b: deposited ? 'あとは、待つだけ。' : '待っています。',
+      lead: deposited
+        ? 'LATCHがこの条件を預かっています。別の誰かの条件と成立し得ると判断された瞬間にだけ、お知らせします。'
+        : 'あなたが預けた条件です。別の誰かの条件と成立し得ると判断された瞬間にだけ、お知らせします。',
+      remain: hh + ':' + pad(mm) + ':' + pad(ss),
+      mainActive: !mainGone,
+      mainGone: mainGone,
+      mainPill: mainGone ? '取り下げ済み' : '待機中',
+      mainPillBg: mainGone ? 'var(--s2)' : 'var(--stb-soft)',
+      mainPillFg: mainGone ? 'var(--t3)' : 'var(--stb)',
+      mainTextColor: mainGone ? 'var(--t3)' : 'var(--t1)',
+      askMain: function () { self.openDlg(MAIN); },
+      targetText: (st.target || MAIN).text,
+      closeDlg: function () { self.closeDlg(); },
+      confirmDrop: function () {
+        var t = (self.state || {}).target || MAIN;
+        var next = Object.assign({}, gone);
+        next[t.id] = true;
+        self.setState({ gone: next });
+        self.closeDlg();
+      },
+      noOthers: live.length === 0,
+      others: live.map(function (o, i) {
+        return {
+          text: o.text,
+          meta: o.meta,
+          isJob: !!o.isJob,
+          isCar: !!o.isCar,
+          border: i === 0 ? 'none' : '1px solid var(--line)',
+          editLabel: o.text + 'を直す',
+          dropLabel: o.text + 'を取り下げる',
+          ask: function () { self.openDlg(o); }
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LATCH — 成立・チャット</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+<style>
+/* ===== 色の定義：案A改「夜と翡翠」（全画面共通） ===== */
+:root{
+  color-scheme:dark;
+  /* 面：奥 → 手前ほど明るい */
+  --bg:#0B0C12;--s1:#12141D;--s2:#191C29;--s3:#20243A;
+  /* 枠線：淡＝区切り（装飾）／強＝入力欄・ボタン（3:1以上） */
+  --line:#23273A;--line-strong:#646A8A;
+  /* 文字：本文／補足／注記 */
+  --t1:#EDEBF3;--t2:#A9ACBF;--t3:#8A8DA0;
+  /* アクセント＝主要ボタン・候補・成立だけに使う */
+  --acc:#5FD4AE;--acc-hover:#7FDEBF;--on-acc:#06180F;
+  --acc-soft:rgba(95,212,174,.14);--acc-line:rgba(95,212,174,.4);--acc-glow:rgba(95,212,174,.45);--acc-haze:rgba(95,212,174,.1);
+  /* 待機＝月明かりの青 */
+  --stb:#9DB2DB;--stb-soft:rgba(157,178,219,.12);--stb-line:rgba(157,178,219,.3);
+  /* 危険＝取り下げ・取り消し・期限間近 */
+  --dng:#F2837A;--dng-soft:rgba(242,131,122,.12);--dng-line:rgba(242,131,122,.5);
+  /* 重なり順 */
+  --z-header:30;--z-tabbar:30;--z-toast:40;--z-skip:60;
+}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg)}
+a{color:var(--t1)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+main:focus{outline:none}
+.vh{position:absolute !important;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;z-index:var(--z-skip);left:16px;top:-100px;padding:12px 18px;border-radius:12px;background:var(--acc);color:var(--on-acc);font-weight:700;text-decoration:none}
+.skip:focus{top:12px}
+.ground{background-image:radial-gradient(circle at 1px 1px, rgba(237,235,243,0.05) 1px, transparent 0);background-size:28px 28px}
+.hdr{position:sticky;top:0;z-index:var(--z-header);background:rgba(11,12,18,.86);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.navlink{transition:background-color .2s ease,color .2s ease}
+.navlink:hover{background:var(--s2);color:var(--t1)}
+.ghost{transition:border-color .2s ease,color .2s ease,background-color .2s ease}
+.ghost:hover{border-color:#8A90AE !important;color:var(--t1) !important;background:var(--s2) !important}
+.danger:hover{border-color:var(--dng) !important;background:var(--dng-soft) !important;color:var(--dng) !important}
+.cta{transition:background-color .2s ease,box-shadow .2s ease}
+.cta:not(:disabled):hover{background:var(--acc-hover) !important}
+.cta:disabled{cursor:not-allowed}
+.lift{transition:border-color .2s ease,background-color .2s ease}
+.lift:hover{border-color:var(--line-strong) !important;background:#151826 !important}
+.tabbar{display:none}
+.tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:56px;border-radius:14px;color:var(--t2);text-decoration:none;font-size:12px;font-weight:500}
+.tab[aria-current="page"]{color:var(--t1);background:var(--s2);font-weight:700}
+.tab .tb{position:absolute;top:5px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;line-height:18px;text-align:center}
+.dlg{width:min(440px,calc(100% - 32px));box-sizing:border-box;padding:28px;border-radius:24px;border:1px solid var(--line-strong);background:var(--s1);color:var(--t1);font-family:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif}
+.dlg::backdrop{background:rgba(5,6,10,.72)}
+@media (max-width:720px){
+  .hdr{padding-top:12px !important;padding-bottom:12px !important}
+  .topnav{display:none !important}
+  .tabbar{display:grid;position:fixed;z-index:var(--z-tabbar);left:0;right:0;bottom:0;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:rgba(11,12,18,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+  .page-main{padding-bottom:calc(112px + env(safe-area-inset-bottom)) !important}
+}
+/* ===== この画面だけ ===== */
+/* 並び順：スマホ＝チャット→詳細、PC＝詳細｜チャット */
+.lt-grid{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"chat" "aside";gap:24px;align-items:start}
+.lt-aside{grid-area:aside}.lt-chat{grid-area:chat}
+@media (min-width:960px){.lt-grid{grid-template-columns:minmax(300px,360px) minmax(0,1fr);grid-template-areas:"aside chat"}}
+.lt-chat{height:min(720px,calc(100vh - 140px));min-height:460px}
+@media (max-width:720px){.lt-chat{height:calc(100dvh - 180px)}.lt-hero-tags{display:none !important}}
+.field:focus{border-color:var(--acc) !important}
+.field::placeholder{color:var(--t3)}
+details > summary{list-style:none;cursor:pointer}
+details > summary::-webkit-details-marker{display:none}
+details[open] .chev{transform:rotate(180deg)}
+.chev{transition:transform .2s ease}
+@keyframes snapL{0%{transform:translateX(-12px)}65%{transform:translateX(1.5px)}100%{transform:none}}
+@keyframes snapR{0%{transform:translateX(12px)}65%{transform:translateX(-1.5px)}100%{transform:none}}
+.snapL{animation:snapL .9s cubic-bezier(.3,.9,.3,1.2) .3s both}
+.snapR{animation:snapR .9s cubic-bezier(.3,.9,.3,1.2) .3s both}
+@keyframes burst{0%{transform:scale(.7);opacity:.9}100%{transform:scale(2);opacity:0}}
+.burst{animation:burst 1.5s cubic-bezier(.2,.7,.3,1) .9s both}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.msg{animation:msgIn .3s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none !important;transition:none !important}}
+</style>
+</helmet>
+<div class="ground" style="min-height: 100vh; position: relative; overflow-x: clip; background-color: var(--bg); color: var(--t1); font-family: 'Zen Kaku Gothic New', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+<a class="skip" href="#main">本文へスキップ</a>
+<div aria-hidden="true" style="position: absolute; top: -300px; left: -200px; width: 1000px; height: 900px; background: radial-gradient(closest-side, var(--acc-haze), rgba(11, 12, 18, 0) 70%); pointer-events: none; z-index: 0"></div>
+
+<header class="hdr" style="display: flex; align-items: center; justify-content: space-between; gap: 12px 32px; padding: 18px clamp(16px, 4vw, 48px); border-bottom: 1px solid var(--line)">
+<a href="../01 預ける（ホーム）-html/Main.dc.html" aria-label="LATCH ホーム" style="display: flex; align-items: center; gap: 12px; min-height: 44px; text-decoration: none; color: var(--t1)">
+<svg width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35" style="stroke: var(--t1)" stroke-width="3.4" stroke-linecap="round"></path><path d="M22 5 A15 15 0 0 1 22 35" style="stroke: var(--acc)" stroke-width="3.4" stroke-linecap="round"></path></svg>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 600; font-size: 17px; letter-spacing: 0.34em">LATCH</span>
+</a>
+<nav class="topnav" aria-label="メインメニュー" style="display: flex; align-items: center; gap: 4px">
+<a class="navlink" href="../01 預ける（ホーム）-html/Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">預ける</a>
+<a class="navlink" href="../03 待機中-html/Standby.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">待機中<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 2px 7px; border-radius: 999px; background: var(--stb-soft); color: var(--stb)">2<span class="vh">件</span></span></a>
+<a class="navlink" href="../04 候補が届く-html/Proposal.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">候補</a>
+<a class="navlink" href="../05 成立・チャット-html/Latched.dc.html" aria-current="page" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: var(--s2); color: var(--t1); text-decoration: none; font-size: 14px; font-weight: 700">成立<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--acc); color: var(--on-acc)">1<span class="vh">件</span></span></a>
+</nav>
+<div style="display: flex; align-items: center; gap: 10px">
+<button type="button" class="ghost" aria-label="通知" style="position: relative; width: 44px; height: 44px; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--t2); display: grid; place-items: center; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+</button>
+<button type="button" aria-label="アカウント" style="width: 44px; height: 44px; padding: 0; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--s3); color: var(--t1); font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; cursor: pointer">K</button>
+</div>
+</header>
+
+<main id="main" tabindex="-1" class="page-main" style="position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; padding: clamp(20px, 5vw, 64px) clamp(16px, 4vw, 48px) 120px; display: flex; flex-direction: column; gap: clamp(20px, 3vw, 28px)">
+
+<section aria-labelledby="h-latched" style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px 40px; padding: clamp(20px, 3vw, 32px) clamp(20px, 3vw, 40px); border-radius: 28px; background: var(--s1); border: 1px solid var(--acc-line); box-shadow: 0 50px 140px -70px var(--acc-glow)">
+<div aria-hidden="true" style="position: relative; flex: none; width: clamp(72px, 12vw, 128px); aspect-ratio: 1 / 1; display: grid; place-items: center">
+<div class="burst" style="position: absolute; inset: 11%; border-radius: 50%; border: 2px solid var(--acc)"></div>
+<div style="position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(closest-side, rgba(95, 212, 174, 0.3), rgba(18, 20, 29, 0) 75%)"></div>
+<svg viewBox="0 0 100 100" fill="none" style="position: relative; width: 78%; height: 78%; filter: drop-shadow(0 0 14px var(--acc-glow))">
+<g class="snapL"><path d="M50 22 A28 28 0 0 0 50 78" style="stroke: var(--acc)" stroke-width="7" stroke-linecap="round"></path></g>
+<g class="snapR"><path d="M50 22 A28 28 0 0 1 50 78" style="stroke: var(--t1)" stroke-width="7" stroke-linecap="round"></path></g>
+</svg>
+</div>
+<div style="flex: 1 1 380px; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<p style="margin: 0; font-size: 14px; font-weight: 700; color: var(--acc)">成立 · 19:16</p>
+<h1 id="h-latched" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-weight: 700; font-size: clamp(28px, 3.4vw, 46px); line-height: 1.25; letter-spacing: 0.02em">{{heroTitle}}</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.85; color: var(--t2); text-wrap: pretty">{{heroLead}}</p>
+</div>
+<div class="lt-hero-tags" style="flex: 0 1 340px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start">
+<span style="padding: 9px 14px; border-radius: 12px; background: var(--s2); border: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 14px">20:30〜</span>
+<span style="padding: 9px 14px; border-radius: 12px; background: var(--s2); border: 1px solid var(--line); font-size: 14px">天文館周辺</span>
+<span style="padding: 9px 14px; border-radius: 12px; background: var(--s2); border: 1px solid var(--line); font-size: 14px">3人</span>
+<span style="padding: 9px 14px; border-radius: 12px; background: var(--s2); border: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 14px">¥4,000前後</span>
+</div>
+</section>
+
+<div class="lt-grid">
+
+<aside aria-label="成立の詳細" class="lt-aside" style="min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<details open="{{wide}}" style="border-radius: 22px; background: #10121A; border: 1px solid var(--line)">
+<summary style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 14px 26px">
+<h2 style="margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; color: var(--t2)">成立した内容</h2>
+<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--t2)"><path d="M6 9l6 6 6-6"></path></svg>
+</summary>
+<div style="padding: 4px 26px 24px; display: flex; flex-direction: column; gap: 16px">
+<dl style="margin: 0; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px 14px; font-size: 15px">
+<dt style="color: var(--t3)">時間</dt><dd style="margin: 0; font-weight: 700">今夜 20:30〜</dd>
+<dt style="color: var(--t3)">場所</dt><dd style="margin: 0; font-weight: 700">天文館周辺<span style="display: block; font-weight: 400; font-size: 13.5px; color: var(--t2)">集合場所はチャットで</span></dd>
+<dt style="color: var(--t3)">人数</dt><dd style="margin: 0; font-weight: 700">3人</dd>
+<dt style="color: var(--t3)">予算</dt><dd style="margin: 0; font-weight: 700">1人 4,000円前後</dd>
+</dl>
+<button type="button" class="ghost" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t1); font-family: inherit; font-size: 14px; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M4 10h16M9 3v4M15 3v4"></path></svg>
+カレンダーに追加
+</button>
+</div>
+</details>
+
+<section aria-labelledby="h-members" style="padding: 24px 26px; border-radius: 22px; background: #10121A; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px">
+<h2 id="h-members" style="margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; color: var(--t2)">メンバー</h2>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px">
+<li style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; flex: none; border-radius: 999px; display: grid; place-items: center; background: #F2B880; color: var(--bg); font-family: 'IBM Plex Mono', monospace; font-weight: 600">Y</span>
+<span style="flex: 1 1 auto; font-size: 15px; font-weight: 700">ゆうき</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--t2)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>参加</span>
+</li>
+<li style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; flex: none; border-radius: 999px; display: grid; place-items: center; background: #F09AC0; color: var(--bg); font-family: 'IBM Plex Mono', monospace; font-weight: 600">M</span>
+<span style="flex: 1 1 auto; font-size: 15px; font-weight: 700">Mika</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--t2)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>参加</span>
+</li>
+<li style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; flex: none; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: var(--s3); border: 2px solid var(--line-strong); color: var(--t1); font-family: 'IBM Plex Mono', monospace; font-weight: 600">K</span>
+<span style="flex: 1 1 auto; font-size: 15px; font-weight: 700">あなた</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: {{meStatusColor}}"><sc-if value="{{active}}" hint-placeholder-val="{{true}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></sc-if>{{meStatus}}</span>
+</li>
+</ul>
+<p style="margin: 4px 0 0; font-size: 13.5px; line-height: 1.7; color: var(--t3)">成立したので、お互いの表示名が見えるようになりました。</p>
+</section>
+
+<section aria-labelledby="h-safety" style="padding: 24px 26px; border-radius: 22px; background: #10121A; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px">
+<h2 id="h-safety" style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; color: var(--t2)">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"></path></svg>
+安全のために</h2>
+<details style="border-radius: 14px; background: var(--s2)">
+<summary style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 4px 16px; font-size: 14.5px; font-weight: 700">会う前の安全ガイド
+<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--t2)"><path d="M6 9l6 6 6-6"></path></svg>
+</summary>
+<ul style="margin: 0; padding: 0 16px 16px 34px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.7; color: var(--t2)">
+<li>はじめは人通りの多いお店で会いましょう</li>
+<li>連絡先の交換は、会ってからでも遅くありません</li>
+<li>違和感があれば、無理せず帰って大丈夫です</li>
+</ul>
+</details>
+<button type="button" class="ghost danger" aria-haspopup="dialog" onClick="{{openSafety}}" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t1); font-family: inherit; font-size: 14px; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4h11l-1.5 4L16 12H5"></path></svg>
+通報・ブロック
+</button>
+</section>
+
+<sc-if value="{{active}}" hint-placeholder-val="{{true}}">
+<button type="button" class="danger" aria-haspopup="dialog" onClick="{{openCancel}}" style="align-self: flex-start; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--dng); font-family: inherit; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; transition: background-color .2s ease, border-color .2s ease">この成立を取り消す</button>
+</sc-if>
+</aside>
+
+<section aria-labelledby="h-chat" class="lt-chat" style="min-width: 0; display: flex; flex-direction: column; border-radius: 24px; background: #10121A; border: 1px solid var(--line); overflow: hidden">
+<div style="flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--s1)">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 id="h-chat" style="margin: 0; font-size: 16px; font-weight: 700">今夜の3人</h2>
+<span style="font-size: 13px; color: var(--t2)">20:30 · 天文館周辺</span>
+</div>
+<div aria-hidden="true" style="display: flex; align-items: center">
+<span style="position: relative; z-index: 3; width: 32px; height: 32px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: #F2B880; color: var(--bg); border: 2px solid var(--s1); font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600">Y</span>
+<span style="position: relative; z-index: 2; margin-left: -8px; width: 32px; height: 32px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: #F09AC0; color: var(--bg); border: 2px solid var(--s1); font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600">M</span>
+<span style="position: relative; z-index: 1; margin-left: -8px; width: 32px; height: 32px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: var(--s3); color: var(--t1); border: 2px solid var(--line-strong); font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600">K</span>
+</div>
+</div>
+
+<div id="chatlog" role="log" aria-label="チャット" tabindex="0" style="flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 18px; padding: 24px clamp(14px, 2.4vw, 28px)">
+<p style="margin: 0 0 4px; align-self: center; display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: var(--acc-soft); border: 1px solid var(--acc-line); color: var(--t1); font-size: 13px; text-align: center">
+<svg width="14" height="14" viewBox="0 0 40 40" fill="none" aria-hidden="true" style="flex: none"><path d="M20.5 5 A15 15 0 0 0 20.5 35" style="stroke: var(--acc)" stroke-width="4.5" stroke-linecap="round"></path><path d="M20.5 5 A15 15 0 0 1 20.5 35" style="stroke: var(--acc)" stroke-width="4.5" stroke-linecap="round"></path></svg>
+19:16 · LATCHが成立し、チャットが開きました
+</p>
+<sc-for list="{{messages}}" as="m" hint-placeholder-count="3">
+<sc-if value="{{m.theirs}}" hint-placeholder-val="{{true}}">
+<div class="msg" style="display: flex; align-items: flex-end; gap: 10px; max-width: min(80%, 560px)">
+<span aria-hidden="true" style="width: 36px; height: 36px; flex: none; border-radius: 999px; display: grid; place-items: center; background: {{m.color}}; color: var(--bg); font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600">{{m.initial}}</span>
+<div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-size: 13px; color: var(--t2)">{{m.name}} · {{m.time}}</span>
+<p style="margin: 0; padding: 12px 16px; border-radius: 18px 18px 18px 6px; background: var(--s2); border: 1px solid var(--line); font-size: 15px; line-height: 1.7">{{m.text}}</p>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{m.mine}}" hint-placeholder-val="{{false}}">
+<div class="msg" style="align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: min(80%, 560px)">
+<span style="font-size: 13px; color: var(--t2)">あなた · {{m.time}}</span>
+<p style="margin: 0; padding: 12px 16px; border-radius: 18px 18px 6px 18px; background: #262B42; border: 1px solid #343A56; color: var(--t1); font-size: 15px; line-height: 1.7">{{m.text}}</p>
+</div>
+</sc-if>
+<sc-if value="{{m.system}}" hint-placeholder-val="{{false}}">
+<p class="msg" style="margin: 0; align-self: center; padding: 7px 14px; border-radius: 999px; background: var(--dng-soft); border: 1px solid var(--dng-line); color: var(--t1); font-size: 13px; text-align: center">{{m.text}}</p>
+</sc-if>
+</sc-for>
+</div>
+
+<form onSubmit="{{send}}" style="flex: none; display: flex; align-items: center; gap: 10px; padding: 12px; border-top: 1px solid var(--line); background: #0E1018">
+<label for="msg" class="vh">メッセージ</label>
+<input id="msg" class="field" type="text" autocomplete="off" enterkeyhint="send" disabled="{{inactive}}" value="{{draft}}" onChange="{{onDraft}}" placeholder="{{placeholder}}" style="flex: 1 1 auto; min-width: 0; min-height: 50px; box-sizing: border-box; padding: 0 20px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--s1); color: var(--t1); font-family: inherit; font-size: 16px; outline: none; transition: border-color .2s ease">
+<button type="submit" class="cta" aria-label="送信" disabled="{{sendDisabled}}" style="width: 50px; height: 50px; flex: none; padding: 0; border-radius: 999px; border: none; background: {{sendBg}}; color: {{sendFg}}; display: grid; place-items: center; cursor: pointer; box-shadow: {{sendShadow}}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z"></path><path d="M11.5 13.5L20 4"></path></svg>
+</button>
+</form>
+</section>
+</div>
+</main>
+
+<dialog id="cancel-dlg" class="dlg" aria-labelledby="cancel-title" aria-describedby="cancel-desc">
+<div style="display: flex; flex-direction: column; gap: 16px">
+<h2 id="cancel-title" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: 22px; font-weight: 700">この成立を取り消しますか？</h2>
+<div id="cancel-desc" style="display: flex; flex-direction: column; gap: 10px; font-size: 14.5px; line-height: 1.8; color: var(--t2)">
+<p style="margin: 0">取り消すと、次のようになります。</p>
+<ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px">
+<li>チャットに「あなたが参加を取り消しました」と表示され、ゆうきさん・Mikaさんに伝わります</li>
+<li>あなたはこのチャットに書き込めなくなります</li>
+<li>残りの2人で会うかどうかは、2人が決めます</li>
+</ul>
+<p style="margin: 0; color: var(--t3)">この操作は元に戻せません。</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px">
+<button type="button" class="ghost" onClick="{{closeCancel}}" style="min-height: 48px; padding: 0 20px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t1); font-family: inherit; font-size: 15px; cursor: pointer">やめておく</button>
+<button type="button" onClick="{{confirmCancel}}" style="min-height: 48px; padding: 0 20px; border-radius: 999px; border: none; background: var(--dng); color: #1A0A08; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">取り消す</button>
+</div>
+</div>
+</dialog>
+
+<dialog id="safety-dlg" class="dlg" aria-labelledby="safety-title">
+<div style="display: flex; flex-direction: column; gap: 16px">
+<h2 id="safety-title" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: 22px; font-weight: 700">通報・ブロック</h2>
+<sc-if value="{{safetyForm}}" hint-placeholder-val="{{true}}">
+<fieldset style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 8px">
+<legend style="margin-bottom: 8px; font-size: 14.5px; color: var(--t2)">対象のメンバー</legend>
+<sc-for list="{{members}}" as="u" hint-placeholder-count="2">
+<label style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px; border-radius: 14px; border: 1px solid {{u.border}}; background: {{u.bg}}; font-size: 15px; cursor: pointer">
+<input type="radio" name="who" checked="{{u.on}}" onChange="{{u.pick}}" style="width: 18px; height: 18px; margin: 0; accent-color: #5FD4AE">
+{{u.name}}</label>
+</sc-for>
+</fieldset>
+<p style="margin: 0; font-size: 13.5px; line-height: 1.75; color: var(--t3)">ブロックすると、この相手とは今後LATCHが成立しなくなります。相手には通知されません。通報は運営が確認し、必要に応じて対応します。</p>
+<div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px">
+<button type="button" class="ghost" onClick="{{closeSafety}}" style="min-height: 48px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t1); font-family: inherit; font-size: 15px; cursor: pointer">キャンセル</button>
+<button type="button" class="ghost" disabled="{{noWho}}" onClick="{{doBlock}}" style="min-height: 48px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--dng-line); background: transparent; color: var(--dng); font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">ブロックする</button>
+<button type="button" disabled="{{noWho}}" onClick="{{doReport}}" style="min-height: 48px; padding: 0 18px; border-radius: 999px; border: none; background: {{reportBg}}; color: {{reportFg}}; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">通報する</button>
+</div>
+</sc-if>
+<sc-if value="{{safetyDone}}" hint-placeholder-val="{{false}}">
+<p role="status" style="margin: 0; font-size: 15px; line-height: 1.8">{{safetyMsg}}</p>
+<div style="display: flex; justify-content: flex-end">
+<button type="button" class="ghost" onClick="{{closeSafety}}" style="min-height: 48px; padding: 0 20px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t1); font-family: inherit; font-size: 15px; cursor: pointer">閉じる</button>
+</div>
+</sc-if>
+</div>
+</dialog>
+
+<nav class="tabbar" aria-label="メインメニュー">
+<a class="tab" href="../01 預ける（ホーム）-html/Main.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8.5v7M8.5 12h7"></path></svg><span>預ける</span></a>
+<a class="tab" href="../03 待機中-html/Standby.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"></path></svg><span>待機中</span><span class="tb" style="background: var(--stb-soft); color: var(--stb)">2<span class="vh">件</span></span></a>
+<a class="tab" href="../04 候補が届く-html/Proposal.dc.html"><svg width="22" height="22" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35"></path><path d="M22 5 A15 15 0 0 1 22 35"></path></svg><span>候補</span></a>
+<a class="tab" href="../05 成立・チャット-html/Latched.dc.html" aria-current="page"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14A1.5 1.5 0 0 1 20.5 7v8.5A1.5 1.5 0 0 1 19 17h-7l-4 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z"></path></svg><span>成立</span><span class="tb" style="background: var(--acc); color: var(--on-acc)">1<span class="vh">件</span></span></a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1480}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this._count = -1;
+    this.scrollChat();
+  }
+
+  componentDidUpdate() {
+    this.scrollChat();
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this._reply);
+  }
+
+  // 新しいメッセージが増えたときだけ、チャット欄を一番下までスクロールする
+  scrollChat() {
+    var n = ((this.state || {}).messages || this.baseMessages()).length;
+    if (n === this._count) { return; }
+    this._count = n;
+    var el = document.getElementById('chatlog');
+    if (el) { el.scrollTop = el.scrollHeight; }
+  }
+
+  baseMessages() {
+    return [
+      { who: 'yuki', name: 'ゆうき', initial: 'Y', color: '#F2B880', time: '19:17', text: 'はじめまして！20:30、天文館通りのアーケード入口あたりで集合はどうでしょう？' },
+      { who: 'mika', name: 'Mika', initial: 'M', color: '#F09AC0', time: '19:18', text: 'いいですね。軽く一杯なので、立ち飲みのお店が気になってます。' },
+      { who: 'me', time: '19:19', text: '賛成です。4,000円くらいで行けるお店、探してみますね。' }
+    ];
+  }
+
+  dlg(id, open) {
+    var el = document.getElementById(id);
+    if (!el) { return; }
+    if (open && !el.open) { el.showModal(); }
+    if (!open && el.open) { el.close(); }
+  }
+
+  renderVals() {
+    var self = this;
+    var st = this.state || {};
+    var list = st.messages || this.baseMessages();
+    var draft = st.draft ?? '';
+    var cancelled = !!st.cancelled;
+    var who = st.who || null;
+    if (this._wide === undefined) {
+      this._wide = !!(window.matchMedia && window.matchMedia('(min-width: 960px)').matches);
+    }
+    var empty = !draft.trim() || cancelled;
+    var MEMBERS = [{ id: 'yuki', name: 'ゆうき' }, { id: 'mika', name: 'Mika' }];
+    var whoName = (MEMBERS.filter(function (m) { return m.id === who; })[0] || {}).name;
+    return {
+      wide: this._wide,
+      active: !cancelled,
+      inactive: cancelled,
+      heroTitle: cancelled ? '参加を取り消しました。' : 'LATCHしました。',
+      heroLead: cancelled ? 'このチャットには書き込めません。条件は待機に戻していません。必要なら、もう一度預けてください。' : '3人全員が「参加する」と答えました。ここからは、お互いの姿が見えます。',
+      meStatus: cancelled ? '取り消し済み' : '参加',
+      meStatusColor: cancelled ? 'var(--dng)' : 'var(--t2)',
+      placeholder: cancelled ? '取り消したため、書き込めません' : 'メッセージを送る',
+      draft: draft,
+      onDraft: function (e) { self.setState({ draft: e.target.value }); },
+      sendDisabled: empty,
+      sendBg: empty ? 'var(--s3)' : 'var(--acc)',
+      sendFg: empty ? 'var(--t3)' : 'var(--on-acc)',
+      sendShadow: empty ? 'none' : '0 10px 30px -10px var(--acc-glow)',
+      send: function (e) {
+        if (e && e.preventDefault) { e.preventDefault(); }
+        var cur = self.state || {};
+        var text = String(cur.draft || '').trim();
+        if (!text || cur.cancelled) { return; }
+        var msgs = (cur.messages || self.baseMessages()).slice();
+        var sent = (cur.sent || 0) + 1;
+        var minute = 19 + sent;
+        msgs.push({ who: 'me', time: '19:' + minute, text: text });
+        self.setState({ messages: msgs, draft: '', sent: sent });
+        clearTimeout(self._reply);
+        self._reply = setTimeout(function () {
+          var now = (self.state && self.state.messages) || msgs;
+          if ((self.state || {}).cancelled) { return; }
+          var next = now.slice();
+          next.push({ who: 'yuki', name: 'ゆうき', initial: 'Y', color: '#F2B880', time: '19:' + minute, text: '了解です、楽しみにしてます！' });
+          self.setState({ messages: next });
+        }, 1600);
+      },
+      messages: list.map(function (m) {
+        return {
+          name: m.name || 'あなた',
+          initial: m.initial || 'K',
+          color: m.color || 'var(--s3)',
+          time: m.time,
+          text: m.text,
+          mine: m.who === 'me',
+          system: m.who === 'system',
+          theirs: m.who !== 'me' && m.who !== 'system'
+        };
+      }),
+      openCancel: function () { self.dlg('cancel-dlg', true); },
+      closeCancel: function () { self.dlg('cancel-dlg', false); },
+      confirmCancel: function () {
+        var cur = self.state || {};
+        var msgs = (cur.messages || self.baseMessages()).slice();
+        msgs.push({ who: 'system', text: 'あなたが参加を取り消しました' });
+        clearTimeout(self._reply);
+        self.setState({ cancelled: true, messages: msgs, draft: '' });
+        self.dlg('cancel-dlg', false);
+      },
+      openSafety: function () { self.setState({ safety: 'form', who: null }); self.dlg('safety-dlg', true); },
+      closeSafety: function () { self.dlg('safety-dlg', false); },
+      safetyForm: (st.safety || 'form') === 'form',
+      safetyDone: st.safety === 'done',
+      safetyMsg: st.safetyMsg || '',
+      noWho: !who,
+      reportBg: who ? 'var(--dng)' : 'var(--s3)',
+      reportFg: who ? '#1A0A08' : 'var(--t3)',
+      doBlock: function () { if (!who) { return; } self.setState({ safety: 'done', safetyMsg: whoName + 'さんをブロックしました。今後この相手とLATCHが成立することはありません。' }); },
+      doReport: function () { if (!who) { return; } self.setState({ safety: 'done', safetyMsg: whoName + 'さんについての通報を受け付けました。運営が内容を確認します。' }); },
+      members: MEMBERS.map(function (m) {
+        var on = who === m.id;
+        return {
+          name: m.name,
+          on: on,
+          bg: on ? 'var(--s3)' : 'transparent',
+          border: on ? 'var(--t2)' : 'var(--line-strong)',
+          pick: function () { self.setState({ who: m.id }); }
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

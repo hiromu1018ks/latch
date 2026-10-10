@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>LATCH — 成立・チャット</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#0B0C12}
+a{color:#EDEBF3}a:hover{color:#FFFFFF}
+.ground{background-image:radial-gradient(circle at 1px 1px, rgba(237,235,243,0.06) 1px, transparent 0);background-size:28px 28px}
+.navlink:hover{background:#171A26}
+.ghost:hover{border-color:#3A3F58;color:#EDEBF3}
+.field:focus{border-color:#4A5070}
+.field::placeholder{color:#6E7186}
+@keyframes snapL{0%{transform:translateX(-12px)}65%{transform:translateX(1.5px)}100%{transform:none}}
+@keyframes snapR{0%{transform:translateX(12px)}65%{transform:translateX(-1.5px)}100%{transform:none}}
+.snapL{animation:snapL .9s cubic-bezier(.3,.9,.3,1.2) .3s both}
+.snapR{animation:snapR .9s cubic-bezier(.3,.9,.3,1.2) .3s both}
+@keyframes burst{0%{transform:scale(.7);opacity:.9}100%{transform:scale(2);opacity:0}}
+.burst{animation:burst 1.5s cubic-bezier(.2,.7,.3,1) .9s both}
+.burst.slow{animation:burst 3.8s cubic-bezier(.2,.7,.3,1) 2.4s infinite}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.msg{animation:msgIn .45s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion: reduce){*,*::after{animation:none !important;transition:none !important}}
+</style>
+</helmet>
+<div class="ground" style="min-height: 100vh; position: relative; overflow: hidden; background-color: #0B0C12; color: #EDEBF3; font-family: 'Zen Kaku Gothic New', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+<div aria-hidden="true" style="position: absolute; top: -300px; left: -200px; width: 1000px; height: 900px; background: radial-gradient(closest-side, {{accentHaze}}, rgba(11, 12, 18, 0) 70%); pointer-events: none; z-index: 0"></div>
+
+<header style="position: relative; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 32px; padding: 18px clamp(16px, 4vw, 48px); border-bottom: 1px solid #1C1F2C; background: rgba(11, 12, 18, 0.72)">
+<a href="Main.dc.html" aria-label="LATCH ホーム" style="display: flex; align-items: center; gap: 12px; min-height: 44px; text-decoration: none; color: #EDEBF3">
+<svg width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35" stroke="#EDEBF3" stroke-width="3.4" stroke-linecap="round"></path><path d="M22 5 A15 15 0 0 1 22 35" stroke="{{accent}}" stroke-width="3.4" stroke-linecap="round"></path></svg>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 600; font-size: 17px; letter-spacing: 0.34em">LATCH</span>
+</a>
+<nav aria-label="メインメニュー" style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px">
+<a class="navlink" href="Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: #A3A5B8; text-decoration: none; font-size: 14px; font-weight: 500">預ける</a>
+<a class="navlink" href="Standby.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: #A3A5B8; text-decoration: none; font-size: 14px; font-weight: 500">待機中<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #20243A; color: #C3C9F2">2</span></a>
+<a class="navlink" href="Proposal.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: #A3A5B8; text-decoration: none; font-size: 14px; font-weight: 500">候補</a>
+<a class="navlink" href="Latched.dc.html" aria-current="page" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #1A1D2A; color: #EDEBF3; text-decoration: none; font-size: 14px; font-weight: 700">成立<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: {{accent}}; color: #17110A">1</span></a>
+</nav>
+<div style="display: flex; align-items: center; gap: 10px">
+<button type="button" aria-label="通知" style="position: relative; width: 44px; height: 44px; padding: 0; border-radius: 999px; border: 1px solid #262A3A; background: transparent; color: #C9CCDF; display: grid; place-items: center; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+</button>
+<button type="button" aria-label="アカウント" style="width: 44px; height: 44px; padding: 0; border-radius: 999px; border: 1px solid #2E3350; background: #1B1F33; color: #DDE2FF; font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; cursor: pointer">K</button>
+</div>
+</header>
+
+<main style="position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; padding: clamp(32px, 5vw, 64px) clamp(16px, 4vw, 48px) 120px; display: flex; flex-direction: column; gap: 28px">
+
+<section aria-labelledby="h-latched" style="display: flex; flex-wrap: wrap; align-items: center; gap: 28px 40px; padding: 32px clamp(20px, 3vw, 40px); border-radius: 28px; background: #12141D; border: 1px solid {{accentLine}}; box-shadow: 0 50px 140px -70px {{accentGlow}}">
+<div aria-hidden="true" style="position: relative; flex: none; width: 128px; height: 128px; display: grid; place-items: center">
+<div class="burst" style="position: absolute; inset: 14px; border-radius: 50%; border: 2px solid {{accent}}"></div>
+<div class="burst slow" style="position: absolute; inset: 14px; border-radius: 50%; border: 1px solid {{accentLine}}"></div>
+<div style="position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(closest-side, {{accentHaze2}}, rgba(18, 20, 29, 0) 75%)"></div>
+<svg viewBox="0 0 100 100" fill="none" style="position: relative; width: 100px; height: 100px; filter: drop-shadow(0 0 14px {{accentGlow}})">
+<g class="snapL"><path d="M50 22 A28 28 0 0 0 50 78" stroke="{{accent}}" stroke-width="7" stroke-linecap="round"></path></g>
+<g class="snapR"><path d="M50 22 A28 28 0 0 1 50 78" stroke="#FFF4E2" stroke-width="7" stroke-linecap="round"></path></g>
+</svg>
+</div>
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<p style="margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.18em; color: {{accent}}">LATCHED · 19:16</p>
+<h1 id="h-latched" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-weight: 700; font-size: clamp(34px, 3.8vw, 52px); line-height: 1.25; letter-spacing: 0.02em">LATCHしました。</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.85; color: #A3A5B8; text-wrap: pretty">3人全員が「参加する」と答えました。ここからは、お互いの姿が見えます。</p>
+</div>
+<div style="flex: 1 1 300px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start">
+<span style="padding: 9px 14px; border-radius: 12px; background: #191C29; border: 1px solid #262A3A; font-family: 'IBM Plex Mono', monospace; font-size: 14px">20:30〜</span>
+<span style="padding: 9px 14px; border-radius: 12px; background: #191C29; border: 1px solid #262A3A; font-size: 14px">天文館周辺</span>
+<span style="padding: 9px 14px; border-radius: 12px; background: #191C29; border: 1px solid #262A3A; font-size: 14px">3人</span>
+<span style="padding: 9px 14px; border-radius: 12px; background: #191C29; border: 1px solid #262A3A; font-family: 'IBM Plex Mono', monospace; font-size: 14px">¥4,000前後</span>
+</div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+<aside aria-label="成立の詳細" style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<section aria-labelledby="h-detail" style="padding: 24px 26px; border-radius: 22px; background: #10121A; border: 1px solid #1F2232; display: flex; flex-direction: column; gap: 16px">
+<h2 id="h-detail" style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: #A3A5B8">成立した内容</h2>
+<dl style="margin: 0; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px 14px; font-size: 14.5px">
+<dt style="color: #858899">時間</dt><dd style="margin: 0; font-weight: 700">今夜 20:30〜</dd>
+<dt style="color: #858899">場所</dt><dd style="margin: 0; font-weight: 700">天文館周辺<span style="display: block; font-weight: 400; font-size: 13px; color: #A3A5B8">集合場所はチャットで</span></dd>
+<dt style="color: #858899">人数</dt><dd style="margin: 0; font-weight: 700">3人</dd>
+<dt style="color: #858899">予算</dt><dd style="margin: 0; font-weight: 700">1人 4,000円前後</dd>
+</dl>
+<button type="button" class="ghost" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 18px; border-radius: 999px; border: 1px solid #2A2E40; background: transparent; color: #C9CCDF; font-family: inherit; font-size: 14px; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M4 10h16M9 3v4M15 3v4"></path></svg>
+カレンダーに追加
+</button>
+</section>
+
+<section aria-labelledby="h-members" style="padding: 24px 26px; border-radius: 22px; background: #10121A; border: 1px solid #1F2232; display: flex; flex-direction: column; gap: 14px">
+<h2 id="h-members" style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: #A3A5B8">メンバー</h2>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px">
+<li style="display: flex; align-items: center; gap: 12px">
+<span style="width: 40px; height: 40px; flex: none; border-radius: 999px; display: grid; place-items: center; background: #5CC8B5; color: #0B0C12; font-family: 'IBM Plex Mono', monospace; font-weight: 600">Y</span>
+<span style="flex: 1 1 auto; font-size: 15px; font-weight: 700">ゆうき</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: {{accent}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>参加</span>
+</li>
+<li style="display: flex; align-items: center; gap: 12px">
+<span style="width: 40px; height: 40px; flex: none; border-radius: 999px; display: grid; place-items: center; background: #F09AC0; color: #0B0C12; font-family: 'IBM Plex Mono', monospace; font-weight: 600">M</span>
+<span style="flex: 1 1 auto; font-size: 15px; font-weight: 700">Mika</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: {{accent}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>参加</span>
+</li>
+<li style="display: flex; align-items: center; gap: 12px">
+<span style="width: 40px; height: 40px; flex: none; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: #1B1F33; border: 2px solid {{accent}}; color: #DDE2FF; font-family: 'IBM Plex Mono', monospace; font-weight: 600">K</span>
+<span style="flex: 1 1 auto; font-size: 15px; font-weight: 700">あなた</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: {{accent}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>参加</span>
+</li>
+</ul>
+<p style="margin: 4px 0 0; font-size: 13px; line-height: 1.7; color: #858899">成立したので、お互いの表示名が見えるようになりました。</p>
+</section>
+
+<button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 6px; border: none; background: transparent; color: #858899; font-family: inherit; font-size: 13.5px; text-decoration: underline; text-underline-offset: 4px; cursor: pointer">この成立を取り消す</button>
+</aside>
+
+<section aria-labelledby="h-chat" style="flex: 999 1 560px; min-width: 0; min-height: 660px; display: flex; flex-direction: column; border-radius: 24px; background: #10121A; border: 1px solid #22263A; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px; border-bottom: 1px solid #1C1F2C; background: #12141D">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 id="h-chat" style="margin: 0; font-size: 16px; font-weight: 700">今夜の3人</h2>
+<span style="font-size: 12.5px; color: #A3A5B8">20:30 · 天文館周辺</span>
+</div>
+<div aria-hidden="true" style="display: flex; align-items: center">
+<span style="position: relative; z-index: 3; width: 32px; height: 32px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: #5CC8B5; color: #0B0C12; border: 2px solid #12141D; font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600">Y</span>
+<span style="position: relative; z-index: 2; margin-left: -8px; width: 32px; height: 32px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: #F09AC0; color: #0B0C12; border: 2px solid #12141D; font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600">M</span>
+<span style="position: relative; z-index: 1; margin-left: -8px; width: 32px; height: 32px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: #1B1F33; color: #DDE2FF; border: 2px solid {{accent}}; font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600">K</span>
+</div>
+</div>
+
+<div role="log" aria-label="チャット" style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 18px; padding: 24px clamp(16px, 2.4vw, 28px)">
+<p style="margin: 0 0 4px; align-self: center; display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: {{accentSoft}}; border: 1px solid {{accentLine}}; color: #F3E7D3; font-size: 12.5px">
+<svg width="14" height="14" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M20.5 5 A15 15 0 0 0 20.5 35" stroke="{{accent}}" stroke-width="4.5" stroke-linecap="round"></path><path d="M20.5 5 A15 15 0 0 1 20.5 35" stroke="{{accent}}" stroke-width="4.5" stroke-linecap="round"></path></svg>
+19:16 · LATCHが成立し、チャットが開きました
+</p>
+<sc-for list="{{messages}}" as="m" hint-placeholder-count="3">
+<sc-if value="{{m.theirs}}" hint-placeholder-val="{{true}}">
+<div class="msg" style="display: flex; align-items: flex-end; gap: 12px; max-width: 80%">
+<span aria-hidden="true" style="width: 36px; height: 36px; flex: none; border-radius: 999px; display: grid; place-items: center; background: {{m.color}}; color: #0B0C12; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600">{{m.initial}}</span>
+<div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-size: 12px; color: #A3A5B8">{{m.name}} · {{m.time}}</span>
+<p style="margin: 0; padding: 12px 16px; border-radius: 18px 18px 18px 6px; background: #1A1D29; border: 1px solid #252938; font-size: 15px; line-height: 1.7">{{m.text}}</p>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{m.mine}}" hint-placeholder-val="{{false}}">
+<div class="msg" style="align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 80%">
+<span style="font-size: 12px; color: #A3A5B8">あなた · {{m.time}}</span>
+<p style="margin: 0; padding: 12px 16px; border-radius: 18px 18px 6px 18px; background: {{accentSoft}}; border: 1px solid {{accentLine}}; color: #FFF6E8; font-size: 15px; line-height: 1.7">{{m.text}}</p>
+</div>
+</sc-if>
+</sc-for>
+</div>
+
+<form onSubmit="{{send}}" style="display: flex; align-items: center; gap: 10px; padding: 16px; border-top: 1px solid #1C1F2C; background: #0E1018">
+<label for="msg" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">メッセージ</label>
+<input id="msg" class="field" type="text" autocomplete="off" value="{{draft}}" onChange="{{onDraft}}" placeholder="メッセージを送る" style="flex: 1 1 auto; min-width: 0; min-height: 50px; box-sizing: border-box; padding: 0 20px; border-radius: 999px; border: 1px solid #2A2E40; background: #12141D; color: #EDEBF3; font-family: inherit; font-size: 15px; outline: none">
+<button type="submit" aria-label="送信" style="width: 50px; height: 50px; flex: none; padding: 0; border-radius: 999px; border: none; background: {{accent}}; color: #17110A; display: grid; place-items: center; cursor: pointer; box-shadow: 0 10px 30px -10px {{accentGlow}}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z"></path><path d="M11.5 13.5L20 4"></path></svg>
+</button>
+</form>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#FFB547","options":["#FFB547","#FF7A59","#C6F25B","#5BE3F2"]},"$preview":{"width":1440,"height":1480}}'>
+class Component extends DCLogic {
+  hexA(hex, a) {
+    var h = String(hex || '#FFB547').replace('#', '');
+    if (h.length === 3) { h = h.split('').map(function (c) { return c + c; }).join(''); }
+    var n = parseInt(h.slice(0, 6), 16);
+    if (isNaN(n)) { n = 0xFFB547; }
+    return 'rgba(' + ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ', ' + a + ')';
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this._reply);
+  }
+
+  baseMessages() {
+    return [
+      { who: 'yuki', name: 'ゆうき', initial: 'Y', color: '#5CC8B5', time: '19:17', text: 'はじめまして！20:30、天文館通りのアーケード入口あたりで集合はどうでしょう？' },
+      { who: 'mika', name: 'Mika', initial: 'M', color: '#F09AC0', time: '19:18', text: 'いいですね。軽く一杯なので、立ち飲みのお店が気になってます。' },
+      { who: 'me', time: '19:19', text: '賛成です。4,000円くらいで行けるお店、探してみますね。' }
+    ];
+  }
+
+  renderVals() {
+    var self = this;
+    var accent = this.props.accent ?? '#FFB547';
+    var st = this.state || {};
+    var list = st.messages || this.baseMessages();
+    var draft = st.draft ?? '';
+    return {
+      accent: accent,
+      accentGlow: this.hexA(accent, 0.5),
+      accentSoft: this.hexA(accent, 0.14),
+      accentLine: this.hexA(accent, 0.4),
+      accentHaze: this.hexA(accent, 0.1),
+      accentHaze2: this.hexA(accent, 0.3),
+      draft: draft,
+      onDraft: function (e) { self.setState({ draft: e.target.value }); },
+      send: function (e) {
+        if (e && e.preventDefault) { e.preventDefault(); }
+        var cur = self.state || {};
+        var text = String(cur.draft || '').trim();
+        if (!text) { return; }
+        var msgs = (cur.messages || self.baseMessages()).slice();
+        var sent = (cur.sent || 0) + 1;
+        var minute = 19 + sent;
+        msgs.push({ who: 'me', time: '19:' + minute, text: text });
+        self.setState({ messages: msgs, draft: '', sent: sent });
+        clearTimeout(self._reply);
+        self._reply = setTimeout(function () {
+          var now = (self.state && self.state.messages) || msgs;
+          var next = now.slice();
+          next.push({ who: 'yuki', name: 'ゆうき', initial: 'Y', color: '#5CC8B5', time: '19:' + minute, text: '了解です、楽しみにしてます！' });
+          self.setState({ messages: next });
+        }, 1600);
+      },
+      messages: list.map(function (m) {
+        return {
+          name: m.name || 'あなた',
+          initial: m.initial || 'K',
+          color: m.color || accent,
+          time: m.time,
+          text: m.text,
+          mine: m.who === 'me',
+          theirs: m.who !== 'me'
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

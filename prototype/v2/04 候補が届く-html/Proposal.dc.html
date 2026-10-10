@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LATCH — 候補が届きました</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+<style>
+/* ===== 色の定義：案A改「夜と翡翠」（全画面共通） ===== */
+:root{
+  color-scheme:dark;
+  /* 面：奥 → 手前ほど明るい */
+  --bg:#0B0C12;--s1:#12141D;--s2:#191C29;--s3:#20243A;
+  /* 枠線：淡＝区切り（装飾）／強＝入力欄・ボタン（3:1以上） */
+  --line:#23273A;--line-strong:#646A8A;
+  /* 文字：本文／補足／注記 */
+  --t1:#EDEBF3;--t2:#A9ACBF;--t3:#8A8DA0;
+  /* アクセント＝主要ボタン・候補・成立だけに使う */
+  --acc:#5FD4AE;--acc-hover:#7FDEBF;--on-acc:#06180F;
+  --acc-soft:rgba(95,212,174,.14);--acc-line:rgba(95,212,174,.4);--acc-glow:rgba(95,212,174,.45);--acc-haze:rgba(95,212,174,.1);
+  /* 待機＝月明かりの青 */
+  --stb:#9DB2DB;--stb-soft:rgba(157,178,219,.12);--stb-line:rgba(157,178,219,.3);
+  /* 危険＝取り下げ・取り消し・期限間近 */
+  --dng:#F2837A;--dng-soft:rgba(242,131,122,.12);--dng-line:rgba(242,131,122,.5);
+  /* 重なり順 */
+  --z-header:30;--z-tabbar:30;--z-toast:40;--z-skip:60;
+}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg)}
+a{color:var(--t1)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+main:focus{outline:none}
+.vh{position:absolute !important;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;z-index:var(--z-skip);left:16px;top:-100px;padding:12px 18px;border-radius:12px;background:var(--acc);color:var(--on-acc);font-weight:700;text-decoration:none}
+.skip:focus{top:12px}
+.ground{background-image:radial-gradient(circle at 1px 1px, rgba(237,235,243,0.05) 1px, transparent 0);background-size:28px 28px}
+.hdr{position:sticky;top:0;z-index:var(--z-header);background:rgba(11,12,18,.86);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.navlink{transition:background-color .2s ease,color .2s ease}
+.navlink:hover{background:var(--s2);color:var(--t1)}
+.ghost{transition:border-color .2s ease,color .2s ease,background-color .2s ease}
+.ghost:hover{border-color:#8A90AE !important;color:var(--t1) !important;background:var(--s2) !important}
+.danger:hover{border-color:var(--dng) !important;background:var(--dng-soft) !important;color:var(--dng) !important}
+.cta{transition:background-color .2s ease,box-shadow .2s ease}
+.cta:not(:disabled):hover{background:var(--acc-hover) !important}
+.cta:disabled{cursor:not-allowed}
+.lift{transition:border-color .2s ease,background-color .2s ease}
+.lift:hover{border-color:var(--line-strong) !important;background:#151826 !important}
+.tabbar{display:none}
+.tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:56px;border-radius:14px;color:var(--t2);text-decoration:none;font-size:12px;font-weight:500}
+.tab[aria-current="page"]{color:var(--t1);background:var(--s2);font-weight:700}
+.tab .tb{position:absolute;top:5px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;line-height:18px;text-align:center}
+.dlg{width:min(440px,calc(100% - 32px));box-sizing:border-box;padding:28px;border-radius:24px;border:1px solid var(--line-strong);background:var(--s1);color:var(--t1);font-family:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif}
+.dlg::backdrop{background:rgba(5,6,10,.72)}
+@media (max-width:720px){
+  .hdr{padding-top:12px !important;padding-bottom:12px !important}
+  .topnav{display:none !important}
+  .tabbar{display:grid;position:fixed;z-index:var(--z-tabbar);left:0;right:0;bottom:0;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:rgba(11,12,18,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+  .page-main{padding-bottom:calc(112px + env(safe-area-inset-bottom)) !important}
+}
+/* ===== この画面だけ ===== */
+/* 並び順：スマホ＝見出し→判断→照合→図、PC＝図｜見出し／照合｜判断 */
+.pv-grid{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"text" "decide" "fit" "visual";gap:32px}
+.pv-text{grid-area:text}.pv-visual{grid-area:visual}.pv-fit{grid-area:fit}.pv-decide{grid-area:decide}
+@media (min-width:980px){
+  .pv-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"visual text" "fit decide";gap:40px 24px;align-items:start}
+  .pv-visual{align-self:center}
+}
+.fit-row{display:grid;grid-template-columns:52px minmax(0,1fr) 18px minmax(0,1fr) 28px;gap:12px;align-items:center}
+@media (max-width:520px){
+  .fit-row{grid-template-columns:minmax(0,1fr) 16px minmax(0,1fr) 28px;gap:6px 10px}
+  .fit-row .fit-label{grid-column:1 / -1}
+  .card-pad{padding-left:20px !important;padding-right:20px !important}
+}
+.timer-low{color:var(--dng) !important}
+@keyframes ripple{0%{transform:scale(.6);opacity:0}15%{opacity:.85}100%{transform:scale(1.45);opacity:0}}
+.ripple{animation:ripple 3.2s cubic-bezier(.2,.6,.3,1) infinite}
+.ripple.d2{animation-delay:1.06s}.ripple.d3{animation-delay:2.12s}
+@keyframes nearL{0%,100%{transform:translateX(-6px)}50%{transform:translateX(-1.5px)}}
+@keyframes nearR{0%,100%{transform:translateX(6px)}50%{transform:translateX(1.5px)}}
+.arcL{animation:nearL 2.6s ease-in-out infinite}
+.arcR{animation:nearR 2.6s ease-in-out infinite}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.rise{animation:rise .6s cubic-bezier(.2,.8,.2,1) both}
+.rise.r2{animation-delay:.1s}.rise.r3{animation-delay:.2s}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none !important;transition:none !important}}
+</style>
+</helmet>
+<div class="ground" style="min-height: 100vh; position: relative; overflow-x: clip; background-color: var(--bg); color: var(--t1); font-family: 'Zen Kaku Gothic New', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+<a class="skip" href="#main">本文へスキップ</a>
+<div aria-hidden="true" style="position: absolute; top: -180px; left: -240px; width: 1100px; height: 1100px; background: radial-gradient(closest-side, var(--acc-haze), rgba(11, 12, 18, 0) 70%); pointer-events: none; z-index: 0"></div>
+
+<header class="hdr" style="display: flex; align-items: center; justify-content: space-between; gap: 12px 32px; padding: 18px clamp(16px, 4vw, 48px); border-bottom: 1px solid var(--line)">
+<a href="../01 預ける（ホーム）-html/Main.dc.html" aria-label="LATCH ホーム" style="display: flex; align-items: center; gap: 12px; min-height: 44px; text-decoration: none; color: var(--t1)">
+<svg width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35" style="stroke: var(--t1)" stroke-width="3.4" stroke-linecap="round"></path><path d="M22 5 A15 15 0 0 1 22 35" style="stroke: var(--acc)" stroke-width="3.4" stroke-linecap="round"></path></svg>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 600; font-size: 17px; letter-spacing: 0.34em">LATCH</span>
+</a>
+<nav class="topnav" aria-label="メインメニュー" style="display: flex; align-items: center; gap: 4px">
+<a class="navlink" href="../01 預ける（ホーム）-html/Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">預ける</a>
+<a class="navlink" href="../03 待機中-html/Standby.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">待機中<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 2px 7px; border-radius: 999px; background: var(--stb-soft); color: var(--stb)">3<span class="vh">件</span></span></a>
+<a class="navlink" href="../04 候補が届く-html/Proposal.dc.html" aria-current="page" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: var(--s2); color: var(--t1); text-decoration: none; font-size: 14px; font-weight: 700">候補<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--acc); color: var(--on-acc)">1<span class="vh">件</span></span></a>
+<a class="navlink" href="../05 成立・チャット-html/Latched.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; color: var(--t2); text-decoration: none; font-size: 14px; font-weight: 500">成立</a>
+</nav>
+<div style="display: flex; align-items: center; gap: 10px">
+<button type="button" class="ghost" aria-label="通知" style="position: relative; width: 44px; height: 44px; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--t2); display: grid; place-items: center; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+</button>
+<button type="button" aria-label="アカウント" style="width: 44px; height: 44px; padding: 0; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--s3); color: var(--t1); font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; cursor: pointer">K</button>
+</div>
+</header>
+
+<main id="main" tabindex="-1" class="page-main pv-grid" aria-labelledby="h-proposal" style="position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: clamp(28px, 5vw, 72px) clamp(16px, 4vw, 48px) 120px">
+
+<div aria-hidden="true" class="pv-visual" style="position: relative; width: min(100%, 440px); aspect-ratio: 1 / 1; margin: 0 auto">
+<div style="position: absolute; inset: -6%; border-radius: 50%; background: radial-gradient(closest-side, rgba(95, 212, 174, 0.22), rgba(11, 12, 18, 0) 70%)"></div>
+<div style="position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--line)"></div>
+<div style="position: absolute; inset: 13%; border-radius: 50%; border: 1px solid #272B3E"></div>
+<div style="position: absolute; inset: 26%; border-radius: 50%; border: 1px solid var(--acc-line); background: radial-gradient(closest-side, rgba(16, 28, 25, 0.92), rgba(12, 17, 18, 0.92))"></div>
+<div class="ripple" style="position: absolute; inset: 26%; border-radius: 50%; border: 1px solid var(--acc-line)"></div>
+<div class="ripple d2" style="position: absolute; inset: 26%; border-radius: 50%; border: 1px solid var(--acc-line)"></div>
+<div class="ripple d3" style="position: absolute; inset: 26%; border-radius: 50%; border: 1px solid var(--acc-line)"></div>
+<svg viewBox="0 0 200 200" fill="none" style="position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 0 16px var(--acc-glow))">
+<circle cx="100" cy="100" r="74" style="stroke: var(--acc-line)" stroke-width="1" stroke-dasharray="1.5 7"></circle>
+<g class="arcL"><path d="M100 70 A30 30 0 0 0 100 130" style="stroke: var(--acc)" stroke-width="7" stroke-linecap="round"></path></g>
+<g class="arcR"><path d="M100 70 A30 30 0 0 1 100 130" style="stroke: var(--t1)" stroke-width="7" stroke-linecap="round"></path></g>
+</svg>
+<span style="position: absolute; top: 9%; left: 0; padding: 8px 14px; border-radius: 999px; background: rgba(18, 20, 29, 0.92); border: 1px solid var(--line); color: var(--t1); font-family: 'IBM Plex Mono', monospace; font-size: 13px">20:30〜</span>
+<span style="position: absolute; top: 16%; right: 0; padding: 8px 14px; border-radius: 999px; background: rgba(18, 20, 29, 0.92); border: 1px solid var(--line); color: var(--t1); font-size: 13px">天文館</span>
+<span style="position: absolute; bottom: 15%; left: 2%; padding: 8px 14px; border-radius: 999px; background: rgba(18, 20, 29, 0.92); border: 1px solid var(--line); color: var(--t1); font-size: 13px">3人</span>
+<span style="position: absolute; bottom: 7%; right: 4%; padding: 8px 14px; border-radius: 999px; background: rgba(18, 20, 29, 0.92); border: 1px solid var(--line); color: var(--t1); font-family: 'IBM Plex Mono', monospace; font-size: 13px">¥4,000</span>
+</div>
+
+<div class="pv-text" style="display: flex; flex-direction: column; gap: 24px; min-width: 0; align-self: center">
+<p class="rise" style="margin: 0; align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; padding: 7px 14px; border-radius: 999px; background: var(--acc-soft); border: 1px solid var(--acc-line); font-size: 14px; font-weight: 700; color: var(--acc)">
+<span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 999px; background: var(--acc); box-shadow: 0 0 12px var(--acc-glow)"></span>
+LATCH候補 · 19:14 に届きました
+</p>
+<h1 id="h-proposal" class="rise r2" style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-weight: 700; font-size: clamp(36px, 4.8vw, 68px); line-height: 1.22; letter-spacing: 0.02em">条件が、<br>揃いそうです。</h1>
+<p class="rise r3" style="margin: 0; max-width: 520px; font-size: 16.5px; line-height: 1.9; color: var(--t2); text-wrap: pretty">相手の姿は、全員が「参加する」と答えたときにはじめて見えます。あなたの条件も、まだ誰にも渡っていません。</p>
+<div class="rise r3" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-radius: 18px; background: var(--s1); border: 1px solid var(--line)">
+<span style="font-size: 13px; color: var(--t3)">開始</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 28px; font-weight: 500; line-height: 1.2; color: var(--t1)">20:30</span>
+<span style="font-size: 13px; color: var(--t2)">今夜 · 10/10（土）</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-radius: 18px; background: var(--s1); border: 1px solid var(--line)">
+<span style="font-size: 13px; color: var(--t3)">エリア</span>
+<span style="font-size: 25px; font-weight: 700; line-height: 1.3; color: var(--t1)">天文館</span>
+<span style="font-size: 13px; color: var(--t2)">お店は成立後に相談</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-radius: 18px; background: var(--s1); border: 1px solid var(--line)">
+<span style="font-size: 13px; color: var(--t3)">人数</span>
+<span style="font-size: 25px; font-weight: 700; line-height: 1.3; color: var(--t1)">3人</span>
+<span style="font-size: 13px; color: var(--t2)">あなた＋2人</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-radius: 18px; background: var(--s1); border: 1px solid var(--line)">
+<span style="font-size: 13px; color: var(--t3)">予算</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 28px; font-weight: 500; line-height: 1.2; color: var(--t1)">¥4,000</span>
+<span style="font-size: 13px; color: var(--t2)">1人あたり · 前後</span>
+</div>
+</div>
+</div>
+
+<section aria-labelledby="h-fit" class="pv-fit card-pad" style="min-width: 0; padding: 28px 32px 24px; border-radius: 24px; background: var(--s1); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px">
+<h2 id="h-fit" style="margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; color: var(--t2)">あなたの条件との照合</h2>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--t1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>5項目すべて条件内</span>
+</div>
+<p class="vh">左があなたの条件、右がこの候補の内容です。</p>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+<sc-for list="{{fit}}" as="f" hint-placeholder-count="5">
+<li class="fit-row" style="padding: 15px 0; border-top: 1px solid var(--line)">
+<span class="fit-label" style="font-size: 13.5px; color: var(--t3)">{{f.label}}</span>
+<span style="font-size: 14.5px; color: var(--t2)"><span class="vh">あなたの条件：</span>{{f.mine}}</span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--line-strong)"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+<span style="font-size: 15px; font-weight: 700; color: var(--t1)"><span class="vh">候補：</span>{{f.theirs}}</span>
+<span style="width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: var(--s2); color: var(--t1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="条件内"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></span>
+</li>
+</sc-for>
+</ul>
+<p style="margin: 10px 0 0; padding: 14px 16px; border-radius: 14px; background: #0F1119; font-size: 14px; line-height: 1.75; color: var(--t2)">この案は、ほかの参加候補それぞれの条件にも収まっています。片方だけが大満足する提案は出しません。</p>
+</section>
+
+<section aria-labelledby="h-decide" class="pv-decide card-pad" style="min-width: 0; padding: 28px 32px 30px; border-radius: 24px; background: var(--s1); border: 1px solid var(--acc-line); box-shadow: 0 50px 140px -60px var(--acc-glow); display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h2 id="h-decide" style="margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; color: var(--t2)">回答期限まで</h2>
+<span role="timer" aria-labelledby="h-decide" class="{{timerClass}}" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: clamp(34px, 4vw, 40px); font-weight: 500; line-height: 1.1; letter-spacing: 0.04em; color: var(--t1)">{{remain}}</span>
+<span style="font-size: 13.5px; color: var(--t3)">19:44 を過ぎると、この候補は静かに消えます</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 10px">
+<div aria-hidden="true" style="display: flex; align-items: center">
+<span style="position: relative; z-index: 3; width: 52px; height: 52px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: var(--s3); border: 2px solid {{meRing}}; color: var(--t1); font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px">K</span>
+<span style="position: relative; z-index: 2; margin-left: -12px; width: 52px; height: 52px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: #0F1119; border: 1.5px dashed var(--line-strong); color: var(--t3)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"></path><path d="M10.6 6.1A9.6 9.6 0 0 1 12 6c5 0 8.5 4.5 9 6-.3.8-1.2 2.3-2.7 3.6M6.4 7.6C4.5 8.9 3.3 10.8 3 12c.5 1.5 4 6 9 6 1.4 0 2.6-.3 3.7-.8"></path><path d="M9.9 10a3 3 0 0 0 4.1 4.1"></path></svg></span>
+<span style="position: relative; z-index: 1; margin-left: -12px; width: 52px; height: 52px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; background: #0F1119; border: 1.5px dashed var(--line-strong); color: var(--t3)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"></path><path d="M10.6 6.1A9.6 9.6 0 0 1 12 6c5 0 8.5 4.5 9 6-.3.8-1.2 2.3-2.7 3.6M6.4 7.6C4.5 8.9 3.3 10.8 3 12c.5 1.5 4 6 9 6 1.4 0 2.6-.3 3.7-.8"></path><path d="M9.9 10a3 3 0 0 0 4.1 4.1"></path></svg></span>
+</div>
+<span style="font-size: 13.5px; color: var(--t2)">{{whoLine}}</span>
+</div>
+</div>
+
+<div aria-live="polite" style="display: flex; flex-direction: column; gap: 14px">
+<sc-if value="{{open}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<button type="button" class="cta" onClick="{{join}}" style="display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 64px; padding: 0 28px; border-radius: 999px; border: none; background: var(--acc); color: var(--on-acc); font-family: inherit; font-size: 18px; font-weight: 700; cursor: pointer; box-shadow: 0 18px 56px -14px var(--acc-glow)">
+<svg width="24" height="24" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M20.5 5 A15 15 0 0 0 20.5 35" stroke="currentColor" stroke-width="4" stroke-linecap="round"></path><path d="M20.5 5 A15 15 0 0 1 20.5 35" stroke="currentColor" stroke-width="4" stroke-linecap="round"></path></svg>
+参加する
+</button>
+<button type="button" class="ghost" onClick="{{decline}}" style="min-height: 52px; padding: 0 24px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t1); font-family: inherit; font-size: 15px; cursor: pointer">今回は見送る</button>
+<p style="margin: 4px 0 0; font-size: 13.5px; line-height: 1.75; color: var(--t3); text-align: center">全員が「参加する」と答えたときだけ、相手が見えてチャットが開きます。あなたの回答は、次の提案の精度に活かされます。</p>
+</div>
+</sc-if>
+
+<sc-if value="{{joined}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 18px; background: var(--acc-soft); border: 1px solid var(--acc-line)">
+<p style="margin: 0; display: flex; align-items: center; gap: 10px; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: 22px; font-weight: 700">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--acc)"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>
+参加と回答しました。</p>
+<p style="margin: 0; font-size: 14.5px; line-height: 1.8; color: var(--t1)">ほかの2人の回答を待っています（1人が回答済み）。全員がそろったら、お知らせします。</p>
+<p style="margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--t2)">誰かが見送った場合は、何も起きずに待機に戻ります。誰が見送ったかは、お互いに分かりません。</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<a href="../03 待機中-html/Standby.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; box-sizing: border-box; border-radius: 999px; background: var(--s3); color: var(--t1); font-size: 14px; font-weight: 700; text-decoration: none">待機中に戻る</a>
+<button type="button" class="ghost" onClick="{{undo}}" style="min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t2); font-family: inherit; font-size: 14px; cursor: pointer">回答を取り消す</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{allIn}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 18px; background: var(--acc-soft); border: 1px solid var(--acc)">
+<p style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: 22px; font-weight: 700">3人全員が参加しました。</p>
+<p style="margin: 0; font-size: 14.5px; line-height: 1.8; color: var(--t1)">LATCHが成立しました。ここから、お互いの姿が見えます。</p>
+<a href="../05 成立・チャット-html/Latched.dc.html" class="cta" style="display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; padding: 0 24px; border-radius: 999px; background: var(--acc); color: var(--on-acc); font-size: 17px; font-weight: 700; text-decoration: none">チャットを開く
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+</a>
+</div>
+</sc-if>
+
+<sc-if value="{{declined}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 16px; padding: 22px; border-radius: 18px; background: #0F1119; border: 1px solid var(--line)">
+<p style="margin: 0; font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif; font-size: 22px; font-weight: 700">見送りました。</p>
+<p style="margin: 0; font-size: 14.5px; line-height: 1.8; color: var(--t2)">条件はそのまま、待機を続けます。見送ったことは、ほかの参加候補には伝わりません。</p>
+<div role="group" aria-labelledby="reason-label" style="display: flex; flex-direction: column; gap: 10px">
+<span id="reason-label" style="font-size: 14px; color: var(--t1)">よければ理由を教えてください（任意・複数可）<span style="display: block; font-size: 13px; color: var(--t3)">次の提案をより合うものにするために使います</span></span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{reasons}}" as="r" hint-placeholder-count="4">
+<button type="button" class="ghost" aria-pressed="{{r.on}}" onClick="{{r.toggle}}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid {{r.border}}; background: {{r.bg}}; color: {{r.fg}}; font-family: inherit; font-size: 14px; cursor: pointer">
+<sc-if value="{{r.on}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></sc-if>
+{{r.label}}</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<a href="../03 待機中-html/Standby.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; box-sizing: border-box; border-radius: 999px; background: var(--s3); color: var(--t1); font-size: 14px; font-weight: 700; text-decoration: none">待機中に戻る</a>
+<button type="button" class="ghost" onClick="{{undo}}" style="min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--t2); font-family: inherit; font-size: 14px; cursor: pointer">取り消す</button>
+</div>
+</div>
+</sc-if>
+</div>
+</section>
+</main>
+
+<nav class="tabbar" aria-label="メインメニュー">
+<a class="tab" href="../01 預ける（ホーム）-html/Main.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8.5v7M8.5 12h7"></path></svg><span>預ける</span></a>
+<a class="tab" href="../03 待機中-html/Standby.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"></path></svg><span>待機中</span><span class="tb" style="background: var(--stb-soft); color: var(--stb)">3<span class="vh">件</span></span></a>
+<a class="tab" href="../04 候補が届く-html/Proposal.dc.html" aria-current="page"><svg width="22" height="22" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M19 5 A15 15 0 0 0 19 35"></path><path d="M22 5 A15 15 0 0 1 22 35"></path></svg><span>候補</span><span class="tb" style="background: var(--acc); color: var(--on-acc)">1<span class="vh">件</span></span></a>
+<a class="tab" href="../05 成立・チャット-html/Latched.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14A1.5 1.5 0 0 1 20.5 7v8.5A1.5 1.5 0 0 1 19 17h-7l-4 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z"></path></svg><span>成立</span></a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1480}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    var self = this;
+    this._t0 = Date.now();
+    this._iv = setInterval(function () { self.forceUpdate(); }, 1000);
+  }
+
+  componentWillUnmount() {
+    clearInterval(this._iv);
+    clearTimeout(this._all);
+  }
+
+  renderVals() {
+    var self = this;
+    var st = this.state || {};
+    // phase: open（未回答） / joined（参加・ほかの回答待ち） / allIn（全員参加） / declined（見送り）
+    var phase = st.phase || 'open';
+    var picked = st.reasons || {};
+    var elapsed = this._t0 ? Math.floor((Date.now() - this._t0) / 1000) : 0;
+    var left = Math.max(0, 1668 - elapsed);
+    var mm = Math.floor(left / 60);
+    var ss = left % 60;
+    var REASONS = [
+      { id: 'time', label: '時間が合わない' },
+      { id: 'place', label: '場所が合わない' },
+      { id: 'size', label: '人数が合わない' },
+      { id: 'mood', label: '今日は気分じゃない' }
+    ];
+    var FIT = [
+      { label: '時間', mine: '今日20時以降', theirs: '20:30 開始' },
+      { label: '場所', mine: '天文館', theirs: '天文館周辺' },
+      { label: '人数', mine: '2〜4人（あなたを含む）', theirs: '3人' },
+      { label: '予算', mine: '5,000円まで', theirs: '4,000円前後' },
+      { label: '目的', mine: '軽く飲みたい', theirs: '軽く一杯' }
+    ];
+    return {
+      remain: (mm < 10 ? '0' + mm : String(mm)) + ':' + (ss < 10 ? '0' + ss : String(ss)),
+      timerClass: left <= 300 ? 'timer-low' : '',
+      fit: FIT,
+      open: phase === 'open',
+      joined: phase === 'joined',
+      allIn: phase === 'allIn',
+      declined: phase === 'declined',
+      meRing: phase === 'joined' || phase === 'allIn' ? 'var(--acc)' : 'var(--line-strong)',
+      whoLine: phase === 'joined' ? 'あなた（参加）＋ 回答待ちの2人' : (phase === 'allIn' ? '3人全員が参加' : 'あなた ＋ まだ見えない2人'),
+      join: function () {
+        self.setState({ phase: 'joined' });
+        clearTimeout(self._all);
+        // プロトタイプ用：数秒後に全員がそろった状態を見せる
+        self._all = setTimeout(function () {
+          if ((self.state || {}).phase === 'joined') { self.setState({ phase: 'allIn' }); }
+        }, 5000);
+      },
+      decline: function () { self.setState({ phase: 'declined' }); },
+      undo: function () { clearTimeout(self._all); self.setState({ phase: 'open', reasons: {} }); },
+      reasons: REASONS.map(function (r) {
+        var on = !!picked[r.id];
+        return {
+          label: r.label,
+          on: on,
+          bg: on ? 'var(--s3)' : 'transparent',
+          border: on ? 'var(--t2)' : 'var(--line-strong)',
+          fg: on ? 'var(--t1)' : 'var(--t2)',
+          toggle: function () {
+            var next = Object.assign({}, picked);
+            next[r.id] = !on;
+            self.setState({ reasons: next });
+          }
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>
