@@ -13,7 +13,7 @@
   (Claude Code / ZCode)にそのまま貼る。セッションを作り替えてもプロンプトが同じなら
   同じ仕事が再現できるよう、プロンプトは自己完結に書いてある
 - **進行の記録。** 実施報告は`docs/plans/ui-v2/phaseN-report.md`へ残し、
-  `docs/plans/STATUS.md`の「UI v2」欄(Phase 0が新設)へ1行追記する
+  `docs/plans/STATUS.md`の「UI v2」欄(Phase 0が2026-10-10に新設済み)へ1行追記する
 - **緑維持。** フロント側のコミットごとに`cd frontend && npx vitest run`が緑のまま。
   画面のDOMに依存する試験は、その画面を担うフェーズが同じコミットで更新する
 - **supervisor / herdrフローで回す場合。** 各フェーズのプロンプトを`{TASK}`として
@@ -41,6 +41,12 @@ Phase間の依存は一直線(P0→P1→P2→P3→P4→P5→P6)。P1Bだけ並�
 ---
 
 ## Phase 0 — 判断を先に固定し、仕様の基準をprototype/v2へ切替える
+
+**実施済み(2026-10-10・コミット11d76f6)。** 14項目とも「プロトタイプが正」の
+原則で確定した。決定は[phase0-decisions.md](ui-v2/phase0-decisions.md)、経過は
+[phase0-report.md](ui-v2/phase0-report.md)。Phase 1Bで実装するAPI追加は
+D-01・D-04・D-06・D-07・D-08の5件(05 v0.6に契約を規定済み。ハイライト用の
+文字位置はD-03で値マッチングに決まったため対象外)。
 
 **スコープ**: ギャップ分析§5・§6の未決14項目について推奨付きで決定表を起こし、
 ユーザー承認を得たうえでdocsの基準を`prototype/`(v1)から`prototype/v2/`へ切り替える。
@@ -137,7 +143,8 @@ LATCH UI v2移行 Phase 1(デザイン基盤と新シェル)を実施する。
 1. styles.cssを全面書換する: :rootトークン一式(全5画面の共通<style>を集約)、
    cta/ghost/danger/lift/dlg/tab/navlink/ground/skip/vh/spinner等の共通部品、
    focus-visible、prefers-reduced-motion。旧トークン(--ink/--green/--coral等)は残さない
-2. フォントをD-12の決定どおり組む(Google Fonts+preconnect またはself-host)。
+2. フォントをD-12の決定どおり組む(self-host・@fontsource。Zen Old Mincho 500,700 /
+   Zen Kaku Gothic New 400,500,700 / IBM Plex Mono 400,500,600。CDNは使わない)。
    package.jsonから@phosphor-icons/webと不要になった@fontsource/*を外す
 3. src/ui/icons.js(または同等)にSVGアイコンを集約する。pathデータは
    プロトタイプのSVGをそのまま写す(独自のアイコンを足さない)
@@ -169,9 +176,11 @@ LATCH UI v2移行 Phase 1(デザイン基盤と新シェル)を実施する。
 
 ## Phase 1B — (オプション・Phase 1と並行)決定分のAPI拡張をbackendへ通す
 
-**スコープ**: P0で「API追加」と決まった項目のみ(例: 回答undo・見送り理由・
-成立取り消し・「あなたを含むか」・ハイライト用の文字位置・期限3択)をbackendに
-実装し、契約試験まで通す。追加がゼロなら本フェーズはスキップ。
+**スコープ**: P0で「API追加」と決まった5件のみ — D-01有効期限3択(expiry-options・
+completion.pyの選択肢更新と既存契約試験の追随)、D-04人数確認の保存
+(structured_data.participants_includes_owner)、D-06回答取り消し(response/undo)、
+D-07見送り理由(responses.reason_codes)、D-08参加取り消し(leave・チャットシステム行・
+CHAT_READONLY拡張)— をbackendに実装し、契約試験まで通す。契約の正本は05 v0.6。
 
 **完了条件**: `make test`緑・契約試験(local/miniflare)緑・docs/05へのAPI追記。
 
@@ -180,14 +189,16 @@ LATCH UI v2移行 Phase 1B(API拡張)を実施する。Phase 1と並行トラッ
 作業ディレクトリ: /home/misty/Projects/latch
 
 # 最初に読むもの(この順)
-1. docs/plans/ui-v2/phase0-decisions.md — 追加が決まったAPIの確定仕様
+1. docs/plans/ui-v2/phase0-decisions.md と docs/05(v0.6)— 追加が決まった
+   API 5件(D-01・D-04・D-06・D-07・D-08)の確定仕様
 2. docs/plans/ui-v2-roadmap.md 本フェーズの定義
 3. backend/src/latch/ — intents・latches・safetyのroutes/schemasと試験の構成
 4. docs/05 — API仕様の記法
 
 # 作業
-1. 決定表で「API追加」となった項目だけを実装する(スキーマ・routes・service・
-   契約・単体・E2E)。決定表にないAPIは作らない
+1. P0で「API追加」と決まった5件(D-01・D-04・D-06・D-07・D-08)だけを実装する
+   (スキーマ・routes・service・契約・単体・E2E。仕様は05 v0.6の規定どおり)。
+   決定表にないAPIは作らない
 2. docs/05へ追記する
 3. docs/plans/ui-v2/phase1b-report.md に実施内容と試験証拠を書く
 
@@ -326,7 +337,7 @@ LATCH UI v2移行 Phase 4(05成立・チャット)を実施する。
 3. チャットを再構成する: ヘッダー・role=log・システム行・相手/自分のbubble・
    単行input+円形送信・取消・完了後の読み取り専用表示。
    30秒ポーリング・同期ロジック(src/latch/chat.jsのsync)は現行踏襲
-4. attendance(D-09「実際に会いましたか?」)はD-14の決定どおり(維持ならv2様式へ)
+4. attendance(09 §2.2 D-09「実際に会いましたか?」)はD-14の決定どおり(維持ならv2様式へ)
 5. 試験を更新する: detail成立姿・chat・report・blockFlow・attendance
 
 # 規律
