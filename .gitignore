@@ -57,5 +57,10 @@ cloudflare/jobs/python_modules/
 cloudflare/jobs/.wrangler/
 cloudflare/api/pylock.toml
 cloudflare/jobs/pylock.toml
+# wranglerの設定・キャッシュ退避先(Makefile CF_ENVのXDG_CONFIG_HOME・backend側実行)
+.xdg-config/
+backend/.wrangler/
+# ZCodeハーネスが.gitignoreから生成するローカルコピー(環境由来)
+.zcodeignore
 # 本体実装: ビルド時にbackend/src/latchからコピーされる(make cf-sync)
 cloudflare/api/latch/
