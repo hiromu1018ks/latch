@@ -1,5 +1,6 @@
 // 条件リストのDOM構成(design §2.5・§2.7・§2.8)。
-// 行構造・ラベル・アイコンはプロトタイプ固定(00 運用ル則6)。値はformat.jsの
+// 行構造・ラベルはプロトタイプ固定(00 運用ル則6)。アイコンはprototype/v2の
+// SVG(src/ui/icons.js)へ差し替え済み(UI v2 Phase 1)。値はformat.jsの
 // 純関数が組み立てる。ユーザー入力はすべてtextContentへ設定する(innerHTMLに埋めない)。
 import {
   formatBudget,
@@ -10,18 +11,21 @@ import {
 } from "./format.js";
 import { dateTimeLocalToIso, isoToDateTimeLocal } from "./format.js";
 import { missingRequired } from "./state.js";
+import { icon } from "../ui/icons.js";
 
 export const REQUIRED_NOTE_TEXT = "時間・場所・目的を指定すると預けられます";
 // 02 D-04・03 §3の注意文言(schema.py WARNING_MESSAGE_NG_DOWNGRADED と同一の固定文字列。
 // サーバ応答のmessageは参考にしか使わない — 確定値13)
 export const NG_NOTE_TEXT = "この条件は確実には除外できません。参考条件として扱います";
 
+// アイコンはプロトタイプ02「読み取った条件」の5行と01カードのカテゴリSVG
+// (時間=clock・場所=pin・人数=people・予算=yen・目的=グラス)
 export const ROW_DEFS = [
-  { key: "time", label: "時間", icon: "ph-clock" },
-  { key: "location", label: "場所", icon: "ph-map-pin" },
-  { key: "participants", label: "人数", icon: "ph-users-three" },
-  { key: "budget", label: "予算", icon: "ph-currency-jpy" },
-  { key: "category", label: "目的", icon: "ph-flag" },
+  { key: "time", label: "時間", icon: "clock" },
+  { key: "location", label: "場所", icon: "pin" },
+  { key: "participants", label: "人数", icon: "people" },
+  { key: "budget", label: "予算", icon: "yen" },
+  { key: "category", label: "目的", icon: "glass" },
 ];
 
 const createEditButton = (label) => {
@@ -29,17 +33,17 @@ const createEditButton = (label) => {
   button.className = "edit-button";
   button.type = "button";
   button.setAttribute("aria-label", `${label}を編集`);
-  button.innerHTML = '<i class="ph ph-pencil-simple" aria-hidden="true"></i>';
+  button.append(icon("pencil", 17));
   return button;
 };
 
-const buildRow = ({ label, icon, value, extraClass = "" }) => {
+const buildRow = ({ label, icon: iconName, value, extraClass = "" }) => {
   const row = document.createElement("div");
   row.className = `condition-row ${extraClass}`.trim();
   row.dataset.label = label;
   const iconBox = document.createElement("div");
   iconBox.className = "condition-icon";
-  iconBox.innerHTML = `<i class="ph ${icon}" aria-hidden="true"></i>`;
+  iconBox.append(icon(iconName, 19));
   const labelEl = document.createElement("span");
   labelEl.className = "condition-label";
   labelEl.textContent = label;
@@ -73,14 +77,14 @@ export const renderConditions = ({ listEl, state, now }) => {
   });
 
   for (const soft of state.softRows) {
-    const row = buildRow({ label: "その他", icon: "ph-flag", value: soft.text });
+    const row = buildRow({ label: "その他", icon: "plus", value: soft.text });
     row.dataset.rowId = soft.id;
     rows.push(row);
   }
   for (const ng of state.ngRows) {
     const row = buildRow({
       label: "NG",
-      icon: "ph-warning",
+      icon: "info",
       value: ng.text,
       extraClass: "ng-row",
     });
@@ -108,8 +112,9 @@ const buildEditForm = (innerHtml) => {
   form.className = "condition-edit";
   form.innerHTML = `
     ${innerHtml}
-    <button type="submit" aria-label="変更を保存"><i class="ph ph-check" aria-hidden="true"></i></button>
+    <button type="submit" aria-label="変更を保存"></button>
   `;
+  form.querySelector('button[type="submit"]').append(icon("check", 16));
   return form;
 };
 

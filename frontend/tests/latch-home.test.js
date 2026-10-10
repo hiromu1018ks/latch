@@ -36,12 +36,11 @@ const mountHome = (callImpl) => {
     candidateList: document.createElement("div"),
     matchedList: document.createElement("div"),
     moreButton: document.createElement("button"),
-    intentCount: document.createElement("button"),
-    intentList: document.createElement("div"),
   };
   el.moreButton.hidden = true;
-  const home = createHome({ client, el });
-  return { client, el, home };
+  const onCounts = vi.fn();
+  const home = createHome({ client, el, onCounts });
+  return { client, el, home, onCounts };
 };
 
 describe("splitStatuses(design §2.2・引用#9)", () => {
@@ -123,49 +122,36 @@ describe("createHome(design §2.2)", () => {
     expect(el.moreButton.hidden).toBe(true);
   });
 
-  it("Intent N件: active数を反映しpopoverにactive一覧の行(カテゴリ・時刻)", async () => {
-    const intent = (primary) => ({
+  it("loadは候補・成立の件数をonCountsへ(ヘッダー/タブバーのバッジ供給)", async () => {
+    const { home, onCounts } = mountHome(async () => ({
+      items: [
+        latch("proposed"),
+        latch("partial_accept", { id: "99999999-9999-4999-8999-999999999999" }),
+        latch("matched", { id: "88888888-8888-4888-8888-888888888888" }),
+      ],
+      next_cursor: null,
+    }));
+    await home.load();
+    expect(onCounts).toHaveBeenLastCalledWith({ proposals: 2, matched: 1 });
+  });
+
+  it("loadIntentsはactive数を待機中バッジへ(onCounts・UI v2 Phase 1)", async () => {
+    const intent = () => ({
       id: "aaaaaaa1-1111-4111-8111-111111111111",
       status: "active",
       structured_intent: {
-        category: { primary, secondary: null },
+        category: { primary: "drinking", secondary: null },
         time: { start: "2026-10-01T20:00:00+09:00", end: null },
       },
       expires_at: null,
     });
-    const { client, el, home } = mountHome(async (method, path) => {
-      if (path.includes("status=active")) {
-        return { items: [intent("drinking"), intent("meal")], next_cursor: null };
-      }
-      return { items: [], next_cursor: null }; // draft
-    });
+    const { client, home, onCounts } = mountHome(async () => ({
+      items: [intent(), intent()],
+      next_cursor: null,
+    }));
     await home.loadIntents();
-    expect(client.call.mock.calls[0]).toEqual([
-      "GET",
-      "/v1/intents?status=active",
-    ]);
-    expect(el.intentCount.textContent).toContain("Intent");
-    expect(el.intentCount.textContent).toContain("2件");
-    expect(el.intentList.querySelectorAll(".intent-row").length).toBe(2);
-    expect(el.intentList.textContent).toContain("飲み"); // カテゴリラベル
-  });
-
-  it("下書きがあれば件数のみ添える(表示のみ)", async () => {
-    const { el, home } = mountHome(async (method, path) => {
-      if (path.includes("status=active")) {
-        return { items: [], next_cursor: null };
-      }
-      return {
-        items: [
-          { id: "d1", status: "draft", structured_intent: {} },
-          { id: "d2", status: "draft", structured_intent: {} },
-        ],
-        next_cursor: null,
-      };
-    });
-    await home.loadIntents();
-    expect(el.intentCount.textContent).toContain("0件"); // カウントはactive数
-    expect(el.intentList.textContent).toContain("下書き 2件");
+    expect(client.call).toHaveBeenCalledWith("GET", "/v1/intents?status=active");
+    expect(onCounts).toHaveBeenCalledWith({ standby: 2 });
   });
 
   it("候補セクションの空状態は「まだ提案はありません」", async () => {

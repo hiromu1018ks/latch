@@ -1,8 +1,9 @@
-// ホーム(M3 ws-7 design §2.2)。入力画面=ホーム — workspaceの下段へ
-// LATCH候補・成立済みLATCHの2セクション。GET /v1/latches(1回)をクライアント
-// 側でstatus仕分け(終了済みは表示しない・引用#9)。topbar「Intent N件」は
-// active数を動的化しpopoverに一覧(表示のみ)。
-import { formatCategory, formatTime } from "../intent/format.js";
+// ホーム(M3 ws-7 design §2.2・UI v2 Phase 1)。入力画面=ホーム — workspaceの
+// 下段へLATCH候補・成立済みLATCHの2セクション(暫定表示・Phase 3/4で一覧画面へ)。
+// GET /v1/latches(1回)をクライアント側でstatus仕分け(終了済みは表示しない・引用#9)。
+// 旧topbar「Intent N件」popoverはv2シェルで廃止 — 件数はonCounts経由で
+// ヘッダー/タブバーのバッジ(待機中・候補・成立)へ供給する。一覧本体は
+// Phase 3(03待機中)で再構成。
 import {
   HIDDEN_PROPOSAL_TEXT,
   NO_LATCH_NOTE,
@@ -55,24 +56,7 @@ export const latchCardHtml = (latchItem, nowIso) => {
 const emptyHtml = (title, note) =>
   `<p class="latch-empty"><strong>${title}</strong><span>${note}</span></p>`;
 
-const intentRow = (intent) => {
-  const row = document.createElement("div");
-  row.className = "intent-row";
-  const structured = intent.structured_intent ?? {};
-  row.innerHTML = `<span class="intent-row-category">${escapeHtml(
-    formatCategory(structured.category),
-  )}</span>
-  <span class="intent-row-time">${escapeHtml(
-    formatTime(
-      structured.time?.start,
-      structured.time?.end,
-      new Date().toISOString(),
-    ),
-  )}</span>`;
-  return row;
-};
-
-export const createHome = ({ client, el }) => {
+export const createHome = ({ client, el, onCounts }) => {
   let items = [];
   let cursor = null;
 
@@ -86,6 +70,7 @@ export const createHome = ({ client, el }) => {
       ? matched.map((item) => latchCardHtml(item, nowIso)).join("")
       : emptyHtml(NO_MATCHED_TITLE, NO_MATCHED_NOTE);
     el.moreButton.hidden = cursor == null; // cursorは不透明文字列(引用#14)
+    onCounts?.({ proposals: candidates.length, matched: matched.length });
   };
 
   const load = async () => {
@@ -107,19 +92,9 @@ export const createHome = ({ client, el }) => {
   };
 
   const loadIntents = async () => {
-    // active一覧(表示)+下書き件数(表示のみ・カウントはactive数)
-    const [active, drafts] = await Promise.all([
-      client.call("GET", "/v1/intents?status=active"),
-      client.call("GET", "/v1/intents?status=draft"),
-    ]);
-    el.intentCount.innerHTML = `Intent <span>${active.items.length}件</span>`;
-    el.intentList.replaceChildren(...active.items.map(intentRow));
-    if (drafts.items.length > 0) {
-      const note = document.createElement("p");
-      note.className = "intent-drafts";
-      note.textContent = `下書き ${drafts.items.length}件`;
-      el.intentList.append(note);
-    }
+    // active数=待機中バッジの供給源(一覧表示はPhase 3の03画面で復活)
+    const data = await client.call("GET", "/v1/intents?status=active");
+    onCounts?.({ standby: data.items.length });
   };
 
   return { load, loadMore, loadIntents };

@@ -1,5 +1,5 @@
-// エントリポイント(M3 ws-7 design §3)。共通初期化(テーマ・セッション・
-// トークンパネル)+ルーター起動のみを担う。入力画面の配線は screen.js、
+// エントリポイント(M3 ws-7 design §3・UI v2 Phase 1)。共通初期化(セッション・
+// トークンパネル・シェル)+ルーター起動のみを担う。入力画面の配線は screen.js、
 // ホーム・詳細は latch/* へ委譲。意図文言をログに出さない(01 §21)。
 import { initChrome } from "./ui/chrome.js";
 import { createClient } from "./api/client.js";
@@ -41,22 +41,30 @@ const client = {
   },
 };
 
-// --- 画面装飾(テーマ・popover・トースト・モーダル) -------------------------
-// Active Intent一覧をpopoversへ追加(ws-7 §2.2・関数は無変更)
+const appState = createAppState({ client });
+
+// --- シェル(navバッジ・aria-current・右上toast・dialog・popover) -------------
 const chrome = initChrome({
-  themeButton: $("#themeButton"),
   popovers: [
     { button: $("#noticeButton"), panel: $("#noticePopover") },
     { button: $("#accountButton"), panel: $("#accountPopover") },
-    { button: $("#intentCountButton"), panel: $("#intentPopover") },
   ],
   toast: $("#toast"),
+  appDialog: $("#appDialog"),
   modal: {
     root: $("#confirmationModal"),
     closeButton: $("#modalClose"),
     returnButton: $("#returnButton"),
   },
 });
+
+// アカウントボタンは表示名のイニシャル1字(失敗時は空のまま)
+if (session.hasTokens()) {
+  appState
+    .ensureMe()
+    .then((me) => chrome.setAccountInitial(Array.from(me.display_name ?? "?")[0] ?? "?"))
+    .catch(() => {});
+}
 
 // --- 開発用トークンパネル(design §2.3・トークン未設定時のみ表示) ----------
 const tokenPanel = $("#tokenPanel");
@@ -98,16 +106,14 @@ $("#tokenConnect").addEventListener("click", async () => {
 initIntentScreen({ client, chrome });
 
 // --- ホーム・詳細・通報・お知らせ・設定(ws-7 §2.1〜§2.2・ws-8 §2.1〜§2.7) --
-const appState = createAppState({ client });
 const home = createHome({
   client,
   el: {
     candidateList: $("#candidateList"),
     matchedList: $("#matchedList"),
     moreButton: $("#moreButton"),
-    intentCount: $("#intentCountButton"),
-    intentList: $("#intentList"),
   },
+  onCounts: (partial) => chrome.setCounts(partial), // 待機中・候補・成立バッジ
 });
 $("#moreButton").addEventListener("click", () => home.loadMore().catch(() => {}));
 
@@ -168,14 +174,25 @@ $("#settingsButton").addEventListener("click", () => {
   $("#accountButton").setAttribute("aria-expanded", "false");
 });
 
+// ルート→topnav/tabbarの強調先(詳細=候補扱いは暫定・Phase 3/4で提案/成立を分岐)
+const NAV_BY_ROUTE = {
+  home: "deposit",
+  confirm: "deposit", // 02は「預ける」流れの中(Phase 2)
+  standby: "standby",
+  latch: "proposals",
+};
+
 const router = createRouter({
   screens: {
     home: $("#homeScreen"),
+    confirm: $("#confirmScreen"), // UI v2 02(Phase 2で実装)
+    standby: $("#standbyScreen"), // UI v2 03(Phase 3で実装)
     latch: $("#detailScreen"),
     settings: $("#settingsScreen"),
     onboarding: $("#onboardingScreen"),
   },
   onRoute: (route) => {
+    chrome.setCurrentNav(NAV_BY_ROUTE[route.name] ?? null);
     if (route.name === "home") {
       home.load().catch(() => {}); // 通信失敗時は空状態のまま(再訪で再試行)
       home.loadIntents().catch(() => {});
@@ -183,9 +200,10 @@ const router = createRouter({
       settings.show();
     } else if (route.name === "onboarding") {
       consent.show().catch(() => {});
-    } else {
+    } else if (route.name === "latch") {
       detail.show(route.id).catch(() => {});
     }
+    // confirm・standbyはPhase 2/3までプレースホルダ表示のみ
   },
 });
 router.start();

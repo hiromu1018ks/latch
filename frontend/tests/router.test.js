@@ -43,6 +43,13 @@ describe("parseHash(design §2.1)", () => {
     expect(parseHash("#/onboarding/x")).toEqual({ name: "home", id: null });
   });
 
+  it("#/confirm・#/standby を解析する(UI v2 02/03・厳密一致)", () => {
+    expect(parseHash("#/confirm")).toEqual({ name: "confirm", id: null });
+    expect(parseHash("#/standby")).toEqual({ name: "standby", id: null });
+    expect(parseHash("#/confirm/")).toEqual({ name: "home", id: null });
+    expect(parseHash("#/standby/x")).toEqual({ name: "home", id: null });
+  });
+
   it("#/settings/ など末尾に追加がある場合は未知hashとしてホームへ", () => {
     expect(parseHash("#/settings/")).toEqual({ name: "home", id: null });
     expect(parseHash("#/settings/x")).toEqual({ name: "home", id: null });

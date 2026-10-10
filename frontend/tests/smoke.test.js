@@ -12,7 +12,7 @@ describe("frontend雛形", () => {
     expect(html()).toContain('src="/src/main.js"');
   });
 
-  it("prototypeの主要IDを維持する(実装基準・00 運用ルール6)", () => {
+  it("入力画面の主要IDを維持する(暫定表示・Phase 2で01/02へ再構成)", () => {
     const ids = [
       "intentText",
       "characterCount",
@@ -31,17 +31,16 @@ describe("frontend雛形", () => {
       "confirmationModal",
       "modalClose",
       "returnButton",
-      "themeButton",
     ];
     for (const id of ids) {
       expect(html()).toContain(`id="${id}"`);
     }
   });
 
-  it("スタイルとアセットが参照される", () => {
+  it("スタイルが参照され、v2トークン「夜と翡翠」が定義される", () => {
     expect(html()).toContain('href="/styles.css"');
-    // テクスチャはstyles.cssから参照される(prototype実態に合わせた検証)
-    expect(css()).toContain("paper-milk.png");
+    expect(css()).toContain("--acc:#5FD4AE");
+    expect(css()).toContain("--bg:#0B0C12");
   });
 });
 
@@ -59,5 +58,43 @@ describe("本実装の構成(Task 11)", () => {
   it("初期テキストは空(サンプル文言を残さない・文言対応表)", () => {
     expect(html()).toContain('id="characterCount">0 / 300');
     expect(html()).not.toContain("天文館");
+  });
+});
+
+describe("UI v2シェル(Phase 1)", () => {
+  it("head: theme-color・viewport-fit=cover(D-12: フォントはself-hostのみ)", () => {
+    expect(html()).toContain('name="theme-color" content="#0B0C12"');
+    expect(html()).toContain("viewport-fit=cover");
+    expect(html()).not.toContain("fonts.googleapis.com"); // CDN不使用
+    expect(css()).toContain("@fontsource/zen-old-mincho");
+    expect(css()).toContain("@fontsource/zen-kaku-gothic-new");
+    expect(css()).toContain("@fontsource/ibm-plex-mono");
+  });
+
+  it("テーマ切替機構は存在しない(gap分析§1)", () => {
+    expect(html()).not.toContain("themeButton");
+    expect(html()).not.toContain("data-theme");
+    expect(html()).not.toContain("latch-theme");
+    expect(css()).not.toContain("paper-milk.png"); // paperテクスチャ廃止
+  });
+
+  it("Phosphorアイコン(ph-クラス)を使わない(インラインSVGへ置換)", () => {
+    expect(html()).not.toMatch(/class="ph /);
+    expect(html()).not.toMatch(/ph ph-/);
+  });
+
+  it("skip link・視覚隠し・ドットグリッド・<dialog>の土台がある", () => {
+    expect(html()).toContain('class="skip" href="#main"');
+    expect(html()).toContain('id="appDialog"');
+    expect(css()).toContain(".vh{");
+    expect(css()).toContain(".ground{");
+    expect(css()).toContain(".dlg::backdrop");
+  });
+
+  it("focus-visible・prefers-reduced-motion・720pxのtabbar規定", () => {
+    expect(css()).toContain(":focus-visible{outline:2px solid var(--acc);outline-offset:3px}");
+    expect(css()).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(css()).toContain("@media (max-width:720px)");
+    expect(css()).toContain("env(safe-area-inset-bottom)");
   });
 });

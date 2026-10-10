@@ -62,18 +62,18 @@ describe("renderConditions(design §2.5・§2.7・§2.8)", () => {
     }
   });
 
-  it("soft行はph-flag・追加行と同型", () => {
+  it("soft行はplusアイコン・追加行と同型(SVGはプロトタイプ由来)", () => {
     const state = applyParseResult(createFormState(), PARSED);
     renderConditions({ listEl: listEl(), state, now: NOW });
     const softRow = listEl().querySelector('[data-label="その他"]');
-    expect(softRow.querySelector(".condition-icon i").className).toContain("ph-flag");
+    expect(softRow.querySelector(".condition-icon svg").dataset.icon).toBe("plus");
   });
 
-  it("NG行はph-warning・data-label=NG・直下に注意文言(02 D-04)", () => {
+  it("NG行はinfoアイコン・data-label=NG・直下に注意文言(02 D-04)", () => {
     const state = applyParseResult(createFormState(), PARSED);
     renderConditions({ listEl: listEl(), state, now: NOW });
     const ngRow = listEl().querySelector('[data-label="NG"]');
-    expect(ngRow.querySelector(".condition-icon i").className).toContain("ph-warning");
+    expect(ngRow.querySelector(".condition-icon svg").dataset.icon).toBe("info");
     const note = ngRow.querySelector(".ng-note");
     expect(note.textContent).toBe(NG_NOTE_TEXT);
     expect(NG_NOTE_TEXT).toBe("この条件は確実には除外できません。参考条件として扱います");

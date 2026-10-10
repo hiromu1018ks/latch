@@ -28,7 +28,7 @@ export const createReportFlow = ({ client, chrome, modal }) => {
         : ""; // 提案1対1: 対象表示なし(非開示のため)
     modal.innerHTML = `
       <section class="confirmation report-dialog" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
-        <button type="button" class="modal-close" data-role="report-close" aria-label="閉じる"><i class="ph ph-x"></i></button>
+        <button type="button" class="modal-close" data-role="report-close" aria-label="閉じる"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
         <p class="section-kicker centered"><span></span>REPORT</p>
         <h2 id="reportTitle">通報</h2>
         ${targetHtml}

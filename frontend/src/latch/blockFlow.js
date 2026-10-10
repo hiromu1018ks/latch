@@ -37,7 +37,7 @@ export const createBlockFlow = ({ client, chrome, modal, onBlocked }) => {
           .join("")}</fieldset>`;
     modal.innerHTML = `
       <section class="confirmation block-dialog" role="dialog" aria-modal="true" aria-labelledby="blockTitle">
-        <button type="button" class="modal-close" data-role="block-close" aria-label="閉じる"><i class="ph ph-x"></i></button>
+        <button type="button" class="modal-close" data-role="block-close" aria-label="閉じる"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
         <p class="section-kicker centered"><span></span>BLOCK</p>
         <h2 id="blockTitle">ブロック</h2>
         ${targetHtml}

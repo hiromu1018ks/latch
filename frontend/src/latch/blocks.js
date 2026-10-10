@@ -52,7 +52,7 @@ export const createBlocksSection = ({ client, el, modal }) => {
     if (!pending) return;
     modal.innerHTML = `
       <section class="confirmation block-dialog" role="dialog" aria-modal="true" aria-labelledby="unblockTitle">
-        <button type="button" class="modal-close" data-role="unblock-close" aria-label="閉じる"><i class="ph ph-x"></i></button>
+        <button type="button" class="modal-close" data-role="unblock-close" aria-label="閉じる"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
         <p class="section-kicker centered"><span></span>BLOCK</p>
         <h2 id="unblockTitle">ブロックの解除</h2>
         <p class="block-confirm">${escapeHtml(pending.display_name)}${BLOCK_CONFIRM_SUFFIX}</p>
