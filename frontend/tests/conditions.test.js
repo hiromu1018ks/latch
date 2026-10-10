@@ -117,13 +117,15 @@ describe("renderRows(02の読み取った条件5行)", () => {
     expect(answered(null).value).toBe("2〜4人");
   });
 
-  it("判定不能NGは5行の下にstb注記箱(注意文言は固定文字列)", () => {
+  it("判定不能NGとparse由来softは5行の下に参考条件箱(注意文言は固定文字列)", () => {
     const state = applyParseResult(createFormState(), PARSED);
     renderRows({ listEl: rowsEl(), state, nowIso: NOW });
     const box = rowsEl().querySelector(".ng-box");
+    expect(box.textContent).toContain("軽く飲みたい"); // parse由来soft(D-19補足)
     expect(box.textContent).toContain("会社関係の人は避けたい");
     expect(box.textContent).toContain(NG_NOTE_TEXT);
     expect(NG_NOTE_TEXT).toBe("この条件は確実には除外できません。参考条件として扱います");
+    expect(box.textContent).not.toContain("undefined");
   });
 
   it("各行に編集ボタン(aria-label)がある", () => {

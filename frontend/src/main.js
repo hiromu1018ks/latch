@@ -200,6 +200,7 @@ const router = createRouter({
   onRoute: (route) => {
     chrome.setCurrentNav(NAV_BY_ROUTE[route.name] ?? null);
     if (route.name === "home") {
+      intentScreen.refresh(); // 02での行編集を01のchips・CTAへ反映(再訪時)
       home.load().catch(() => {}); // 通信失敗時は空状態のまま(再訪で再試行)
       home.loadIntents().catch(() => {});
     } else if (route.name === "confirm") {

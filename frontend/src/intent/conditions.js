@@ -212,11 +212,18 @@ const peopleFieldset = (state) => {
   return box;
 };
 
-// 判定不能NG(02 D-04) — 02の5行の下にstb情報箱で出す(送信内容から取り零さない)
+// 参考条件(判定不能NG=02 D-04・parse由来soft=D-19補足)— 02の5行の下に
+// stb情報箱で出す。いずれもsoft_constraints/ng_unverifiableとして送信される
+// ため、表示から取り零さない(プロトタイプ02に相当行はない=本実装の補完)
 const ngNoteBox = (state) => {
-  if (state.ngRows.length === 0) return null;
+  if (state.softRows.length === 0 && state.ngRows.length === 0) return null;
   const box = document.createElement("div");
   box.className = "ng-box";
+  for (const row of state.softRows) {
+    const line = document.createElement("p");
+    line.textContent = `「${row.text}」— 参考条件として扱います`;
+    box.append(line);
+  }
   for (const row of state.ngRows) {
     const line = document.createElement("p");
     line.textContent = `「${row.text}」— ${NG_NOTE_TEXT}`;

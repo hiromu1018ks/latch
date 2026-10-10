@@ -136,11 +136,9 @@ export const initIntentScreen = ({ client, chrome, state }) => {
       // parse失敗時はこの後のslotCount判定で遷移を見合わせる
     }
     busy = false;
-    if (refreshChips() === 0) {
-      refreshActions();
-      return;
-    }
-    location.hash = "#/confirm";
+    const slotCount = refreshChips();
+    refreshActions(); // busy描画を確実に戻す(遷移後に01へ戻ってもCTAがbusyのまま残らない)
+    if (slotCount > 0) location.hash = "#/confirm";
   };
 
   submitButton.addEventListener("click", () => {
@@ -207,6 +205,8 @@ export const initIntentScreen = ({ client, chrome, state }) => {
       intentText.focus();
       intentText.select();
     },
+    // 02で行編集した後に01へ戻ったときへ(chips・CTAを最新のstateで描き直す)
+    refresh: refreshActions,
     screen: root,
     composer,
   };
