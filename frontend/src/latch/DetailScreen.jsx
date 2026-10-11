@@ -410,7 +410,12 @@ export const DetailScreen = ({ client, appState, latchId }) => {
         onConfirmDecline={confirmDecline}
         onCancelDecline={cancelDecline}
         onUndo={undo}
-        onOpenChat={() => setView("matched")}
+        onOpenChat={() => {
+          // チャットを開いた時点でallInの一度きり表示は消費する。開いた後の
+          // 再取得(参加取り消しなど)でallInカードへ戻さない(phase 7の実機E2Eで検出)
+          showAllInOnceRef.current = false;
+          setView("matched");
+        }}
         onOpenSafety={() =>
           setSafety({
             latchId: latch.id,

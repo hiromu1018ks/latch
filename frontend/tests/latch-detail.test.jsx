@@ -313,6 +313,47 @@ describe("04 提案姿(全面再構成・プロトタイプ04)", () => {
     });
   });
 
+  it("チャットを開いたあとの再取得は05を保つ(allInの一度きり表示は消費済み)", async () => {
+    // phase 7実機E2Eで検出した回帰: チャットを開いた後の再取得(参加取り消しなど)
+    // でallInカードへ戻ると、取り消し後の姿が出せない
+    const matched = baseLatch(
+      { status: "matched", my_response: "yes", remaining_responses: 0 },
+      minimalProposal,
+    );
+    matched.participants = participants;
+    let state = baseLatch();
+    mountDetail(async (method, path) => {
+      if (path.endsWith("/leave")) return { latch: { id: LATCH_ID, status: "matched", left: true } };
+      if (path.endsWith("/response")) {
+        state = matched;
+        return { latch: matched };
+      }
+      if (path === `/v1/latches/${LATCH_ID}/messages?limit=100`) {
+        return { items: [], next_cursor: null };
+      }
+      return { latch: state };
+    });
+    await waitFor(() =>
+      expect(root().querySelector('[data-role=respond][data-value="yes"]')).not.toBeNull(),
+    );
+    fireEvent.click(root().querySelector('[data-role=respond][data-value="yes"]'));
+    await waitFor(() => expect(root().textContent).toContain("チャットを開く"));
+    fireEvent.click(root().querySelector("[data-role=open-chat]"));
+    await waitFor(() => expect(root().querySelector("h1").textContent).toBe(LATCHED_TITLE));
+    // チャットを開いた後の再取得(取り消し導線から)でもallInへ戻らない
+    fireEvent.click(root().querySelector("[data-role=cancel-entry]"));
+    await waitFor(() => {
+      expect(document.querySelector("#appDialog h2")?.textContent).toBe(CANCEL_DIALOG_TITLE);
+    });
+    const confirm = [...document.querySelectorAll("#appDialog button")].find(
+      (b) => b.textContent === "取り消す",
+    );
+    fireEvent.click(confirm);
+    await waitFor(() => {
+      expect(root().querySelector("h1").textContent).toBe(LEFT_TITLE);
+    });
+  });
+
   it("離脱時のflush: 未送信の見送りを送る(理由つき)", async () => {
     const calls = [];
     const latch = baseLatch();
