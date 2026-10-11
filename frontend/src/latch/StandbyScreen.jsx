@@ -291,8 +291,12 @@ export const StandbyScreen = ({ client }) => {
     const wasMain = items[0]?.id === target.id;
     try {
       await client.call("DELETE", `/v1/intents/${target.id}`);
-      setItems((prev) => prev.filter((item) => item.id !== target.id));
+      const nextItems = items.filter((item) => item.id !== target.id);
+      setItems(nextItems);
       setDrafts((prev) => prev.filter((item) => item.id !== target.id));
+      // ヘッダー/タブバーの待機中バッジも 新件数へ追従させる
+      // (画面内のバッジだけでなくchrome側へも供給する・phase 7実機E2Eで検出)
+      setCounts({ standby: nextItems.length });
       if (wasMain) setGoneMain(target); // 取り下げ済みカードを表示し続ける
       showToast(WITHDRAWN_TOAST_TEXT);
       await refreshLatches().catch(() => {}); // 候補消滅をバッジへ反映

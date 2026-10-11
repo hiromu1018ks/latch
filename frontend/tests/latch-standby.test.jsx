@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { StandbyScreen } from "../src/latch/StandbyScreen.jsx";
-import { AppDialog, ChromeProvider, ToastArea } from "../src/ui/chrome.jsx";
+import { AppDialog, ChromeProvider, ToastArea, useChrome } from "../src/ui/chrome.jsx";
 
 // 旧standby.js(mainCardHtml等のHTML組立+createStandby配線)の試験を、
 // Reactコンポーネント(StandbyScreen・UI v2 Phase 6)のRTLへ書き換えたもの。
@@ -50,8 +50,14 @@ const mountStandby = (callImpl, { hash } = {}) => {
   if (hash != null) window.location.hash = hash;
   const client = { call: vi.fn(callImpl) };
   const chrome = { current: null };
+  // chrome contextの値検査用(バッジ供給の試験で使う)
+  const Probe = () => {
+    chrome.current = useChrome();
+    return null;
+  };
   render(
     <ChromeProvider>
+      <Probe />
       <StandbyScreen client={client} />
       {/* 取り下げdialog(chrome.openAppDialog)と候補トーストの受け皿 */}
       <AppDialog />
@@ -161,6 +167,27 @@ describe("取り下げ済み状態(プロトタイプ03のmainGone)", () => {
     });
     expect(mainCard().querySelector("a.sb-again").getAttribute("href")).toBe("#/");
     expect(mainCard().textContent).toContain("もう一度預ける");
+  });
+
+  it("取り下げでchrome countsのstandbyも減る(ヘッダー/タブバーのバッジ追従)", async () => {
+    // phase 7実機E2Eで検出: 画面内のバッジは減るがchrome側の供給が更新されず、
+    // ヘッダーの「待機中」バッジが実件数より多く残る
+    const { chrome } = mountStandby(async (method, path) => {
+      if (method === "DELETE") return null;
+      if (path === "/v1/intents?status=active") {
+        return { items: [intent()], next_cursor: null };
+      }
+      if (path === "/v1/intents?status=draft") return { items: [], next_cursor: null };
+      return { items: [], next_cursor: null };
+    });
+    await waitFor(() => expect(chrome.current).not.toBeNull());
+    await waitFor(() => expect(chrome.current.counts.standby).toBe(1));
+    fireEvent.click(mainCard().querySelector("button[aria-haspopup='dialog']"));
+    const buttons = [...document.querySelectorAll("#appDialog button")];
+    buttons[1].click(); // 取り下げる=DELETE
+    await waitFor(() => {
+      expect(chrome.current.counts.standby).toBe(0);
+    });
   });
 });
 
