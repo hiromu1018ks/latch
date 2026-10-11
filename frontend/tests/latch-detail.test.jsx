@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { ApiError } from "../src/api/session.js";
 import {
@@ -100,7 +100,14 @@ const root = () => document.getElementById("detailScreen");
 const appDialogText = () => document.querySelector("#appDialog")?.textContent ?? "";
 const plainToast = () => document.querySelector(".toast-msg--plain")?.textContent ?? "";
 
+// 日付語(「今夜」)は実行日の実時計で決まるためfixtureの日付(2026-10-10)へ
+// 固定する(Dateのみ偽装・タイマーは実のまま=waitFor・1秒更新は実時間で動く)
+beforeEach(() => {
+  vi.useFakeTimers({ now: new Date("2026-10-10T12:00:00+09:00"), toFake: ["Date"] });
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   window.location.hash = "";
 });

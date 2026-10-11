@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { useState } from "react";
 import { EXTRAS, NG_NOTE_TEXT, REQUIRED_NOTE_TEXT, editors, readSlots, rowModels } from "../src/intent/conditions.js";
@@ -7,6 +7,11 @@ import { applyParseResult, createFormState } from "../src/intent/state.js";
 
 // now = JST 2026-10-10(土) 12:00
 const NOW = "2026-10-10T12:00:00+09:00";
+// 日付語(「今日」)は実行日の実時計で決まるためfixtureの日付へ固定する
+// (Dateのみ偽装・タイマーは実のまま=RTLのwaitForは実時間で動く)
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const PARSED = {
   category: { primary: "drinking", secondary: null },
@@ -86,6 +91,7 @@ const commitEditor = async (text) => {
 beforeEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  vi.useFakeTimers({ now: new Date(NOW), toFake: ["Date"] });
 });
 
 describe("readSlots(01 composerの読み取りchips)", () => {

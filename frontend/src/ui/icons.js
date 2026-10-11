@@ -1,6 +1,6 @@
 // SVGアイコン一式(prototype/v2 01〜05のSVGをそのまま写したもの。
-// Phosphor Icons Webフォントの廃止に伴い、JSで組み立てるDOMはここから
-// アイコンを取得する。pathデータ・stroke幅はプロトタイプの該当SVGが正源。
+// 消費側はsrc/ui/Icon.jsx(React版)。Phase 1時点のicon/logoSvg/iconHtml
+// (DOM組立)はPhase 6のReact載せ替えで未使用になり、Phase 7の清掃で削除した。
 // 独自のアイコンは足さない(UI v2 Phase 1の規律)。
 
 // 各アイコン: { viewBox, sw(stroke-width), body } — bodyはプロトタイプの
@@ -145,43 +145,4 @@ export const ICONS = {
     sw: 4,
     body: '<path d="M20.5 5 A15 15 0 0 0 20.5 35"></path><path d="M20.5 5 A15 15 0 0 1 20.5 35"></path>',
   },
-};
-
-// ロゴ(ヘッダー・トースト用)。左右2弧の色はプロトタイプ固定
-// (左弧=t1・右弧=acc)のためcurrentColorではなく個別指定。
-export const logoSvg = (size = 30) => {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  el.setAttribute("width", size);
-  el.setAttribute("height", size);
-  el.setAttribute("viewBox", "0 0 40 40");
-  el.setAttribute("fill", "none");
-  el.setAttribute("aria-hidden", "true");
-  el.innerHTML =
-    '<path d="M19 5 A15 15 0 0 0 19 35" style="stroke: var(--t1)" stroke-width="3.4" stroke-linecap="round"></path>' +
-    '<path d="M22 5 A15 15 0 0 1 22 35" style="stroke: var(--acc)" stroke-width="3.4" stroke-linecap="round"></path>';
-  return el;
-};
-
-export const icon = (name, size = 18) => {
-  const def = ICONS[name];
-  if (!def) throw new Error(`unknown icon: ${name}`);
-  const el = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  el.setAttribute("width", size);
-  el.setAttribute("height", size);
-  el.setAttribute("viewBox", def.viewBox);
-  el.setAttribute("fill", "none");
-  el.setAttribute("stroke", "currentColor");
-  el.setAttribute("stroke-width", def.sw);
-  el.setAttribute("stroke-linecap", "round");
-  el.setAttribute("stroke-linejoin", "round");
-  el.setAttribute("aria-hidden", "true");
-  el.dataset.icon = name;
-  el.innerHTML = def.body;
-  return el;
-};
-
-// innerHTMLテンプレート文字列用(属性値は静的なのでエスケープ不要)
-export const iconHtml = (name, size = 18, extraClass = "") => {
-  const cls = extraClass ? ` class="${extraClass}"` : "";
-  return icon(name, size).outerHTML.replace("<svg", `<svg${cls}`);
 };
