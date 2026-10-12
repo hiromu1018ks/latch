@@ -422,7 +422,7 @@ BEFORE(§2.3)から変化したセルのみ記載(`implemented(spec:line)`=実E2
 | A2 | 有効トークン接続 | happy implemented(auth.spec.js:14) |
 | A3 | 無効トークン接続 | validation implemented(auth.spec.js:26) |
 | A4 | API停止中接続 | error implemented(auth.spec.js:33) |
-| A5 | 再訪・自動refresh | happy/persist **known-failure(findings#1)**(auth.spec.js fixme) |
+| A5 | 再訪・自動refresh | happy/persist implemented(auth.spec.js:43・findings#1修正済み) |
 | A6 | refresh失効→パネル | error/state implemented(auth.spec.js:52) |
 | B1 | 未同意→onboarding誘導 | state implemented(consent.spec.js:8) |
 | B2 | 422 CONSENT_REQUIRED検出 | error/state implemented(consent.spec.js:16) |
@@ -449,7 +449,7 @@ BEFORE(§2.3)から変化したセルのみ記載(`implemented(spec:line)`=実E2
 | J3 | ≤720px tabbar | happy implemented(misc.spec.js:20) |
 | J4 | お知らせpopover | happy/persist/state implemented(errors-and-settings.spec.js:58) |
 
-**AFTER時点で open なセルはゼロ**(適用91= vitest✅ + E2E implemented + known-failure 2セル(A5) + n/a)。
+**AFTER時点で open なセルはゼロ**(適用91= vitest✅ + E2E implemented + n/a。findings#1は2026-10-12修正済み・A5もimplemented)。
 
 ### Phase 1 完了チェックリスト
 
@@ -500,9 +500,9 @@ BEFORE(§2.3)から変化したセルのみ記載(`implemented(spec:line)`=実E2
 | 実ブラウザ×実APIのE2Eテスト | **0件** | **35件**(2回連続全緑・~24秒・chromium) |
 | 振る舞い×次元セル(適用91) | ✅57 / ◐32 / —2(すべてモック証明) | openゼロ(vitest✅+E2E implemented+known-failure 2+waived) |
 | P0ギャップ(横断アクセス) | 1件open | implemented(cross-user.spec.js:8) |
-| P1ギャップ | 7件open | 6件implemented+1件known-failure(findings#1) |
+| P1ギャップ | 7件open | 7件implemented(findings#1は当日修正・A5のfixme解除) |
 | P2ギャップ | 9件open | 9件implemented |
-| 発見したアプリバグ | — | **findings#1(並行refresh競合でfamily失効)** |
+| 発見したアプリバグ | — | **findings#1(並行refresh競合でfamily失効)→ 当日修正済み**(client.js単一フライト化) |
 
 ### 主要な新規証明(既存367件のvitestでは証明されていなかったもの)
 
@@ -516,6 +516,6 @@ BEFORE(§2.3)から変化したセルのみ記載(`implemented(spec:line)`=実E2
 ### 正直な完了声明
 
 - **完了**: すべてのギャップ(G-01〜G-17)が終端状態(implemented / known-failure / waived)。再分析パス1で新規P0/P1なし。vitest 367件は無影響(緑維持)
-- **既知の未解決**: findings#1(アプリバグ・A5のみtest.fixme)。**本体修正後はfixme解除のみで回帰試験が走る**
+- **既知の未解決**: なし(findings#1は2026-10-12にclient.jsへ単一フライト化で修正済み。単体client.test.js+実E2E A5の両方で解消を確認)
 - **対象外**: Cloudflare実装(8787)向けE2E project(契約試験130件がAPIパリティを担保するため本パスでは対象外とした。必要時にwebServer追加で拡張可能)・W-01〜W-04のwaived(理由はgaps.md)
 - **E2Eの実行前提**: compose常設環境(`make up`+`make migrate`)・chromium導入済み・`cd frontend && npx playwright test`

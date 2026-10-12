@@ -79,6 +79,33 @@ describe("createClient.call", () => {
     expect(session.current().refreshToken).toBe("rt-2"); // 回転保存
   });
 
+  it("並行401はrefresh 1回に束ねられ、両方の再送が回転後のaccessで通る(findings#1)", async () => {
+    const session = makeSession();
+    session.save({ refresh_token: "rt-1" }); // accessなし=新規タブ再訪の形状
+    const unauthorized = { error: { code: "UNAUTHENTICATED", message: "x", details: null } };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(401, unauthorized))
+      .mockResolvedValueOnce(jsonResponse(401, unauthorized))
+      .mockResolvedValueOnce(jsonResponse(200, { access_token: "at-2", refresh_token: "rt-2" }))
+      .mockImplementation(async () => jsonResponse(200, { ok: true }));
+    const client = createClient({ session, fetchImpl });
+    const [a, b] = await Promise.all([
+      client.call("GET", "/v1/intents?status=active"),
+      client.call("GET", "/v1/latches?limit=20"),
+    ]);
+    expect(a).toEqual({ ok: true });
+    expect(b).toEqual({ ok: true });
+    const refreshCalls = fetchImpl.mock.calls.filter(([url]) => url === "/v1/auth/refresh");
+    expect(refreshCalls).toHaveLength(1); // 同一refreshの並行再利用=族失効を起こさない
+    expect(fetchImpl).toHaveBeenCalledTimes(5); // 2要求+refresh1+再送2
+    const retries = fetchImpl.mock.calls.filter(
+      ([, init]) => init.headers.Authorization === "Bearer at-2",
+    );
+    expect(retries).toHaveLength(2);
+    expect(session.current().refreshToken).toBe("rt-2");
+  });
+
   it("401→refresh失敗→clear+onSessionExpired+ApiError(Review Focus 2)", async () => {
     const session = makeSession();
     session.save({ access_token: "expired", refresh_token: "rt-dead" });

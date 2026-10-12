@@ -38,10 +38,9 @@ test("API到達不能時は「接続できませんでした」を出す(A4)", a
   await expect(page.getByText("接続できませんでした。APIの起動を確認してください。")).toBeVisible();
 });
 
-// known failure: findings#1 — 起動時の並行API呼び出しが単一フライト保護のない
-// refreshを同時実行し、回転refreshの再利用検知がfamily全体を失効させる(実API再現済み:
-// 同一refreshの並行更新=200/401、正規の新トークン再試行も401)。本体修正後に有効化。
-test.fixme("access切れ+refresh保持の再訪は自動refreshでAPIが継続する(A5)", async ({ page }) => {
+// findings#1(並行refresh競合で族失効)はclient.jsの単一フライト化で修正済み。
+// 本テストは新規タブ再訪(accessなし+refresh保持)の正規経路を実APIで証明する。
+test("access切れ+refresh保持の再訪は自動refreshでAPIが継続する(A5)", async ({ page }) => {
   const user = await provisionUser({});
   await page.context().addInitScript(([r]) => localStorage.setItem("latch-refresh", r), [user.refresh]);
   await page.goto("/#/standby");

@@ -13,7 +13,7 @@
 | ID | Behavior | Dimension | Priority | Status | Notes |
 |---|---|---|---|---|---|
 | G-02 | 主幹作成フロー: 入力→parse→確認→預ける→03着地→永続(C1/C2/C5/D5/E1) | happy, validation, state, persist | P1 | implemented(main-flow.spec.js:29・C2:10,15/C4:22/C5:65) | 実APIユーザーで01に「天文館 今夜19時から 2人で 飲み」等(既存7地物の範囲)を入力→debounce parse→02で5条件確認→預ける→`#/standby?deposited=1`着地→**リロードでIntentが残る**。C1のcomposer配線(型入力→chips→CTA有効化)はunit全体で未証明のため本E2Eが最初の証明になる(OBS-03) |
-| G-03 | 認証・セッション実フロー(A2/A3/A4/A5/A6) | happy, validation, error, state, persist | P1 | implemented(auth.spec.js:8-66・ただしA5のみknown-failure(findings#1)でfixme) | CLI発行IdPトークン→開発用パネル実操作(有効=接続/無効=「トークンが無効です」/route abort=「接続できませんでした」)→storage実永続→再訪で継続。A5はaccess破棄+refresh残存での再訪で自動refreshを観測。TokenPanelはunitで書けない構造(OBS-02)のためE2Eが唯一の証明場所 |
+| G-03 | 認証・セッション実フロー(A2/A3/A4/A5/A6) | happy, validation, error, state, persist | P1 | implemented(auth.spec.js:8-66・A5はfindings#1修正後にfixme解除で36件緑) | CLI発行IdPトークン→開発用パネル実操作(有効=接続/無効=「トークンが無効です」/route abort=「接続できませんでした」)→storage実永続→再訪で継続。A5はaccess破棄+refresh残存での再訪で自動refreshを観測。TokenPanelはunitで書けない構造(OBS-02)のためE2Eが唯一の証明場所 |
 | G-04 | 同意ゲート実フロー(B1/B2/B3) | error, state, happy, persist | P1 | implemented(consent.spec.js:8,16,31) | 未同意ユーザー(登録のみ・consentなし)で起動→`#/onboarding`誘導→01入力でparse 422 CONSENT_REQUIRED→トースト+誘導→オンボーディングで同意→再訪で誘導なし。App配線(起動時・422横断ラップ)がunit未証明のためE2Eが本丸 |
 | G-05 | 回答・undo実フロー(G2/G5/G6・E6込み) | happy, state, error | P1 | implemented(response.spec.js:8,19,33,44,59,71) | latch fixture(契約harness `reference_harness.py`のactor provisioning流用)で04を開く→YES→allIn/05遷移→undo→**open復帰(2択の再表示)**→再undoで409収束。**G5(open復帰)はunitにアサーション自体が存在しない**(FG-07)最重要の新規証明。着地時トースト(E6)もここで観測 |
 | G-06 | 取り下げの永続化(E3 persist) | persist | P1 | implemented(intent-lifecycle.spec.js:8) | active Intent作成→03「取り下げる」→dialog確認→リロード/再訪でIntentが消えている(バッジも0)。withdraw後のintents再取得が実装にないため(OBS-05)E2Eでのみ証明可能 |
@@ -52,5 +52,5 @@
 ## Phase 3結果(2026-10-12)
 
 - 全ギャップ実装完了: **G-01〜G-17 すべてimplemented**(上表Status列にfile:line)。追加された成果物は `frontend/tests/e2e/`(helpers.js+9specファイル・35テスト)。2回連続全緑(35 passed・1 skipped・~24秒)
-- 唯一の既知失敗: **A5(access切れ再訪の自動refresh)→ findings#1**(実アプリバグのためtest.fixme・本体修正後に有効化)
+- 唯一の既知失敗だったA5(access切れ再訪の自動refresh)は **findings#1をclient.js単一フライト化で修正**しfixme解除(36件緑・2回連続)
 - 実装中に判明した契約の追加事実: 取り下げ(cancelled)後のGET /v1/intents/{id}は本人にも404 / latch proposal jsonbの豊富さ(summary_only全フィールド形)が04画面の全形/最小形を決める

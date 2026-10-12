@@ -35,6 +35,16 @@ const refreshOnce = async (session, fetchImpl) => {
 
 export const createClient = ({ session, fetchImpl, onSessionExpired = () => {} }) => {
   const fetcher = fetchImpl ?? ((...args) => fetch(...args));
+  // 進行中のrefreshは1つに束ねる。回転式refreshは同一トークンの再利用を検知すると
+  // 族ごと失効させるため、並行401(起動時の複数呼び出し等)でそれぞれrefreshを
+  // 投げると正規ユーザーがログアウトされる(findings#1)。
+  let refreshing = null;
+  const refreshShared = () => {
+    refreshing ??= refreshOnce(session, fetcher).finally(() => {
+      refreshing = null;
+    });
+    return refreshing;
+  };
   return {
     call: async (method, path, { body, signal } = {}) => {
       let res = await doFetch(fetcher, method, path, {
@@ -43,7 +53,7 @@ export const createClient = ({ session, fetchImpl, onSessionExpired = () => {} }
         token: session.current().accessToken,
       });
       if (res.status === 401 && session.current().refreshToken) {
-        const refreshed = await refreshOnce(session, fetcher);
+        const refreshed = await refreshShared();
         if (refreshed) {
           res = await doFetch(fetcher, method, path, {
             body,
