@@ -600,4 +600,4 @@ backlog §12③のP1 UI群5項目(U-05・U-08・U-09・U-19+T-01/P-08統合・T-
 
 ### 8.4 残る主要項目(backlog正本)
 
-P1残9項目(P-02・A-02・U-02・U-04・U-07・O-01・O-02等)。次の推奨=④O-01 CI(GitHub Actions)載せ+残りP1 UI群(U-02ブロックdialog・U-04 attendance・U-07 visibility 2値比較)。findingsは#1・#2ともに修正済みで未解消ゼロ。
+P1残7項目(P-02・A-02・U-02・U-04・U-07・O-01・O-02)。次の推奨=④O-01 CI(GitHub Actions)載せ+残りP1 UI群(U-02ブロックdialog・U-04 attendance・U-07 visibility 2値比較)。findingsは#1・#2ともに修正済みで未解消ゼロ。
