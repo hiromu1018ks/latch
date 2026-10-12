@@ -1,6 +1,16 @@
-# 発見事項(findings)— Phase 2時点 2026-10-12
+# 発見事項(findings)— Phase 2時点 2026-10-12 / Phase 3追記あり
 
-アプリバグの記録(known-failure)・false-green・重複クラスタ・観察。**バグを発見したら findings#N として追記し、該当テストはtest.fixme+参照をつける**(現時点でバグは未発見)。
+アプリバグの記録(known-failure)・false-green・重複クラスタ・観察。**バグを発見したら findings#N として追記し、該当テストはtest.fixme+参照をつける**。
+
+## アプリケーションバグ(known-failure)
+
+### findings#1 — 並行refresh競合によるセッションfamily失効(2026-10-12・Phase 3実装中に発見)
+
+- **再現手順**: accessなし+refresh保持のセッションでアプリを開く(新規タブ再訪・access期限後という正規の継続経路)。起動時に複数のAPI呼び出しが並行して401となり、それぞれ `refreshOnce`(frontend/src/api/client.js:20-37)を**単一フライト保護なし**に同時実行する。同一refreshトークンでの2回目の `POST /v1/auth/refresh` が回転ストアの再利用検知に掛かる
+- **実API検証(2026-10-12)**: 同一refreshでの並行更新 → 片方200・他方401。**勝者側が受け取った正規の新トークンでの再試行も401**(=family全体が失効している)
+- **影響**: 該当経由のユーザーは完全ログアウトし、保存済みrefreshも無効(refresh=localStorage 30日の継続設計と矛盾)。P1(コア継続性・認証)
+- **テスト**: `frontend/tests/e2e/auth.spec.js` A5を `test.fixme`(known failure: findings#1)。本体修正後に有効化すれば直ちに回帰試験になる
+- **修正方向(参考)**: client.jsのrefreshOnceに単一フライト化(進行中のrefresh promiseの共有)を入れるか、起動時の最初のAPI呼び出しを直列化する
 
 ## False greens(疑似緑 — partial格下げの根拠)
 

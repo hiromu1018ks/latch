@@ -412,9 +412,44 @@ Cloudflare実装の差分: `/health`がstatusのみ・`/v1/sessions`と`/metrics
 
 ※ authz列が実質G7のみなのはロールが存在しないため(全ユーザー同権・横断は404で隠蔽)。未認証応答(401)はA1のstateで観測する。
 
-### 2.4 Behavior × Dimension matrix — AFTER(Phase 3以降で更新)
+### 2.4 Behavior × Dimension matrix — AFTER(Phase 3完了・2026-10-12)
 
-Phase 3でimplementしたセルを `implemented(file:line)` / `known-failure(findings#N)` / `waived(reason)` で記録する。
+BEFORE(§2.3)から変化したセルのみ記載(`implemented(spec:line)`=実E2Eで証明 / `known-failure(findings#N)`)。記載なきセルはBEFOREのまま(vitest証拠✅/n/a)。specは `frontend/tests/e2e/` 基準。
+
+| # | 振る舞い(短縮名) | E2Eで終端化したセル |
+|---|---|---|
+| A1 | 訪問者→トークンパネル | state implemented(auth.spec.js:8) |
+| A2 | 有効トークン接続 | happy implemented(auth.spec.js:14) |
+| A3 | 無効トークン接続 | validation implemented(auth.spec.js:26) |
+| A4 | API停止中接続 | error implemented(auth.spec.js:33) |
+| A5 | 再訪・自動refresh | happy/persist **known-failure(findings#1)**(auth.spec.js fixme) |
+| A6 | refresh失効→パネル | error/state implemented(auth.spec.js:52) |
+| B1 | 未同意→onboarding誘導 | state implemented(consent.spec.js:8) |
+| B2 | 422 CONSENT_REQUIRED検出 | error/state implemented(consent.spec.js:16) |
+| B3 | オンボーディング同意 | happy/persist implemented(consent.spec.js:31) |
+| C1 | 入力→parseプレビュー | happy implemented(main-flow.spec.js:29) |
+| C2 | 空/300字超→CTA無効 | validation implemented(main-flow.spec.js:10,15) |
+| C3 | parse失敗文言 | error implemented(errors-and-settings.spec.js:8) |
+| C4 | 例文chip挿入 | happy implemented(main-flow.spec.js:22) |
+| C5 | 下書き保存 | happy/persist implemented(main-flow.spec.js:65) |
+| D5 | 預ける→03着地 | persist implemented(main-flow.spec.js:29・リロード再取得で証明) |
+| D7 | 保存429/503 | error implemented(errors-and-settings.spec.js:22・再試行込み) |
+| D8 | 編集モード復元→PATCH | persist implemented(intent-lifecycle.spec.js:37) |
+| E3 | 取り下げ→バッジ更新 | persist implemented(intent-lifecycle.spec.js:8) |
+| G1 | 提案表示 | happy implemented(cross-user.spec.js:19・response.spec.js:8) |
+| G2 | YES回答→allIn/joined | happy/state/persist implemented(response.spec.js:8,33) |
+| G4 | 見送り+理由 | happy/state/persist implemented(response.spec.js:44) |
+| G5 | undo→open復帰 | happy/state implemented(response.spec.js:19・FG-07の新規証明) |
+| G7 | 他ユーザーlatch URL→404 | authz implemented(cross-user.spec.js:8・**P0**) |
+| H2 | .icsダウンロード | happy implemented(chat.spec.js:30・実ダウンロード検証) |
+| H3 | チャット送信 | happy/persist implemented(chat.spec.js:8・2コンテキスト) |
+| H6 | leave | persist implemented(chat.spec.js:44・再訪readonly) |
+| I3 | ブロック一覧・解除 | persist implemented(errors-and-settings.spec.js:79) |
+| J1 | nav・バッジ | happy implemented(response.spec.js:71・実DOM非0件) |
+| J3 | ≤720px tabbar | happy implemented(misc.spec.js:20) |
+| J4 | お知らせpopover | happy/persist/state implemented(errors-and-settings.spec.js:58) |
+
+**AFTER時点で open なセルはゼロ**(適用91= vitest✅ + E2E implemented + known-failure 2セル(A5) + n/a)。
 
 ### Phase 1 完了チェックリスト
 
@@ -437,8 +472,50 @@ Phase 3でimplementしたセルを `implemented(file:line)` / `known-failure(fin
 - [x] false-greenヒットを findings.md へ記録
 - [x] gaps.md 優先度つき・重複除去・アプローチ案つき
 
-## 4. 実装と再分析ループ(Phase 3/4 — 未実施)
+## 4. 実装と再分析ループ(Phase 3/4 — 2026-10-12完了)
 
-Phase 3は gaps.md のP0→P1→P2順にPlaywrightスペックを小バッチで実装(frontend/tests/e2e/)。Phase 4は再分析(最大3パス)。
+**Phase 3(実装)**: gaps.md のP0→P1→P2順に `frontend/tests/e2e/` へ実装(helpers.js+9spec・35テスト)。設計:
 
-## 5. 最終報告(Phase 5 — 未実施)
+- ユーザー払い出しは契約harnessと同じ正規経路(IdP JWTをnode:cryptoでRS256署名→auth/token→users→consent)。1テスト=1ユーザー(レート制限60req/分/user対策)
+- latch fixtureは契約harnessと同じ直接SQL INSERT(IntentはAPI作成・proposalはbuild_proposalのsummary_only全フィールド形)。workerパイプライン非依存=決定的
+- 429系はpage.routeで応答注入(実APIをレート限界まで叩かない)
+- afterAllでベストエフォート後片付け(latch系行SQL削除→ユーザー退会API)
+
+**トリアージで修正したテスト側要因**: psqlのRETURNING出力汚染(コマンドタグ混入)・vh(視覚隠蔽)ラジオへのcheck()・複数要素への文言マッチ・起動時同意ゲートとクリックの競合待ち。
+
+**Phase 4(再分析・パス1/3)**: 実装を通じて新たに観察された振る舞いを評価:
+
+1. 取り下げ後のGET /v1/intents/{id}は本人にも404(契約挙動)→ E3のアサーションに反映済み。新規ギャップなし
+2. 04画面の全形/最小形はlatch proposal jsonbの豊富さで決まる → E2Eでは全形を検証(fixtureがsummary_only形)。最小形はunit(latch-detail:138-147)で証明済み。新規ギャップなし
+3. 並行refresh競合 → **findings#1(A5 known-failure)**として記録。P1の新ギャップではなく既知A5セルの根因確定
+
+**判定: 新規P0/P1ギャップゼロ → 終了条件充足(パス1で終了・ハードキャップ3未満)**。
+
+## 5. 最終報告(Phase 5 — 2026-10-12)
+
+### Before → After
+
+| 指標 | Before(Phase 2時点) | After(Phase 3完了) |
+|---|---|---|
+| 実ブラウザ×実APIのE2Eテスト | **0件** | **35件**(2回連続全緑・~24秒・chromium) |
+| 振る舞い×次元セル(適用91) | ✅57 / ◐32 / —2(すべてモック証明) | openゼロ(vitest✅+E2E implemented+known-failure 2+waived) |
+| P0ギャップ(横断アクセス) | 1件open | implemented(cross-user.spec.js:8) |
+| P1ギャップ | 7件open | 6件implemented+1件known-failure(findings#1) |
+| P2ギャップ | 9件open | 9件implemented |
+| 発見したアプリバグ | — | **findings#1(並行refresh競合でfamily失効)** |
+
+### 主要な新規証明(既存367件のvitestでは証明されていなかったもの)
+
+1. **G7横断アクセス**(P0): 実ユーザー2名+第三者の3セッションで404+ホーム導線を確認
+2. **G5 undo→open復帰**(FG-07): 全テスト資産で最初のアサーション
+3. **主幹フローの実API結合**(OBS-03): composer配線(型入力→parse→chips→CTA)と保存→リロード永続
+4. **TokenPanel実挙動**(OBS-02): 接続・無効トークン・API不能の3分岐
+5. **同意ゲートのApp配線**(B1/B2): 起動時誘導と422横断検出
+6. persist系14セルの実再取得/リロード証明
+
+### 正直な完了声明
+
+- **完了**: すべてのギャップ(G-01〜G-17)が終端状態(implemented / known-failure / waived)。再分析パス1で新規P0/P1なし。vitest 367件は無影響(緑維持)
+- **既知の未解決**: findings#1(アプリバグ・A5のみtest.fixme)。**本体修正後はfixme解除のみで回帰試験が走る**
+- **対象外**: Cloudflare実装(8787)向けE2E project(契約試験130件がAPIパリティを担保するため本パスでは対象外とした。必要時にwebServer追加で拡張可能)・W-01〜W-04のwaived(理由はgaps.md)
+- **E2Eの実行前提**: compose常設環境(`make up`+`make migrate`)・chromium導入済み・`cd frontend && npx playwright test`
