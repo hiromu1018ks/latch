@@ -314,6 +314,8 @@ class CloudflareHarness:
             return await self._seed_notification(params)
         if name == "survey_onboarding_answered":
             return await self._seed_survey_onboarding(params)
+        if name == "ab_assignment":
+            return await self._seed_ab_assignment(params)
         raise KeyError(f"未知のseed: {name}")
 
     async def _seed_survey_onboarding(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -332,6 +334,28 @@ class CloudflareHarness:
             ]
         )
         return {"survey_id": survey_id}
+
+    async def _seed_ab_assignment(self, params: dict[str, Any]) -> dict[str, Any]:
+        """actor(ab2/ab3)へ割付行を直接INSERT(実験行は冪等)。"""
+        actor = params.get("actor", "ab2")
+        experiment = params.get("experiment", "latch_threshold")
+        variant = params.get("variant", "treatment")
+        await self.resolve_token(actor)
+        now = SystemClock().now()
+        await self._d1_batch(
+            [
+                "INSERT INTO ab_experiments (experiment_key, status,"
+                " control_value, treatment_value, started_at, stopped_at)"
+                f" VALUES ('{experiment}', 'running', '0.6', '0.5',"
+                f" {micros(now)}, NULL)"
+                " ON CONFLICT (experiment_key) DO NOTHING",
+                "INSERT INTO ab_assignments (experiment_key, user_id, variant,"
+                " stratum, assigned_at) VALUES"
+                f" ('{experiment}', '{self._user_ids[actor]}', '{variant}',"
+                f" '0', {micros(now)})",
+            ]
+        )
+        return {"experiment": experiment, "variant": variant}
 
     async def _insert_latch(
         self,
@@ -429,6 +453,10 @@ class CloudflareHarness:
         await self._d1_batch(
             [
                 # FK参照元から先に消く(journal→commands・ownership→intents/latches)
+                f"DELETE FROM ab_assignments WHERE user_id IN {u}",
+                "DELETE FROM ab_experiments WHERE experiment_key IN"
+                " ('latch_threshold', 'notification_daily_limit',"
+                " 'notification_concurrent_limit')",
                 f"DELETE FROM survey_responses WHERE user_id IN {u}",
                 "DELETE FROM journal WHERE command_id IN (SELECT id FROM commands"
                 " WHERE target_id IN " + intents + " OR target_id IN " + u + ")",

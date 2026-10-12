@@ -16,6 +16,7 @@ from collections.abc import Awaitable, Callable
 import redis.asyncio as redis_async
 from prometheus_client import start_http_server
 
+from latch.ab.service import make_ab_service
 from latch.core.clock import Clock, SystemClock
 from latch.core.db import create_db_engine
 from latch.events import EventBus, IncomingEvent, make_event_bus
@@ -25,6 +26,7 @@ from latch.llm.gateway import build_worker_gateway
 from latch.notifications.sender import build_push_sender
 from latch.obs.collector import MetricsCollector
 from latch.obs.kpi import KpiJob
+from latch.obs.kpi_alert import KpiAlertJob
 from latch.obs.metrics import observe_pipeline_layer, observe_retrieval
 from latch.settings import Settings
 from latch.worker.backfill import BackfillRunner
@@ -183,13 +185,16 @@ class Worker:
             # コミット直後に送信・失敗はsender側で握る)。real(実FCM)はG3後
             push = build_push_sender(self.clock, self.settings)
             # LatchEngine DI(M2 ws-6・design §2.1案A): JevWorker直後のLayer 5。
-            # redis非依存のため常に構築(注入済み資産は再構築しない)
+            # redis非依存のため常に構築(注入済み資産は再構築しない)。
+            # ab(V1-P4・05 v0.8)=A/B割付の解決(実験行が無ければ挙動不変)
+            ab_service = make_ab_service(engine=engine, clock=self.clock)
             if self._latch is None:
                 self._latch = LatchEngine(
                     engine=engine,
                     clock=self.clock,
                     geo=GeoService(engine),
                     push=push,
+                    ab=ab_service,
                 )
             # GroupEngine DI(M2 ws-7・design §2.1案A): LatchEngine直後の
             # グループ生成・集約。latchはtry_promote委譲用(Noneなら提案化なし)
@@ -199,6 +204,7 @@ class Worker:
                     clock=self.clock,
                     geo=GeoService(engine),
                     latch=self._latch,
+                    ab=ab_service,
                 )
             # ReevalRunner DI(design §2.8): catch-up・Bucket再評価の周期task。
             # pipelineはengineを閉包した直接投入(_run_direct_pipeline)。
@@ -280,6 +286,16 @@ class Worker:
                 reset_task = asyncio.create_task(reset_job.run(stop=self._stop))
             retention_task = asyncio.create_task(retention_job.run(stop=self._stop))
             kpi_task = asyncio.create_task(kpi_job.run(stop=self._stop))
+            # D-02警報線・A/B有害シグナルの週次検知(V1-P4 O-06・05 v0.8規定6)。
+            # kpi_dailyを材料にするためKpiJobと同じくengineのみで動く。
+            # arm用redisはJevCostStoreと共用(無い構成はプロセス内単発化)
+            kpi_alert_job = KpiAlertJob(
+                engine=engine,
+                clock=self.clock,
+                redis=redis_client,
+                interval_sec=self.settings.obs_collect_interval_sec,
+            )
+            kpi_alert_task = asyncio.create_task(kpi_alert_job.run(stop=self._stop))
             collector_task = asyncio.create_task(collector.run(stop=self._stop))
             logger.info("worker started (app_env=%s)", self.settings.app_env)
             await self._stop.wait()
@@ -294,6 +310,7 @@ class Worker:
                 await reset_task
             await retention_task
             await kpi_task
+            await kpi_alert_task
             await collector_task
             logger.info("worker stopped")
         finally:

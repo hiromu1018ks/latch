@@ -1413,10 +1413,13 @@ class D1AtomicRepository:
         expected_revisions: dict[str, int],
         proposal: dict[str, Any],
         now,
+        daily_limit: int | None = None,
+        concurrent_limit: int | None = None,
     ) -> CommandResult:
         """提示(latch_engine.try_promote相当)。
 
         proposal = {intent_ids, score, proposal, candidate_id?}
+        daily_limit/concurrent_limitはA/B適用値(05 v0.8・None=現行定数)。
         - 各Intentの版・status(active/paused)・期限を再確認
         - D-08同時進行上限(3/Intent)・日次上限(6/user)を原子カウントで確認
         - openなlatchのintent集合重複(uq_latches_intent_ids_open)が仲裁
@@ -1444,7 +1447,9 @@ class D1AtomicRepository:
                 return CommandResult(
                     CommandStatus.REJECTED, error_code="INTENT_EXPIRED"
                 )
-        # D-08: 同時進行3/Intent・日次6/user
+        # D-08: 同時進行3/Intent・日次6/user(A/B適用値は引数で上書き)
+        concurrent_cap = concurrent_limit if concurrent_limit is not None else 3
+        daily_cap = daily_limit if daily_limit is not None else 6
         for iid in intent_ids:
             open_count = (
                 await self.db.prepare(
@@ -1456,7 +1461,7 @@ class D1AtomicRepository:
                 .bind(iid)
                 .first()
             )
-            if open_count["c"] >= 3:
+            if open_count["c"] >= concurrent_cap:
                 return CommandResult(
                     CommandStatus.REJECTED, error_code="CONCURRENT_LIMIT"
                 )
@@ -1471,7 +1476,7 @@ class D1AtomicRepository:
                 .bind(uid, day_start_us)
                 .first()
             )
-            if daily["c"] >= 6:
+            if daily["c"] >= daily_cap:
                 return CommandResult(CommandStatus.REJECTED, error_code="DAILY_LIMIT")
 
         latch_id = _new_id()

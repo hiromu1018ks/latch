@@ -55,6 +55,10 @@ ACTOR_SPEC: dict[str, dict[str, Any]] = {
     "sv1": {"register": True, "consent": True},  # Intentなし(not_due固定)
     "sv2": {"register": True, "consent": True},  # onboarding往復チェーン用
     "sv3": {"register": True, "consent": True},  # week4(seedで29日前回答)
+    # ab(V1-P4・05 v0.8)。割付の観測API用(actor単位でseedを分ける)
+    "ab1": {"register": True, "consent": True},  # 割付なし(空配列固定)
+    "ab2": {"register": True, "consent": True},  # seed=latch_threshold/treatment
+    "ab3": {"register": True, "consent": True},  # seed=notification_daily_limit/control
 }
 
 
@@ -222,6 +226,8 @@ class ReferenceHarness:
             return await self._seed_notification(params)
         if name == "survey_onboarding_answered":
             return await self._seed_survey_onboarding(params)
+        if name == "ab_assignment":
+            return await self._seed_ab_assignment(params)
         raise KeyError(f"未知のseed: {name}")
 
     async def _seed_survey_onboarding(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -280,6 +286,36 @@ class ReferenceHarness:
                 },
             )
         return str(res.first()[0])
+
+    async def _seed_ab_assignment(self, params: dict[str, Any]) -> dict[str, Any]:
+        """actor(ab2/ab3)へ割付行を直接INSERT(実験行は冪等)。"""
+        actor = params.get("actor", "ab2")
+        experiment = params.get("experiment", "latch_threshold")
+        variant = params.get("variant", "treatment")
+        await self.resolve_token(actor)
+        async with self._engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO ab_experiments (experiment_key, status,"
+                    " control_value, treatment_value, started_at)"
+                    " VALUES (:k, 'running', :c, :t, now())"
+                    " ON CONFLICT (experiment_key) DO NOTHING"
+                ),
+                {"k": experiment, "c": "0.6", "t": "0.5"},
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO ab_assignments (experiment_key, user_id,"
+                    " variant, stratum, assigned_at) VALUES (:k,"
+                    " CAST(:u AS uuid), :v, '0', now())"
+                ),
+                {
+                    "k": experiment,
+                    "u": self._user_ids[actor],
+                    "v": variant,
+                },
+            )
+        return {"experiment": experiment, "variant": variant}
 
     async def _seed_pair_latch(self, params: dict[str, Any]) -> dict[str, Any]:
         a = await self._create_intent("u1")
@@ -364,6 +400,20 @@ class ReferenceHarness:
     async def cleanup(self) -> None:
         p = {"p": self._prefix + "%"}
         async with self._engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "DELETE FROM ab_assignments WHERE user_id IN"
+                    " (SELECT id FROM users WHERE auth_subject LIKE :p)"
+                ),
+                p,
+            )
+            await conn.execute(
+                text(
+                    "DELETE FROM ab_experiments WHERE experiment_key IN"
+                    " ('latch_threshold', 'notification_daily_limit',"
+                    " 'notification_concurrent_limit')"
+                ),
+            )
             await conn.execute(
                 text(
                     "DELETE FROM survey_responses WHERE user_id IN"

@@ -23,7 +23,7 @@ from latch.obs.kpi import (
 
 
 def test_metric_keys_cover_09_2_2_table():
-    """metric_key集合が§2.3の定義表と完全一致(15キー)。"""
+    """metric_key集合が§2.2の定義表と完全一致(16キー=15+report_rate v0.7)。"""
     assert METRIC_KEYS == {
         "intent_create_rate",
         "intent_recreation_rate",
@@ -40,6 +40,7 @@ def test_metric_keys_cover_09_2_2_table():
         "no_answer_rate",
         "jev_executions_per_intent",
         "mute_rate",
+        "report_rate",
     }
     assert DAILY_METRIC_KEYS == {
         "intent_create_rate",

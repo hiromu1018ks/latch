@@ -1,4 +1,4 @@
-code_revision: 6905c7722e577526a9c9abb43d974b5cab01c42b
+code_revision: 13e32f82bb7241acf5b58b17fdcef7553168fbf2
 fixture_hashes:
   g1_alcohol: b88d5c586667d86f06623d5d5ba9e7083b7ec5500dfbbee308c496743d67f9ac
   g1_parser_struct: 37169a64a33240128addee6179a86f30c630ce88b9b2848742cb9aec91dc7013
@@ -18,4 +18,4 @@ model_ids:
 prompt_hashes:
   jev_questions: 10a3d7d71dd4e282b611540be72df70f39cb2b7023bf0803a4e13d35a754fb67
   parser_system_prompt: 5e7e91020d7b25497254241d5f311915f21ccc28d7457e2b4c2b4718519ffa5e
-schema_head: '0010'
+schema_head: '0011'

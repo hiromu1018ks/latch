@@ -672,3 +672,40 @@ backlog A-06(実装欠落→実装+検証)を05 v0.7改版→backend(参照+Clou
 ### 10.3 CI(O-01)への影響
 
 本実装でCIが実行するテストは増えるのみ(順序・前提の変化なし): ci E2E 47→50・test-ci 2177→2229・vitest 368→376。alembic head=0010・D1 0006は各migrateステップが自動適用。**workflowの実pushと初回実行確認は引き続きユーザー指示待ち(人間領域の別承認のまま)**
+
+## 11. V1-P4 観測・判定・A/B基盤実装パス(2026-10-12・backlog §12 O-06+A-03+A-05)
+
+仕様=05 v0.8(コミット13e32f8)→backend(参照+Cloudflare/D1)→契約→E2Eの3層で実施。13 §3表2のPhase 2/Phase 3開始前要件の装置を開発側で充足(判定の実施自体は運用)。
+
+### 11.1 実装テスト(仕様=05 v0.8+09 v0.7)
+
+| 層 | 場所 | テスト | 対応 |
+|---|---|---|---|
+| backend参照 | latch/ab/{rules,service}.py+alembic 0011+users/routes.py(GET /me/ab)+worker/main.py配線 | unit test_ab_rules 9+test_ab_service 9・integration test_ab_api 9(表制約/API/閾値反転・混在=対照・停止=全群対照・D-08処置値) | **A-05割付・解決・ペア適用** |
+| backend参照 | obs/kpi_alert.py+kpi.py(report_rate週次)+worker/main.py(KpiJob同tick) | unit test_kpi_alert 8+integration test_kpi_alert_ci 6(発報1回+単発化・min_den抑止・前週0急増外・無データ無発報) | **O-06警報線** |
+| backend参照 | obs/mlr.py+mlr_baselines表+CLI | unit test_mlr 5+integration test_mlr_ci 4(記録→判定・below_baseline・no_data/no_baseline・再ベースライン追記) | **A-03前期比−5pt** |
+| Cloudflare | migrations/0007_ab_mlr.sql+svc_ab.py+state.py配線+pipeline.py適用+atomic.py上限引数 | cf-unit test_ab_pipeline 3(実験なし挙動不変・treatment閾値で非提案+割付永続化・混在+stopped=対照)・**実D1へ0007適用済み**(3表確認) | **D1側(E-01体制)** |
+| 契約 | tests/contracts(ab領域4ケース+seed ab_assignment両harness) | 参照147緑(worker停止条件)・D1 144緑・manifest schema_head=0011再生成 | **パリティ** |
+| E2E | tests/e2e/ab.spec.js 2件 | 実worker経由の割付発生+GET /me/abで観測+再取得同一variant(安定)・観測APIは割付を作らない(空配列のままDB証明) | **割付の実機** |
+
+### 11.2 設計判断(根拠の記録)
+
+1. **E2Eの割付再現性はci 1領域に絞り、混在ペアの対照値適用はbackend integration+cf-unitが所有**: スコア値を固定できるのは試験環境(direct seed/stub)のみで、E2Eでのスコア制御はstub依存の間接証明になるため。E2Eは「実workerの提案評価が割付を作る+安定」の実機証明に特化した
+2. **E2Eの実験投入はcontrol=treatment=6(notification_daily_limit)**: 割付の駆動に必要で値が同値のため並走specの提案挙動に影響しない(--workers=4並列下の安全策)。teardownで実験行をFK cascade削除
+3. **O-06/A-03のjobは参照基盤専用・CF側はT10(observability)で移植**: kpi_daily集計基盤自体がPostgreSQL SQL(AT TIME ZONE/jsonb/generate_series)でD1に存在しないため(CF-STATUSのT10=observabilityが移植先)。表(ab_*/mlr_baselines)はD1 0007で作成済み・判定の純関数(週比・−5pt数学)はlatch/obs配下でCF copyへ同期される
+4. **割付ハッシュは決定的なため、テストは期待variantを事前計算しユーザー列挙で群を選ぶ**(12人で必要群が揃わない確率2^-11未満): 参照integration・cf-unit・E2Eとも乱数skipのない決定的試験とした(初版のskip方式は撤回)
+5. **ノイズ抑止の固定値**: yes率は週合計分母≥10で判定(min_den)・急増(週比2倍)は前週分子>0のみ判定(0→nは倍率不能=急増の定義外)。根拠: 小標本の誤報が警報の信頼を毀損するため・D-02の文言(10%未満・週比2倍)を満たす最小の拘束解釈
+6. **「前期比」の読み**: D-02の「ベースライン記録→以降は前期比−5pt以内」は**ベースライン値との差分を判定本体**とし、直前週との差分は参考値として並記(09 §6の文言がベースライン記録を前置するため)
+
+### 11.3 実機・実装で確認された観察(ドキュメント化価値のある発見)
+
+1. **契約suiteを常設worker稼働中に手動実行するとteardownがFK違反で赤化し得る**: workerがAPI発行Intentを非同期評価しmatch_candidatesをINSERTする竞合(M2 ws-7の孤立行メモの拡張形・test-ciは`docker compose stop worker`で走るため本来の実行経路では発生しない)。手動実行時はworker停止が正規手順
+2. **test_cutover_rehearsalのintegrity検査はci DBのE2E残存で赤化する**: matched latch+open intentsの残存41行が「matched_intents_closed」を破る(exportがDB全体を対象のため)。クリーンDB順序(test-ci→E2E)では発生しない=既知のDB残存感度パターン(V1-P2のtest_expiry_batchesと同型)。E2E実施後のcf-unit単体実行は残存を考慮して読む
+3. **AbServiceの実験行30秒キャッシュにより停止の伝播は最大30秒+評価周期**: CF試験では明示的に新しいservice注入でTTL経過を表現。運用上の停止反映も同オーダー(05 v0.8 規定7)
+4. **割付の層は評価時点のActive Intent数で計算される**: ペア試験では各ユーザー1件active=層'1-2'。期待値計算を評価直前のDB状態で行う必要がある(登録直後の層'0'と異なる)
+5. **D1版apply_proposalの上限はハードコード(>=3/>=6)だった**: A/B適用値は引数(daily_limit/concurrent_limit・None=現行定数)で渡す形に変更し後方互換を維持
+6. **asyncpgのdate bindはdateオブジェクト必須**(CAST(:d AS date)でも文字列はtoordinalでDataError): kpi_daily試験行投入はdateを渡す(uuid[]のCAST規律と扱いが異なる)
+
+### 11.4 CI(O-01)への影響
+
+test-ciはworker停止で実行するため契約suite競合は発生しない(観察1は手動実行時のみ)。増分: unit +31(test_ab_rules 9+test_ab_service 9+test_kpi_alert 8+test_mlr 5・obs_kpi期待値1件修正)・integration +19(test_ab_api 9+test_kpi_alert_ci 6+test_mlr_ci 4)・cf-unit +3(test_ab_pipeline)・契約 +4ケース(ab)・ci E2E +2(ab.spec.js)・vitest不変(frontend変更なし)。alembic head=0011・D1 0007はmigrateステップが自動適用。**workflowの実pushは引き続きユーザー指示待ち**

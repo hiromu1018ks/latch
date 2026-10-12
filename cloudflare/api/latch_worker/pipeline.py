@@ -105,6 +105,7 @@ class PipelineServices:
     llm: Any  # StubPipelineLLM | RealPipelineLLM(統一IF: embed/judge → JevJudgment)
     clock: Any
     geo: Any = None
+    ab: Any = None  # AbService | None(05 v0.8・未注入=実験なしと同一挙動)
 
     def now(self) -> datetime:
         return self.clock.now()
@@ -150,6 +151,7 @@ def build_pipeline(env) -> PipelineServices:
     from latch.core.clock import SystemClock
     from latch_worker.d1binding import RealD1Binding
     from latch_worker.geocode_d1 import D1GeoService
+    from latch_worker.svc_ab import build_ab_service
 
     db = RealD1Binding(env.DB)
     clock = SystemClock()
@@ -173,6 +175,7 @@ def build_pipeline(env) -> PipelineServices:
         llm=llm,
         clock=clock,
         geo=D1GeoService(db),
+        ab=build_ab_service(db, clock),
     )
 
 
@@ -619,7 +622,14 @@ async def _promote_scored_pairs(
     - 提案済み(open latchに両Intentを含む)行は対象外(再評価で再提案しない)
     - 75分ルール(06 §10)・D-07再提案抑制(06 §10)をlatch_calc純関数で確認
     - apply_proposalが版・D-08上限・open重複を原子確認して確定
+    - A/B(05 v0.8): 抽出は対照・処置の小さい方の閾値で行い、行ごとに
+      ペア参加者のvariantで再判定する(混在ペアは対照値・FR-25)
     """
+    drain_threshold = (
+        await services.ab.drain_threshold()
+        if services.ab is not None
+        else latch_calc.LATCH_THRESHOLD
+    )
     rows = (
         await services.db.prepare(
             "SELECT id, intent_a_id, intent_b_id, intent_a_version,"
@@ -628,7 +638,7 @@ async def _promote_scored_pairs(
             " AND (CASE WHEN intent_a_id = ? THEN intent_a_version"
             "           ELSE intent_b_version END) = ?"
             " AND status = 'evaluated' AND latch_score IS NOT NULL"
-            f" AND latch_score >= {latch_calc.LATCH_THRESHOLD}"
+            " AND latch_score >= ?"
             " AND NOT EXISTS ("
             "   SELECT 1 FROM latches l WHERE l.status IN"
             "   ('candidate','proposed','partial_accept')"
@@ -638,7 +648,10 @@ async def _promote_scored_pairs(
             "               WHERE jb.value = match_candidates.intent_b_id))"
             " ORDER BY latch_score DESC, intent_a_id ASC"
         )
-        .bind(origin["id"], origin["id"], origin["id"], origin["version"])
+        .bind(
+            origin["id"], origin["id"], origin["id"], origin["version"],
+            drain_threshold,
+        )
         .all()
     )
     proposed: list[str] = []
@@ -671,6 +684,18 @@ async def _promote_scored_pairs(
             "paused",
         ):
             continue
+        # A/B(05 v0.8 規定4・5): ペア参加者のvariantから適用値を解決
+        pair_owners = [a_row["user_id"], b_row["user_id"]]
+        if services.ab is not None:
+            pair_threshold = await services.ab.pair_threshold(pair_owners)
+            daily_limit = await services.ab.pair_daily_limit(pair_owners)
+            concurrent_limit = await services.ab.pair_concurrent_limit(pair_owners)
+        else:
+            pair_threshold = latch_calc.LATCH_THRESHOLD
+            daily_limit = None
+            concurrent_limit = None
+        if float(row["latch_score"]) < pair_threshold:
+            continue  # 抽出はmin閾値・適用は行ごとのペア適用値
         if not a_row["time_start"] or not b_row["time_start"]:
             continue
         if not a_row["expires_at"] or not b_row["expires_at"]:
@@ -729,6 +754,8 @@ async def _promote_scored_pairs(
                 "expires_us": micros(min_expires),
             },
             now,
+            daily_limit=daily_limit,
+            concurrent_limit=concurrent_limit,
         )
         if result.status.value == "applied":
             proposed.append(str(result.response["latch"]["id"]))

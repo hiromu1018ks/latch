@@ -160,8 +160,9 @@ LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
   secrets(2026-10-12〜): LATCH_LLM_MODE=real・LATCH_ANTHROPIC_API_KEY・
   LATCH_GEMINI_API_KEY・LATCH_TYPESAFE_API_KEY(鍵値は.env由来・repo外)
 - D1: latch-core(id: f40367ac-7631-4506-a083-c52e7ab51787)
-  マイグレーション0001〜0006適用済み(0005・0006は2026-10-12に実D1へ適用。
-  0006_survey.sql=V1-P3体感アンケートのsurvey_responses表)+
+  マイグレーション0001〜0007適用済み(0005・0006は2026-10-12に実D1へ適用。
+  0006_survey.sql=V1-P3体感アンケートのsurvey_responses表。0007_ab_mlr.sql=
+  V1-P4 A/B基盤のab_experiments/ab_assignments+mlr_baselines 3表・2026-10-12適用)+
   geofeatures 7行+probe_events表
   (cron稼働証跡として継続記録)
 - Queues: latch-jobs-probe(producer=env.JOBS・consumer=パイプライン評価)
@@ -288,7 +289,10 @@ LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
 - T8: 0003_schedule.sql + adapters/d1/schedule.py +
   runtime/cloudflare/scheduled.py + test_schedule_recovery.py(I3)
 - T9: Vectorize比較(近似を許さない初期判定 → 不採用見込みなら根拠記録)
-- T10: notification_jobs・retention・observability・restore
+- T10: notification_jobs・retention・observability・restore(observability分は
+  V1-P4追加資産=obs/kpi_alert.py(KpiAlertJob)・obs/mlr.py(MLR前期比判定)の
+  D1移植もここへ含む。ab_*/mlr_baselines表は0007で作成済み・A/B適用面の
+  pipeline配線はV1-P4で実装済み)
 - T11: migration_eval/compare.py・costs.py + test_end_to_end.py
 - T12: migration/export.py・transform.py・verify.py・replay.py +
   test_cutover_rehearsal.py(seedでの変換・復元・切替・巻き戻し)

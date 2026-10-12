@@ -49,6 +49,11 @@ def get_survey_service(request: Request) -> SurveyService:
     return request.app.state.survey_service
 
 
+def get_ab_service(request: Request):
+    """app.state.ab_service へのアクセス(lifespanまたはテスト注入で載る・v0.8)。"""
+    return request.app.state.ab_service
+
+
 class ConsentStateResponse(BaseModel):
     """GET/POST /v1/users/me/consent の200応答(設計§2.3)。"""
 
@@ -249,4 +254,32 @@ async def submit_survey(
         survey=SurveyAnsweredBody(
             round=answered.round, answered_at=answered.answered_at
         )
+    )
+
+
+class AbAssignmentBody(BaseModel):
+    experiment: str
+    variant: str
+    assigned_at: datetime
+
+
+class AbAssignmentsResponse(BaseModel):
+    assignments: list[AbAssignmentBody]
+
+
+@users_router.get("/me/ab", response_model=AbAssignmentsResponse)
+async def get_my_ab_assignments(
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[object, Depends(get_ab_service)],
+) -> AbAssignmentsResponse:
+    """自分のA/B割付一覧(05 v0.8・読み取り専用・割付を作らない・UIなし)。"""
+    views = await svc.assignments_for_user(claims)
+    logger.info("users.ab_assignments ok n=%d", len(views))
+    return AbAssignmentsResponse(
+        assignments=[
+            AbAssignmentBody(
+                experiment=v.experiment, variant=v.variant, assigned_at=v.assigned_at
+            )
+            for v in views
+        ]
     )

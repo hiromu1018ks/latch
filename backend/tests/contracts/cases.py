@@ -2095,6 +2095,66 @@ CASES: list[ContractCase] = [
         E(404, error_code="NOT_FOUND"),
         source_test="test_survey_api.test_unregistered_survey_is_404",
     ),
+    # ================= ab(A/B割付の観測・05 v0.8) =================
+    C(
+        "ab_status_empty",
+        "ab",
+        "割付のないユーザーは空配列(このAPIは割付を作らない)",
+        R("GET", "/v1/users/me/ab", actor="ab1"),
+        E(200, json_equals={"assignments": []}),
+        source_test="test_ab_api.test_ab_status_empty_for_new_user",
+    ),
+    C(
+        "ab_status_shows_assignment",
+        "ab",
+        "seedされた割付行はexperiment/variant/assigned_atで応答(stratumなし)",
+        R("GET", "/v1/users/me/ab", actor="ab2"),
+        E(
+            200,
+            json_equals={
+                "assignments.0.experiment": "latch_threshold",
+                "assignments.0.variant": "treatment",
+            },
+            json_contains=("assignments.0.assigned_at",),
+        ),
+        seed=(
+            "ab_assignment",
+            {"actor": "ab2", "experiment": "latch_threshold", "variant": "treatment"},
+        ),
+        effects="ab_assignments行1件(seed由来・読み取りで増えない)",
+        source_test="test_ab_api.test_ab_status_returns_rows_and_read_is_stable",
+    ),
+    C(
+        "ab_status_control_variant",
+        "ab",
+        "対照群の割付行も同一形状(variant=control)",
+        R("GET", "/v1/users/me/ab", actor="ab3"),
+        E(
+            200,
+            json_equals={
+                "assignments.0.experiment": "notification_daily_limit",
+                "assignments.0.variant": "control",
+            },
+            json_contains=("assignments.0.assigned_at",),
+        ),
+        seed=(
+            "ab_assignment",
+            {
+                "actor": "ab3",
+                "experiment": "notification_daily_limit",
+                "variant": "control",
+            },
+        ),
+        source_test="test_ab_api.test_ab_status_returns_rows_and_read_is_stable",
+    ),
+    C(
+        "ab_status_unauthorized",
+        "ab",
+        "認証欠落は401(既定の認証エラー)",
+        R("GET", "/v1/users/me/ab"),
+        E(401),
+        source_test="test_ab_api.test_ab_status_requires_auth",
+    ),
 ]
 
 # -- 将来回帰ケース(T0: SQL fakeでは見逃す系統。バグを正解fixtureにしない) --------

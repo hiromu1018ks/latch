@@ -58,6 +58,7 @@ async def build_state(app: FastAPI, env) -> None:
     from latch_worker.svc_latches import D1LatchesService
     from latch_worker.svc_notifications import D1NotificationsService
     from latch_worker.svc_safety import D1SafetyService
+    from latch_worker.svc_ab import build_ab_service
     from latch_worker.svc_users import (
         D1UsersFacade,
         build_consent_service,
@@ -133,6 +134,7 @@ async def build_state(app: FastAPI, env) -> None:
     )
     app.state.consent_service = consent_service
     app.state.survey_service = build_survey_service(db, clock)
+    app.state.ab_service = build_ab_service(db, clock)
     app.state.intent_parse_service = build_parse_service(
         clock, user_lookup, consent_service.consented, parser=parse_parser
     )

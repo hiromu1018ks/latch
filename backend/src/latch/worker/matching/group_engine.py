@@ -631,11 +631,19 @@ class GroupEngine:
         clock: Clock,
         geo=None,
         latch=None,
+        ab=None,
     ) -> None:
         self._engine = engine
         self._clock = clock
         self._geo = geo  # GeoService | None(Noneならarea_name=None)
         self._latch = latch  # LatchEngine | None(try_promote委譲用)
+        self._ab = ab  # AbService | None(未注入=実験なしと同一挙動・05 v0.8 規定5)
+
+    async def _group_threshold(self, user_ids) -> float:
+        """集合参加者のvariantから解決した閾値(混在集合は対照値・05 v0.8 規定4)。"""
+        if self._ab is None:
+            return latch_calc.LATCH_THRESHOLD
+        return await self._ab.pair_threshold(user_ids)
 
     async def handle(self, intent_id: uuid.UUID) -> GroupContext | None:
         """生成(設計§2.2〜2.3手順1〜8)。skip・Pool空はno-op(構造化ログ)。"""
@@ -874,12 +882,14 @@ class GroupEngine:
             # 手順g: 集約tx(1集合1tx・I-1対策の本体)
             now = self._clock.now()
             latch_id: uuid.UUID | None = None
+            # A/B適用値(05 v0.8: 集合参加者全員のvariantから解決・混在は対照値)
+            threshold = await self._group_threshold([inp.user_id for inp in r.inputs])
             async with self._engine.begin() as conn:
                 row = await _update_aggregate(conn, r.gid, r.score, now)
                 if row is None:
                     continue  # 冪等スキップ(他の実行が計算済み)
                 prev = row[1]
-                if r.score < latch_calc.LATCH_THRESHOLD:
+                if r.score < threshold:
                     continue  # candidateのまま(aggregate_scoreは入る)
                 deadline0 = latch_calc.response_deadline(now, r.target, r.min_expires)
                 if not latch_calc.d07_allows(

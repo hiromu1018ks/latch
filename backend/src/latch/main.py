@@ -80,6 +80,7 @@ async def _lifespan(app: FastAPI):
     build_safety = not hasattr(app.state, "safety_service")
     build_consent = not hasattr(app.state, "consent_service")
     build_survey = not hasattr(app.state, "survey_service")
+    build_ab = not hasattr(app.state, "ab_service")
     if not (
         build_auth
         or build_users
@@ -92,6 +93,7 @@ async def _lifespan(app: FastAPI):
         or build_safety
         or build_consent
         or build_survey
+        or build_ab
     ):
         yield
         return
@@ -141,6 +143,11 @@ async def _lifespan(app: FastAPI):
         app.state.survey_service = make_survey_service(
             clock=app.state.clock, engine=engine
         )
+    if build_ab:
+        # A/B割付の観測API面(05 v0.8・読み取り専用。適用面はworker側が構築)
+        from latch.ab.service import make_ab_service
+
+        app.state.ab_service = make_ab_service(clock=app.state.clock, engine=engine)
     if build_intents:
         app.state.intent_parse_service = make_intent_parse_service(
             clock=app.state.clock,

@@ -626,11 +626,29 @@ class LatchEngine:
         clock: Clock,
         geo=None,
         push: PushSender | None = None,
+        ab=None,
     ) -> None:
         self._engine = engine
         self._clock = clock
         self._geo = geo  # GeoService | None(Noneならarea_name=None)
         self._push = push  # PushSender | None(未注入ならno-op・design §2.7)
+        self._ab = ab  # AbService | None(未注入=実験なしと同一挙動・05 v0.8 規定5)
+
+    async def _pair_threshold(self, user_ids) -> float:
+        """A/B解決済みのペア適用閾値(実験なし=現行定数)。"""
+        if self._ab is None:
+            return latch_calc.LATCH_THRESHOLD
+        return await self._ab.pair_threshold(user_ids)
+
+    async def _pair_daily_limit(self, user_ids) -> int:
+        if self._ab is None:
+            return latch_calc.D08_DAILY_LIMIT
+        return await self._ab.pair_daily_limit(user_ids)
+
+    async def _pair_concurrent_limit(self, user_ids) -> int:
+        if self._ab is None:
+            return latch_calc.D08_CONCURRENT_LIMIT
+        return await self._ab.pair_concurrent_limit(user_ids)
 
     async def handle(self, intent_id: uuid.UUID) -> None:
         """フェーズ1(読取)→各行評価→drain(design §2.9のtx分割)。"""
@@ -698,6 +716,11 @@ class LatchEngine:
         )
         score = latch_calc.LATCH_C * mutual
         deadline0 = latch_calc.response_deadline(now, target, min_expires)
+        # A/B適用値の解決(05 v0.8 規定4・5: ペア参加者のvariantから導く。
+        # 失敗時刻も既定値へ落ちるためtxを始める前に解決して閉じ込める)
+        pair_users = (origin_inputs.user_id, peer_inputs.user_id)
+        pair_threshold = await self._pair_threshold(pair_users)
+        nearby_daily_limit = await self._pair_daily_limit(pair_users)
         # tx1: H再検証(SELECT) + 退避つきlatch_score UPDATE + 生成物
         latch_id: uuid.UUID | None = None
         nearby_latch_id: uuid.UUID | None = None
@@ -711,7 +734,7 @@ class LatchEngine:
             if rec is None:
                 return False
             _, prev_latch_score = rec
-            if score >= latch_calc.LATCH_THRESHOLD:
+            if score >= pair_threshold:
                 if not latch_calc.d07_allows(
                     has_no_response=has_no,
                     latest_defer_at=latest_defer_at,
@@ -795,6 +818,7 @@ class LatchEngine:
                     min_expires=min_expires,
                     has_no=has_no,
                     now=now,
+                    daily_limit=nearby_daily_limit,
                 )
         if latch_id is not None:
             await self.try_promote(latch_id, e2e_ctx=e2e_ctx)
@@ -818,6 +842,7 @@ class LatchEngine:
         min_expires,
         has_no,
         now,
+        daily_limit=None,
     ) -> tuple[uuid.UUID | None, list[uuid.UUID]]:
         """閾値未満: nearby_also参加者への存在通知(§2.7・引用#9・集約tx内)。
 
@@ -854,8 +879,9 @@ class LatchEngine:
             conn, [u.user_id for u in notify_targets], day_start, day_next
         )
         notified: list[uuid.UUID] = []
+        limit = daily_limit if daily_limit is not None else latch_calc.D08_DAILY_LIMIT
         for u in notify_targets:
-            if counts.get(u.user_id, 0) < latch_calc.D08_DAILY_LIMIT:
+            if counts.get(u.user_id, 0) < limit:
                 await _insert_notification(
                     conn, u.user_id, NOTIFICATION_NEARBY, latch_id, now
                 )
@@ -914,20 +940,19 @@ class LatchEngine:
                 )
                 return
             notify = [p for p in parts if p.notification_level != "muted"]
+            # A/B適用値(05 v0.8: 参加者全員のvariantから解決・混在は対照値)
+            participant_users = [p.user_id for p in parts]
+            daily_limit = await self._pair_daily_limit(participant_users)
+            concurrent_limit = await self._pair_concurrent_limit(participant_users)
             day_start = layer4.jst_day_start(self._clock.jst_date())
             day_next = day_start + timedelta(days=1)
             counts = await _count_daily_notifications(
                 conn, [p.user_id for p in notify], day_start, day_next
             )
-            if any(
-                counts.get(p.user_id, 0) >= latch_calc.D08_DAILY_LIMIT for p in notify
-            ):
+            if any(counts.get(p.user_id, 0) >= daily_limit for p in notify):
                 return  # candidateのまま(破棄しない)
             for p in parts:  # muted含む全参加者がproposed数に計上(引用#10)
-                if (
-                    await _count_open_proposed(conn, p.intent_id)
-                    >= latch_calc.D08_CONCURRENT_LIMIT
-                ):
+                if await _count_open_proposed(conn, p.intent_id) >= concurrent_limit:
                     return
             if not await _promote_latch(conn, latch_id, deadline, now):
                 return  # 他経路で遷移済み(条件付きUPDATEの行数0)
@@ -985,7 +1010,14 @@ class LatchEngine:
         次トリガーへ(design §2.10-8: Worker 1構成を前提に行ロックのみ)。
         """
         now = self._clock.now()
-        ids = await _drain_candidates(self._engine, now, latch_calc.LATCH_THRESHOLD)
+        # drainの抽出閾値は対照・処置の小さい方(05 v0.8 規定5: 処置閾値を
+        # 下げた実験で[処置値, 対照値)のスコア行が対象から漏れないため)
+        drain_threshold = (
+            await self._ab.drain_threshold()
+            if self._ab is not None
+            else latch_calc.LATCH_THRESHOLD
+        )
+        ids = await _drain_candidates(self._engine, now, drain_threshold)
         for latch_id in ids:
             await self.try_promote(latch_id)
 

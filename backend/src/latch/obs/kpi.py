@@ -38,6 +38,7 @@ METRIC_KEYS = frozenset(
         "no_answer_rate",
         "jev_executions_per_intent",
         "mute_rate",
+        "report_rate",
     }
 )
 
@@ -287,7 +288,15 @@ SQL_UPSERT_WEEKLY = text(f"""
             WHERE day < CAST(:week_start AS date)) t),
          (SELECT count(DISTINCT user_id) FROM sessions
           WHERE {JST_DAY % "created_at"} BETWEEN CAST(:week_start AS date)
-                                               AND CAST(:week_end AS date)))
+                                               AND CAST(:week_end AS date))),
+        ('report_rate',
+         (SELECT count(*) FROM reports
+          WHERE {JST_DAY % "created_at"} BETWEEN CAST(:week_start AS date)
+                                              AND CAST(:week_end AS date)),
+         (SELECT count(*) FROM latch_status_events
+          WHERE to_status='proposed'
+            AND {JST_DAY % "created_at"} BETWEEN CAST(:week_start AS date)
+                                              AND CAST(:week_end AS date)))
     ) AS m(metric_key, num, den)
     ON CONFLICT (metric_key, day) DO UPDATE SET
         numerator = EXCLUDED.numerator,
