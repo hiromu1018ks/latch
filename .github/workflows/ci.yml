@@ -1,0 +1,127 @@
+# O-01(backlog §10・S-4解消): 全試験をGitHub Actionsへ載せる。
+# 第一段階の対象 = backend全套(test-ci・LATCH_LLM_MODE=stub明示)+backend lint
+# +frontend vitest(368)+ci project UI E2E(47)。staging/cf projectは対象外
+# (実環境と鍵・build資産への依存が大きいため契機実行・手動維持とする)。
+#
+# 設計判断(backlog §12④):
+# - 実配備・実LLM・secretは一切載せない(課金・外部送信なし。LATCH_LLM_MODE=stub
+#   を明示 — コード既定もstubのため二重の保護)
+# - runnerはubuntu-latest(node/python/docker-composeすべて同梱前提)
+# - **順序は backend全套 → E2E**: test_expiry_batchesの計数assertはDB残存に敏感
+#   でE2E残存行がsweeperの処理件数を崩す(ローカルドライランで実証)ため、
+#   クリーンDBでbackend全套を先に通す。E2Eは最後(残存を残してもjob終了で消える)
+# - **geofeatures投入は2回(test-ciの前後)**: 契約試験・intent系統合試験は地名
+#   解決(天文館)のためにgeofeaturesが必須(空だと422 GEOCODING_FAILEDで大量失敗
+#   =ドライランで実証)。test-ci内のgeo試験がfixtureへ入れ替え/消去するため、
+#   E2Eの前に再度投入する。実データ取込み(ISJ zip+OSM pbfの大容量DL)の代わりに
+#   backend試験と同一のfixture(isj_sample.csv+osm_sample.xml)をlatch.geo CLIで
+#   投入する(天文館を含む・冪等)
+# - ci E2Eはworkflow内でcompose常設API(8000)+vite(5173)を立てる(webServer設定が
+#   viteを自動起動・APIとDBはcompose)
+# - load DB(massload 4試験の前提)もworkflow内で起動(dbのみ)+マイグレーション
+# - 失敗時はPlaywrightのHTMLレポート・trace・録画をartifactへ上げる
+#   (listレポートでどの試験が落ちたかはログで見える)
+#
+# 注意: このworkflowの初回実行確認は実pushの承認待ち(人間領域)。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # 実LLM経路の呼び出しなし(stub決定応答)。実環境由来のreal漏れ対策の明示。
+      LATCH_LLM_MODE: stub
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      # -- ci常設環境(compose: db/redis/pubsub/api/worker)とDB整備 ----------
+      - name: ci常設環境を起動(compose up --wait・backend image build込み)
+        run: make up
+
+      - name: DBマイグレーション(alembic head)
+        run: make migrate
+
+      - name: geofeaturesをfixtureで投入①(契約・intent系試験の地名解決用)
+        run: |
+          cd backend
+          uv run --group geo python -m latch.geo import-isj --csv tests/fixtures/geo/isj_sample.csv
+          uv run --group geo python -m latch.geo import-osm --pbf tests/fixtures/geo/osm_sample.xml
+
+      - name: backend lint(ruff)
+        run: make lint
+
+      - name: load DBを起動+マイグレーション(massload試験の前提・dbのみ)
+        run: |
+          docker compose -f compose.load.yaml up -d --wait db
+          make load-migrate
+
+      - name: backend全套(test-ci・unit+integration+cloudflare unit・クリーンDB)
+        run: make test-ci
+
+      # -- E2Eの前提整備(geo試験がgeofeaturesを入れ替えるため再度投入) ------
+      - name: geofeaturesをfixtureで投入②(E2Eの地名解決用・冪等)
+        run: |
+          cd backend
+          uv run --group geo python -m latch.geo import-isj --csv tests/fixtures/geo/isj_sample.csv
+          uv run --group geo python -m latch.geo import-osm --pbf tests/fixtures/geo/osm_sample.xml
+
+      # -- frontend: vitest + build + UI E2E(ci project) ---------------------
+      - name: frontend依存を導入
+        working-directory: frontend
+        run: npm ci
+
+      - name: frontend単体試験(vitest全件)
+        working-directory: frontend
+        run: npm test
+
+      - name: frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Playwright chromiumを導入
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: UI E2E(ci project・compose API+vite)
+        working-directory: frontend
+        env:
+          LATCH_E2E_PROJECTS: ci
+          LATCH_E2E_TARGET: ci
+        run: |
+          npx playwright test --workers=4
+          node scripts/e2e-gallery.mjs
+
+      # -- 失敗時の見え方: レポート・trace・録画をartifactへ ------------------
+      - name: Playwrightの証跡をアップロード(失敗時)
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-artifacts
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            frontend/e2e-recordings
+          if-no-files-found: ignore
+          retention-days: 14

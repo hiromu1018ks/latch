@@ -166,16 +166,15 @@ async def test_llm_real_smoke(wrangler):
             )
             assert resp.status_code == 201, resp.text
             user_id = resp.json()["user"]["id"]
-            resp = await client.post(
-                "/v1/users/me/consent", json={}, headers=headers
-            )
+            resp = await client.post("/v1/users/me/consent", json={}, headers=headers)
             assert resp.status_code == 200, resp.text
             actors[name] = {"headers": headers, "user_id": user_id}
             record["actors"][name] = {"subject": subject, "user_id": user_id}
 
         # -- 1. parse 1件(実Anthropic) ----------------------------------------
         resp = await client.post(
-            "/v1/intents/parse", json={"text": PARSE_TEXT},
+            "/v1/intents/parse",
+            json={"text": PARSE_TEXT},
             headers=actors["alpha"]["headers"],
         )
         assert resp.status_code == 200, resp.text
@@ -192,10 +191,9 @@ async def test_llm_real_smoke(wrangler):
         from latch.llm.stub import StubLLM
 
         stub_out = await StubLLM().complete_structured(PARSE_TEXT, date.today())
-        record["parse"]["differs_from_stub"] = (
-            json.dumps(parsed, sort_keys=True, default=str)
-            != json.dumps(stub_out, sort_keys=True, default=str)
-        )
+        record["parse"]["differs_from_stub"] = json.dumps(
+            parsed, sort_keys=True, default=str
+        ) != json.dumps(stub_out, sort_keys=True, default=str)
         record["timings_s"]["parse_done"] = round(time.monotonic() - started, 1)
 
         # -- 2. 意図2件(同時間帯・同地域。スロットは実行ごとに分離[A-01規律]:

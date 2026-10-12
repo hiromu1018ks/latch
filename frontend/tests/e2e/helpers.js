@@ -102,18 +102,23 @@ export async function provisionUser({ consent = true, register = true, tag = "e2
   return user;
 }
 
-export async function createIntent(user, { status = "active", location = "天文館", hoursAhead = 2 } = {}) {
+// rawText/softConstraintsはU-07用(相手Intentの非開示assertに使う固有値の注入)。
+export async function createIntent(
+  user,
+  { status = "active", location = "天文館", hoursAhead = 2, rawText, softConstraints } = {},
+) {
   const start = new Date(Date.now() + hoursAhead * 3_600_000).toISOString();
   const res = await api("POST", "/v1/intents", {
     token: user.access,
     body: {
-      raw_text: `e2e ${location} ${start}`,
+      raw_text: rawText ?? `e2e ${location} ${start}`,
       status,
       structured_intent: {
         category: { primary: "meal", secondary: null },
         alcohol_involved: false,
         time: { start, end: null },
         location: { name: location },
+        ...(softConstraints ? { soft_constraints: softConstraints } : {}),
       },
     },
   });
@@ -167,6 +172,24 @@ export function insertPairLatch(intentA, intentB, { status = "proposed", proposa
 
 export function expireResponseDeadline(latchId) {
   sql(`UPDATE latches SET response_deadline = now() - interval '1 minute' WHERE id = '${latchId}'::uuid;`);
+}
+
+// completed fixture(U-04 attendance用)。実運用ではsweeperが対象時刻経過で
+// status=completed+completed_atを書き、回答確定時にcalibration_records行が
+// 作られるため、その2点を直接投入する(attendanceの書込先はcalibration_records・
+// 窓判定はcompleted_at+3日=service.is_attendance_window_open)。actual_attendedは
+// NULLのまま申告待ちにする。
+export function insertCompletedLatch(intentA, intentB, { proposal } = {}) {
+  const latchId = insertPairLatch(intentA, intentB, { status: "completed", proposal });
+  sql(`UPDATE latches SET completed_at = now() WHERE id = '${latchId}'::uuid;`);
+  sql(
+    [
+      "INSERT INTO calibration_records (latch_id, intent_ids, prediction, proposal_snapshot, actual_responses, matched, created_at, updated_at)",
+      "SELECT id, intent_ids, '{}'::jsonb, proposal, '[]'::jsonb, true, now(), now()",
+      `FROM latches WHERE id = '${latchId}'::uuid;`,
+    ].join(" "),
+  );
+  return latchId;
 }
 
 // グループ成立fixture(3人)。group_candidates行+group_candidate_idつきlatches行を

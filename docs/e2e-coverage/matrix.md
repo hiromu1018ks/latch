@@ -601,3 +601,43 @@ backlog §12③のP1 UI群5項目(U-05・U-08・U-09・U-19+T-01/P-08統合・T-
 ### 8.4 残る主要項目(backlog正本)
 
 P1残7項目(P-02・A-02・U-02・U-04・U-07・O-01・O-02)。次の推奨=④O-01 CI(GitHub Actions)載せ+残りP1 UI群(U-02ブロックdialog・U-04 attendance・U-07 visibility 2値比較)。findingsは#1・#2ともに修正済みで未解消ゼロ。
+
+## 9. V1-P2 残P1 UI群+CI構築実装パス(2026-10-12・backlog §12④+残りUI群)
+
+backlog §12④(O-01 CI)と残りP1 UI群4項目(U-02・U-04・U-07・P-02)を実施。**P1の開発側実装は出揃い**(残るP1=16中2=A-02オーナー承認待ち・O-02 load環境実施)。
+
+### 9.1 実装テスト(計4新規spec・helpers拡張2)
+
+| project | spec | テスト | 対応backlog項目 |
+|---|---|---|---|
+| ci | e2e/block.spec.js:10 | 05成立起点→「通報・ブロック」dialog→対象固定→「ブロックする」→完了表示→blocks表+設定ブロック一覧へ反映 | **U-02(受け入れ#20 UI面・H10)** |
+| ci | e2e/attendance.spec.js:13 | completed fixture→05出席申告2択→「会いました」→済み表示+calibration_records.actual_attended=true | **U-04(原則6・D-09)** |
+| ci | e2e/visibility.spec.js:38 | 同一条件候補を2値配置→04サマリ差分+raw_text/表示名/NG条件/座標の否定的assert(両形)+一覧サマリ行差分 | **U-07(受け入れ#22/#23)** |
+| ci | e2e/group.spec.js:12 | 3人グループ04必要人数→YES×3のpartial_accept残回答→allIn→05複数人+matched/Intent/通知3行のDB証明 | **P-02(受け入れ#18)** |
+| (CI) | .github/workflows/ci.yml | ci E2E+vitest+backend全套+lintを1jobで(実pushは承認待ち) | **O-01(S-4解消)** |
+
+helpers拡張: `createIntent`へrawText/softConstraints(非開示assert用固有値の注入)・`insertCompletedLatch`(status=completed+completed_at+calibration_records直投入=attendanceの書込先と3日窓判定を満たす)。
+
+稼働実績(最終状態): **vitest 368・ci 47(43+4)・staging 5・cf 2**=E2E 54テスト・2回連続緑。
+
+### 9.2 実機で確認された実装挙動(ドキュメント化価値のある発見)
+
+1. **同一Intent対へのopen状態latchは二重挿入できない**: uq_latches_intent_ids_open(M2 0004の部分UNIQUE索引・D-08提案例)がcandidate/proposed/partial_accept間でintent_ids一意を強制する。受け入れ#22「同一候補を双方で配置」のUI実機は**同一条件の別ペア(A+B/A+C)**で行うのが正規手段(初回実装がunique違反で失敗し発見)
+2. **attendanceのUI表示条件はstatusのみ・POST成立条件はcalibration_records行+completed_at**: completed fixtureはlatch行だけでは不十分で、回答確定時にサーバが作るcalibration_records(actual_attended NULL)とcompleted_at(3日窓)の投入がセットで必要(§9-6①の「completed_atは常にnull」は実運用のsweeper経路の話=fixtureでは明示投入)
+3. **グループ04の必要人数/残回答表示はwho行+joinedWaitTextで構成される**: 専用のgroupNeedText(view.js)は定義のみで未使用。partial_acceptの現況(「1人が回答済み」)は再訪で見える(answered=total−remaining−1の計算)
+4. **make lintに既存drift 2件(test_llm_real.py・test_llm_real_smoke.py=V1-P1 A-2のコミット残)**: O-01のworkflow設計中にlint step投入で発見し回収(ruff format+import並び・意味変化なし)。test-ciにlintが含まれない運用の隙間が実害となった形で、CI載せの価値を実証
+5. **test_expiry_batchesの計数assertはDB残存に敏感 — E2E→test-ciの順で実行すると失敗する**: sweeperのrun_once件数assert(==1など)が、同DBに残存する非終端latch・active intent(過去E2Eセッション由来・FakeClockの+121hで一括期限到達扱い)で崩れる。ローカルドライランで実証(3 failed/2174 passed・`assert 34 == 1`)。**CIの実行順序は backend全套(クリーンDB)→E2E** が正しく、逆順は不可。E2E残存の掃除(cleanupAllはbest-effort)だけでは足りない=runnerの毎回クリーンDBがCIの構造的価値
+6. **geofeatures空のDBでは契約試験・intent系統合試験が大量失敗する**: 地名解決(天文館等)が422 GEOCODING_FAILEDになるため(ドライランで実証: 契約30件超+attendance/consent/deletion/degraded系が赤)。ローカルのci DBは普段geofeaturesが入っているため気づかない前提。**CIではgeofeaturesのfixture投入(latch.geo CLI)をtest-ciの前後の2回**に行う(前=契約・統合試験の地名解決・後=test-ci内のgeo試験が入れ替え/消去するためE2E用の再投入)
+
+### 9.3 CI workflowの設計判断(O-01)
+
+- **対象=第一段階**: backend全套(make test-ci・LATCH_LLM_MODE=stub明示)+backend lint+frontend vitest+build+ci E2E(Playwright ci project)。staging/cf projectは対象外(実環境・鍵・build資産依存のため契機実行・手動維持)
+- **実行順序は backend全套→E2E**(§9.2-5): 計数assertのDB残存感度のためbackend全套をクリーンDBで最初に・E2Eは最後(runnerのDBはjob毎に消えるためE2E残存は無害)
+- **geofeaturesのfixture投入はtest-ciの前後2回**(§9.2-6): 前=契約・intent系統合試験の地名解決(空だと422で大量失敗)・後=E2E用(geo試験が入れ替え/消去するため)。実データ取込み(ISJ zip+OSM pbf大容量DL・手動配置)はCI不向きなため、`python -m latch.geo import-isj/import-osm`がpbf/xml自動判別で読める既存fixture(isj_sample+osm_sample・天文館を含む)の冪等投入とする(ローカル実測=7行)
+- **load DB(massload 4試験の前提)もworkflow内で起動**: `docker compose -f compose.load.yaml up -d --wait db`+`make load-migrate`(dbサービスのみ)
+- **失敗時の見え方**: listレポート(ログで落ちた試験が見える)+Playwright HTMLレポート・trace・録画ギャラリーをartifactへ(`if: failure()`)
+- **静的確認とドライラン**: YAML構文+actionlint 1.7.12で警告ゼロ+ローカルでコマンド列ドライラン(migrate・lint・load-migrate・make test-ci全套・geo投入・build・E2E)。ドライランで順序の欠陥2件(§9.2-5/6)を発見し3回目の実行で確定シーケンス(クリーンDB+geo投入→test-ci→geo再投入)を検証。**実pushと初回実行確認はユーザー指示待ち(人間領域の別承認)**
+
+### 9.4 残る主要項目(backlog正本)
+
+P1残2項目(A-02=オーナー承認待ち・O-02=load環境実施)。P2以下はbacklog §12⑤⑥どおり。

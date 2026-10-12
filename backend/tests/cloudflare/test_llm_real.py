@@ -11,15 +11,6 @@ import json
 from datetime import date
 
 import pytest
-
-from latch.llm.errors import (
-    LLMConnectionError,
-    LLMOverloadedError,
-    LLMProviderError,
-    LLMRateLimitError,
-)
-from latch.llm.gateway import LLMGateway
-from latch.llm.jev import JEV_QUESTIONS, JEV_MODEL, validate_and_normalize
 from latch_worker import llm_real
 from latch_worker.llm_real import (
     FetchAnthropicJevFallback,
@@ -30,6 +21,14 @@ from latch_worker.llm_real import (
     default_parser_assets,
 )
 
+from latch.llm.errors import (
+    LLMConnectionError,
+    LLMOverloadedError,
+    LLMProviderError,
+    LLMRateLimitError,
+)
+from latch.llm.gateway import LLMGateway
+from latch.llm.jev import JEV_MODEL, JEV_QUESTIONS, validate_and_normalize
 
 # ============================================================================
 # transport差し替え(リクエスト記録つき)
@@ -90,7 +89,12 @@ def _systemone_ok() -> dict:
 async def test_parser_request_shape_and_parse():
     expected = {"category": {"primary": "meal"}, "ok": True}
     transport = FakeTransport(
-        {"https://api.anthropic.com/v1/messages": (200, _anthropic_ok(json.dumps(expected)))}
+        {
+            "https://api.anthropic.com/v1/messages": (
+                200,
+                _anthropic_ok(json.dumps(expected)),
+            )
+        }
     )
     llm_real.set_transport(transport)
     prompt, schema = default_parser_assets()
@@ -107,9 +111,7 @@ async def test_parser_request_shape_and_parse():
     assert req["body"]["max_tokens"] == 1024
     assert "2026-10-12" in req["body"]["system"]
     assert "{current_date}" not in req["body"]["system"]
-    assert req["body"]["messages"] == [
-        {"role": "user", "content": "今夜 天文館で軽く"}
-    ]
+    assert req["body"]["messages"] == [{"role": "user", "content": "今夜 天文館で軽く"}]
     assert req["body"]["output_config"]["format"]["type"] == "json_schema"
     # schema後加工(本体adapt_schema_for_anthropicと同一): $ref解決済みで
     # ルートがrequired全埋め・additionalProperties=false
@@ -148,7 +150,9 @@ async def test_embedding_request_and_768_dims():
     assert "gemini-embedding-001:embedContent" in req["url"]
     assert req["headers"]["x-goog-api-key"] == "g-test"
     assert req["body"]["outputDimensionality"] == 768
-    assert req["body"]["content"]["parts"] == [{"text": "category: meal\n[hard] time: ..."}]
+    assert req["body"]["content"]["parts"] == [
+        {"text": "category: meal\n[hard] time: ..."}
+    ]
 
 
 async def test_embedding_dimension_mismatch_is_provider_error():
@@ -185,7 +189,10 @@ async def test_typesafe_jev_wire_format():
     req = transport.requests[0]
     assert req["headers"]["authorization"] == "Bearer ts-test"
     assert req["body"]["model"] == JEV_MODEL
-    assert req["body"]["state"] == {"intent_a": "A:\n[hard]...", "intent_b": "B:\n[hard]..."}
+    assert req["body"]["state"] == {
+        "intent_a": "A:\n[hard]...",
+        "intent_b": "B:\n[hard]...",
+    }
     # questionsはJEV_QUESTIONS定数が単一の真実(SDKのnormalize_questionsと同一wire)
     assert req["body"]["questions"] == JEV_QUESTIONS
 
@@ -206,7 +213,12 @@ async def test_fallback_jev_prompt_schema_and_answers_conversion():
         "latent_yes": 0.5,
     }
     transport = FakeTransport(
-        {"https://api.anthropic.com/v1/messages": (200, _anthropic_ok(json.dumps(flat)))}
+        {
+            "https://api.anthropic.com/v1/messages": (
+                200,
+                _anthropic_ok(json.dumps(flat)),
+            )
+        }
     )
     llm_real.set_transport(transport)
     fallback = FetchAnthropicJevFallback(api_key="sk-test")
@@ -251,9 +263,7 @@ async def test_fallback_jev_prompt_schema_and_answers_conversion():
 async def test_post_json_error_mapping(status, text, exc):
     llm_real.set_transport(FakeTransport({"https://x.test/": (status, text)}))
     with pytest.raises(exc):
-        await llm_real._post_json(
-            "https://x.test/", headers={}, body={"a": 1}
-        )
+        await llm_real._post_json("https://x.test/", headers={}, body={"a": 1})
 
 
 async def test_post_json_connection_error(monkeypatch):
@@ -395,9 +405,7 @@ async def test_recording_parser_success_and_failure():
     assert recorder.calls[1][2]["actual_provider"] == "anthropic"
     # 失敗: 429→LLMRateLimitErrorを記録して伝播
     recorder2 = FakeRecorder()
-    transport2 = FakeTransport(
-        {"https://api.anthropic.com/v1/messages": (429, "{}")}
-    )
+    transport2 = FakeTransport({"https://api.anthropic.com/v1/messages": (429, "{}")})
     gateway2 = _real_gateway_with_fake_transport(transport2)
     parser2 = llm_real.RecordingParser(gateway2, recorder2, SystemClock())
     with pytest.raises(LLMRateLimitError):
@@ -460,8 +468,9 @@ async def test_stub_pipeline_llm_shape_is_unchanged():
     if cf_api not in sys.path:
         sys.path.insert(0, cf_api)
 
-    from latch.llm.stub import StubLLM
     from latch_worker.pipeline import STUB_JEV_RESPONSE, StubPipelineLLM
+
+    from latch.llm.stub import StubLLM
 
     stub = StubPipelineLLM(StubLLM(jev_response=STUB_JEV_RESPONSE))
     assert stub.mode == "stub"
@@ -470,6 +479,7 @@ async def test_stub_pipeline_llm_shape_is_unchanged():
     assert judgment.model == JEV_MODEL
     # 従来のfingerprint・costと同じ値になる材料(provider/model/usage)
     assert judgment.usage == {"input_tokens": 0, "output_tokens": 0}
-    assert min(
-        judgment.result["would_a_accept_b"], judgment.result["would_b_accept_a"]
-    ) == 0.9
+    assert (
+        min(judgment.result["would_a_accept_b"], judgment.result["would_b_accept_a"])
+        == 0.9
+    )
