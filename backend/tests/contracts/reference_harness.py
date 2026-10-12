@@ -50,6 +50,11 @@ ACTOR_SPEC: dict[str, dict[str, Any]] = {
     "u1_noconsent": {"register": True, "consent": False},
     "u1_del": {"register": True, "consent": True},
     "u1_logged_out": {"register": True, "consent": True, "logout": True},
+    # survey(V1-P3・05 v0.7)。u1〜u4は他領域のseedでIntentを作るため
+    # due判定の状態を固定する専用actorを分ける
+    "sv1": {"register": True, "consent": True},  # Intentなし(not_due固定)
+    "sv2": {"register": True, "consent": True},  # onboarding往復チェーン用
+    "sv3": {"register": True, "consent": True},  # week4(seedで29日前回答)
 }
 
 
@@ -215,7 +220,32 @@ class ReferenceHarness:
             return await self._seed_completed_latch(params)
         if name == "notification":
             return await self._seed_notification(params)
+        if name == "survey_onboarding_answered":
+            return await self._seed_survey_onboarding(params)
         raise KeyError(f"未知のseed: {name}")
+
+    async def _seed_survey_onboarding(self, params: dict[str, Any]) -> dict[str, Any]:
+        """sv3のonboarding回答をdays_ago日前へ直接INSERT(week4 dueの駆動)。"""
+        days_ago = float(params.get("days_ago", 29))
+        await self.resolve_token("sv3")
+        now = SystemClock().now()
+        async with self._engine.begin() as conn:
+            res = await conn.execute(
+                text("""
+                    INSERT INTO survey_responses
+                        (user_id, round, answers, free_comment, created_at)
+                    VALUES (CAST(:u AS uuid), 'onboarding',
+                            CAST(:answers AS jsonb), NULL,
+                            CAST(:at AS timestamptz))
+                    RETURNING id
+                """),
+                {
+                    "u": uuid_mod.UUID(self._user_ids["sv3"]),
+                    "answers": json.dumps({"convenience": 4}, ensure_ascii=False),
+                    "at": now - timedelta(days=days_ago),
+                },
+            )
+            return {"survey_id": str(res.first()[0])}
 
     async def _insert_latch(
         self,
@@ -334,6 +364,13 @@ class ReferenceHarness:
     async def cleanup(self) -> None:
         p = {"p": self._prefix + "%"}
         async with self._engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "DELETE FROM survey_responses WHERE user_id IN"
+                    " (SELECT id FROM users WHERE auth_subject LIKE :p)"
+                ),
+                p,
+            )
             await conn.execute(
                 text(
                     "DELETE FROM messages WHERE latch_id IN"

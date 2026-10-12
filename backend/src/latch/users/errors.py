@@ -53,3 +53,18 @@ class DependencyUnavailableError(UsersError):
 
     http_status = 503
     code = "DEPENDENCY_UNAVAILABLE"
+
+
+class SurveyAlreadyAnsweredError(UsersError):
+    """アンケート回答の二重回答(ラウンド単位・訂正不可。05 v0.7)。"""
+
+    http_status = 409
+    code = "SURVEY_ALREADY_ANSWERED"
+
+
+class SurveyNotDueError(UsersError):
+    """配信対象外ラウンドへの回答(05 v0.7。onboarding=active化Intentなし/
+    week4=初回回答から28日未経過または初回未回答)。"""
+
+    http_status = 409
+    code = "SURVEY_NOT_DUE"

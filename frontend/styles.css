@@ -882,6 +882,52 @@ a.notice-item:hover{border-color:var(--line-strong);background:var(--s3)}
 
 /* いま、LATCHがしていること(3カード) */
 .sb-doing{display:flex;flex-direction:column;gap:24px}
+
+/* --- 体感アンケート(V1-P3・05 v0.7)。03の受動カード ------------------------- */
+.sv-sec{display:flex}
+.sv-card{
+  display:flex;flex-direction:column;gap:16px;width:100%;
+  padding:26px;border-radius:22px;background:#10121A;border:1px solid var(--line);
+}
+.sv-title{
+  margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
+  font-weight:700;font-size:20px;
+}
+.sv-q{margin:0;padding:0;border:none;display:flex;flex-direction:column;gap:10px}
+.sv-legend{
+  padding:0;font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2);
+}
+.sv-scale{display:flex;flex-wrap:wrap;gap:8px}
+.sv-opt{
+  position:relative;display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+  min-height:42px;padding:0 14px;border-radius:999px;
+  border:1px solid var(--line-strong);background:transparent;
+  transition:border-color .2s ease,background-color .2s ease;
+}
+.sv-opt input{
+  position:absolute;inset:0;opacity:0;cursor:pointer;margin:0;
+}
+.sv-opt[data-checked="true"]{border-color:var(--acc);background:var(--s2)}
+.sv-opt:focus-within{border-color:var(--acc)}
+.sv-opt-num{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--stb)}
+.sv-opt-label{font-size:13px;color:var(--t1)}
+.sv-comment{display:flex;flex-direction:column;gap:8px}
+.sv-comment-label{font-size:14px;font-weight:700;letter-spacing:0.06em;color:var(--t2)}
+.sv-comment textarea{
+  font-family:inherit;font-size:14px;color:var(--t1);line-height:1.7;
+  padding:12px 14px;border-radius:14px;border:1px solid var(--line-strong);
+  background:var(--bg);resize:vertical;
+}
+.sv-foot{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.sv-submit{
+  min-height:46px;padding:0 20px;border:none;border-radius:999px;
+  background:var(--acc);color:var(--on-acc);font-family:inherit;font-size:14px;
+  font-weight:700;cursor:pointer;
+}
+.sv-submit:disabled{opacity:.45}
+.sv-privacy{margin:0;font-size:13px;line-height:1.7;color:var(--t3)}
+.sv-done{margin:0;color:var(--t2);font-weight:700}
+.sv-error{margin:0;color:var(--dng);font-weight:700}
 .sb-h2{
   margin:0;font-family:'Zen Old Mincho','Hiragino Mincho ProN','Yu Mincho',serif;
   font-weight:700;font-size:clamp(24px, 3vw, 28px);

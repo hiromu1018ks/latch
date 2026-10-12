@@ -1881,6 +1881,220 @@ CASES: list[ContractCase] = [
         E(200, json_equals={"status": "ok"}),
         source_test="test_ratelimit_api.test_9",
     ),
+    # ================= survey(体感アンケート・05 v0.7) =================
+    C(
+        "survey_status_not_due_without_intent",
+        "survey",
+        "active化Intentがないユーザーは全ラウンドnot_due",
+        R("GET", "/v1/users/me/survey", actor="sv1"),
+        E(
+            200,
+            json_equals={
+                "onboarding": {"status": "not_due", "available_at": None},
+                "week4": {"status": "not_due", "available_at": None},
+            },
+        ),
+        source_test="test_survey_api.test_status_not_due_without_intent",
+    ),
+    C(
+        "survey_submit_onboarding_not_due_409",
+        "survey",
+        "Intent未active化でのonboarding回答は409 SURVEY_NOT_DUE",
+        R(
+            "POST",
+            "/v1/users/me/survey",
+            json={"round": "onboarding", "answers": {"convenience": 4}},
+            actor="sv1",
+        ),
+        E(409, error_code="SURVEY_NOT_DUE"),
+        source_test="test_survey_api.test_submit_onboarding_without_intent_409_not_due",
+    ),
+    C(
+        "survey_submit_invalid_round_422",
+        "survey",
+        "不正roundは422(schemaのLiteral)",
+        R(
+            "POST",
+            "/v1/users/me/survey",
+            json={"round": "weekly", "answers": {"convenience": 4}},
+            actor="sv1",
+        ),
+        E(422, error_code="VALIDATION_ERROR"),
+        source_test="test_survey_api.test_submit_invalid_values_422",
+    ),
+    C(
+        "survey_status_due_after_activation",
+        "survey",
+        "active Intent作成後はonboardingがdue",
+        R("GET", "/v1/users/me/survey", actor="sv2"),
+        E(
+            200,
+            json_equals={
+                "onboarding": {"status": "due", "available_at": None},
+                "week4": {"status": "not_due", "available_at": None},
+            },
+        ),
+        setup=(
+            (
+                "create_intent",
+                R("POST", "/v1/intents", json=_intent_body(), actor="sv2"),
+                E(201),
+            ),
+        ),
+        source_test="test_survey_api.test_status_due_after_activation",
+    ),
+    C(
+        "survey_submit_onboarding_ok",
+        "survey",
+        "onboarding回答は201・survey入れ子でroundとanswered_at",
+        R(
+            "POST",
+            "/v1/users/me/survey",
+            json={"round": "onboarding", "answers": {"convenience": 4}},
+            actor="sv2",
+        ),
+        E(
+            201,
+            json_equals={"survey": {"round": "onboarding"}},
+            json_contains=("survey.answered_at",),
+        ),
+        # actorはケース毎に新規provisionされるためdue条件をsetupで満たす
+        setup=(
+            (
+                "create_intent",
+                R("POST", "/v1/intents", json=_intent_body(), actor="sv2"),
+                E(201),
+            ),
+        ),
+        effects="survey_responses行1件(UNIQUE(user_id, round))",
+        source_test="test_survey_api.test_submit_onboarding_then_answered",
+    ),
+    C(
+        "survey_status_after_answer",
+        "survey",
+        "回答済みラウンドはanswered・week4はavailable_at付きnot_due",
+        R("GET", "/v1/users/me/survey", actor="sv2"),
+        E(
+            200,
+            json_equals={
+                "onboarding": {"status": "answered", "available_at": None},
+                "week4": {"status": "not_due"},
+            },
+            json_contains=("week4.available_at",),
+        ),
+        setup=(
+            (
+                "create_intent",
+                R("POST", "/v1/intents", json=_intent_body(), actor="sv2"),
+                E(201),
+            ),
+            (
+                "answer",
+                R(
+                    "POST",
+                    "/v1/users/me/survey",
+                    json={"round": "onboarding", "answers": {"convenience": 4}},
+                    actor="sv2",
+                ),
+                E(201),
+            ),
+        ),
+        source_test="test_survey_api.test_submit_onboarding_then_answered",
+    ),
+    C(
+        "survey_submit_duplicate_409",
+        "survey",
+        "同一ラウンドの二重回答は409 SURVEY_ALREADY_ANSWERED(単発)",
+        R(
+            "POST",
+            "/v1/users/me/survey",
+            json={"round": "onboarding", "answers": {"convenience": 5}},
+            actor="sv2",
+        ),
+        E(409, error_code="SURVEY_ALREADY_ANSWERED"),
+        setup=(
+            (
+                "create_intent",
+                R("POST", "/v1/intents", json=_intent_body(), actor="sv2"),
+                E(201),
+            ),
+            (
+                "answer",
+                R(
+                    "POST",
+                    "/v1/users/me/survey",
+                    json={"round": "onboarding", "answers": {"convenience": 4}},
+                    actor="sv2",
+                ),
+                E(201),
+            ),
+        ),
+        source_test="test_survey_api.test_submit_duplicate_409",
+    ),
+    C(
+        "survey_week4_too_early_409",
+        "survey",
+        "onboarding回答から28日未経過のweek4回答は409 SURVEY_NOT_DUE",
+        R(
+            "POST",
+            "/v1/users/me/survey",
+            json={
+                "round": "week4",
+                "answers": {"convenience": 4, "continuation": 5},
+            },
+            actor="sv2",
+        ),
+        E(409, error_code="SURVEY_NOT_DUE"),
+        setup=(
+            (
+                "create_intent",
+                R("POST", "/v1/intents", json=_intent_body(), actor="sv2"),
+                E(201),
+            ),
+            (
+                "answer",
+                R(
+                    "POST",
+                    "/v1/users/me/survey",
+                    json={"round": "onboarding", "answers": {"convenience": 4}},
+                    actor="sv2",
+                ),
+                E(201),
+            ),
+        ),
+        source_test="test_survey_api.test_week4_too_early_409",
+    ),
+    C(
+        "survey_week4_due_and_submit",
+        "survey",
+        "onboarding回答29日前のseedではweek4がdue・回答は201",
+        R(
+            "POST",
+            "/v1/users/me/survey",
+            json={
+                "round": "week4",
+                "answers": {"convenience": 4, "continuation": 5},
+                "free_comment": "契約用の自由記述",
+            },
+            actor="sv3",
+        ),
+        E(
+            201,
+            json_equals={"survey": {"round": "week4"}},
+            json_contains=("survey.answered_at",),
+        ),
+        seed=("survey_onboarding_answered", {"days_ago": 29}),
+        effects="survey_responses行2件(onboarding=seed・week4=本体)",
+        source_test="test_survey_api.test_week4_flow_after_28d",
+    ),
+    C(
+        "survey_status_unregistered_404",
+        "survey",
+        "登録前JWTのGETは404 NOT_FOUND(consentと同一挙動)",
+        R("GET", "/v1/users/me/survey", actor="ghost"),
+        E(404, error_code="NOT_FOUND"),
+        source_test="test_survey_api.test_unregistered_survey_is_404",
+    ),
 ]
 
 # -- 将来回帰ケース(T0: SQL fakeでは見逃す系統。バグを正解fixtureにしない) --------

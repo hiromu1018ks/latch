@@ -312,7 +312,26 @@ class CloudflareHarness:
             return await self._seed_completed_latch(params)
         if name == "notification":
             return await self._seed_notification(params)
+        if name == "survey_onboarding_answered":
+            return await self._seed_survey_onboarding(params)
         raise KeyError(f"未知のseed: {name}")
+
+    async def _seed_survey_onboarding(self, params: dict[str, Any]) -> dict[str, Any]:
+        """sv3のonboarding回答をdays_ago日前へ直接INSERT(week4 dueの駆動)。"""
+        days_ago = float(params.get("days_ago", 29))
+        await self.resolve_token("sv3")
+        now = SystemClock().now()
+        survey_id = str(uuid_mod.uuid4())
+        await self._d1_batch(
+            [
+                "INSERT INTO survey_responses"
+                " (id, user_id, round, answers, free_comment, created_at)"
+                f" VALUES ('{survey_id}', '{self._user_ids['sv3']}', 'onboarding',"
+                f" '{_canonical({'convenience': 4})}', NULL,"
+                f" {micros(now - timedelta(days=days_ago))})"
+            ]
+        )
+        return {"survey_id": survey_id}
 
     async def _insert_latch(
         self,
@@ -410,6 +429,7 @@ class CloudflareHarness:
         await self._d1_batch(
             [
                 # FK参照元から先に消く(journal→commands・ownership→intents/latches)
+                f"DELETE FROM survey_responses WHERE user_id IN {u}",
                 "DELETE FROM journal WHERE command_id IN (SELECT id FROM commands"
                 " WHERE target_id IN " + intents + " OR target_id IN " + u + ")",
                 "DELETE FROM commands WHERE target_id IN "

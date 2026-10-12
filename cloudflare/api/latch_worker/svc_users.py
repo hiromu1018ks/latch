@@ -18,10 +18,11 @@ from datetime import date, datetime
 
 from latch.adapters.d1.atomic import D1AtomicRepository
 from latch.auth.tokens import AccessTokenClaims
-from latch.domain.time import micros
+from latch.domain.time import from_micros, micros
 from latch.users.consent import ConsentService
 from latch.users.errors import UserExistsError
 from latch.users.service import NewUser, UserRow, UserService
+from latch.users.survey import SurveyService
 
 from latch_worker.gjson import loads_json
 
@@ -206,4 +207,85 @@ def build_consent_service(db, clock) -> ConsentService:
         fetch_consent=fetch_consent,
         consented=consented,
         exists_fn=exists_user,
+    )
+
+
+def build_survey_service(db, clock) -> SurveyService:
+    """SurveyService本体へD1関数を注入(体感アンケート・05 v0.7)。
+
+    due判定の規則(onboarding=active化Intent存在・week4=onboarding回答+28日)
+    は本体SurveyServiceが持ち、D1側は永続化Callableのみ(consentと同型)。
+    """
+
+    async def fetch_rounds(claims: AccessTokenClaims) -> dict:
+        rows = (
+            await db.prepare(
+                "SELECT round, created_at FROM survey_responses"
+                " WHERE user_id = (SELECT id FROM users"
+                "  WHERE auth_provider = ? AND auth_subject = ?)"
+            )
+            .bind(claims.auth_provider, claims.auth_subject)
+            .all()
+        )
+        return {row["round"]: from_micros(int(row["created_at"])) for row in rows}
+
+    async def has_activated_intent(claims: AccessTokenClaims) -> bool:
+        row = (
+            await db.prepare(
+                "SELECT 1 AS x FROM intents i"
+                " JOIN users u ON u.id = i.user_id"
+                " WHERE u.auth_provider = ? AND u.auth_subject = ?"
+                "   AND i.status != 'draft' LIMIT 1"
+            )
+            .bind(claims.auth_provider, claims.auth_subject)
+            .first()
+        )
+        return row is not None
+
+    async def exists_user(claims: AccessTokenClaims) -> bool:
+        row = (
+            await db.prepare(
+                "SELECT 1 AS x FROM users"
+                " WHERE auth_provider = ? AND auth_subject = ?"
+            )
+            .bind(claims.auth_provider, claims.auth_subject)
+            .first()
+        )
+        return row is not None
+
+    async def insert_answer(claims, round_, answers, free_comment, now):
+        import json as json_mod
+        import uuid as uuid_mod
+
+        row = (
+            await db.prepare(
+                "INSERT INTO survey_responses"
+                " (id, user_id, round, answers, free_comment, created_at)"
+                " SELECT ?, u.id, ?, ?, ?, ?"
+                "  FROM users u"
+                " WHERE u.auth_provider = ? AND u.auth_subject = ?"
+                " ON CONFLICT (user_id, round) DO NOTHING"
+                " RETURNING created_at"
+            )
+            .bind(
+                str(uuid_mod.uuid4()),
+                round_,
+                json_mod.dumps(answers, ensure_ascii=False),
+                free_comment,
+                micros(now),
+                claims.auth_provider,
+                claims.auth_subject,
+            )
+            .first()
+        )
+        if row is None:
+            return None
+        return from_micros(int(row["created_at"]))
+
+    return SurveyService(
+        clock=clock,
+        fetch_rounds=fetch_rounds,
+        has_activated_intent=has_activated_intent,
+        exists_user=exists_user,
+        insert_answer=insert_answer,
     )

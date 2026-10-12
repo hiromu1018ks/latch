@@ -246,3 +246,28 @@ export const CONSENT_STATE_NOT_AGREED_TEXT = "同意していません";
 export const CONSENT_TOAST_TEXT = "同意を記録しました";
 export const CONSENT_REQUIRED_TOAST_TEXT =
   "マッチングの利用には同意が必要です。同意画面へ移動します。";
+
+// --- V1-P3追記: 体感アンケート(05 v0.7・09 §2.3・仮説1/5) --------------------
+// 配信は03待機中への受動カード(モーダル・通知・バッジなし)。設問は1回3問以内:
+// onboarding=便利さ1問・week4=便利さ+継続意向+任意の自由記述。
+
+export const SURVEY_ONBOARDING_TITLE = "はじめての待ちかた、いかがでしたか?";
+export const SURVEY_WEEK4_TITLE = "4週間、待ってみていかがでしたか?";
+export const SURVEY_CONVENIENCE_QUESTION =
+  "条件を預けて待つだけでLATCH候補が届く仕組みを、便利だと思いますか?";
+export const SURVEY_CONTINUATION_QUESTION =
+  "今後もLATCHを使い続けたいと思いますか?";
+export const SURVEY_SCALE_OPTIONS = [
+  ["1", "まったく思わない"],
+  ["2", "あまり思わない"],
+  ["3", "どちらとも言えない"],
+  ["4", "思う"],
+  ["5", "とても思う"],
+];
+export const SURVEY_FREE_COMMENT_LABEL = "ひとこと、お聞かせください（任意）";
+export const SURVEY_FREE_COMMENT_PLACEHOLDER = "待つ体験について感じたことなど";
+export const SURVEY_NOTE_TEXT =
+  "回答はLATCHの体験を良くするために使います。回答と、あなたが預けた条件が結びつけられることはありません。";
+export const SURVEY_SUBMIT_LABEL = "送信する";
+export const SURVEY_DONE_TEXT = "回答を送りました";
+export const SURVEY_ERROR_TEXT = "送信できませんでした。";

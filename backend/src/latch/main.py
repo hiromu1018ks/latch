@@ -55,6 +55,7 @@ from latch.users.consent import ConsentService, make_consent_service
 from latch.users.errors import UsersError
 from latch.users.routes import users_router
 from latch.users.service import make_user_service
+from latch.users.survey import SurveyService, make_survey_service
 
 logger = logging.getLogger("latch.auth")
 users_logger = logging.getLogger("latch.users")
@@ -78,6 +79,7 @@ async def _lifespan(app: FastAPI):
     build_events = not hasattr(app.state, "event_bus")
     build_safety = not hasattr(app.state, "safety_service")
     build_consent = not hasattr(app.state, "consent_service")
+    build_survey = not hasattr(app.state, "survey_service")
     if not (
         build_auth
         or build_users
@@ -89,6 +91,7 @@ async def _lifespan(app: FastAPI):
         or build_events
         or build_safety
         or build_consent
+        or build_survey
     ):
         yield
         return
@@ -132,6 +135,10 @@ async def _lifespan(app: FastAPI):
         )
     if build_consent:
         app.state.consent_service = make_consent_service(
+            clock=app.state.clock, engine=engine
+        )
+    if build_survey:
+        app.state.survey_service = make_survey_service(
             clock=app.state.clock, engine=engine
         )
     if build_intents:
@@ -258,6 +265,7 @@ def create_app(
     notifications_service=None,
     safety_service=None,
     consent_service: ConsentService | None = None,
+    survey_service: SurveyService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.settings = settings if settings is not None else Settings()
@@ -268,6 +276,8 @@ def create_app(
         app.state.users_service = users_service
     if consent_service is not None:
         app.state.consent_service = consent_service
+    if survey_service is not None:
+        app.state.survey_service = survey_service
     if intent_parse_service is not None:
         app.state.intent_parse_service = intent_parse_service
     if intent_service is not None:

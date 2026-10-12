@@ -13,16 +13,17 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from latch.auth.deps import require_authenticated
 from latch.auth.tokens import AccessTokenClaims
 from latch.ratelimit.deps import api_rate_limited
 from latch.users.consent import ConsentService, ConsentState
 from latch.users.service import UserCreated, UserMe, UserService
+from latch.users.survey import SurveyAnswered, SurveyService, SurveyStatus
 
 logger = logging.getLogger("latch.users")
 
@@ -39,8 +40,13 @@ def get_users_service(request: Request) -> UserService:
 
 
 def get_consent_service(request: Request) -> ConsentService:
-    """app.state.consent_service へのアクセス(lifespanまたはテスト注入)。"""
+    """app.state.consent_service へのアクセス(lifespanまたはテスト注入で載る)。"""
     return request.app.state.consent_service
+
+
+def get_survey_service(request: Request) -> SurveyService:
+    """app.state.survey_service へのアクセス(lifespanまたはテスト注入で載る)。"""
+    return request.app.state.survey_service
 
 
 class ConsentStateResponse(BaseModel):
@@ -152,3 +158,95 @@ async def get_consent(
     state: ConsentState = await svc.get(claims=claims)
     logger.info("users.consent_state ok")
     return ConsentStateResponse(consented_at=state.consented_at)
+
+
+# -- 体感アンケート(05 v0.7・09 §2.3) ---------------------------------------
+
+
+class SurveyAnswersInput(BaseModel):
+    """5段階設問の値(1〜5)。round別の必須/禁止はSurveySubmitRequestで検査。"""
+
+    convenience: int = Field(ge=1, le=5)  # 便利さ(仮説1)
+    continuation: int | None = Field(
+        default=None, ge=1, le=5
+    )  # 継続意向(仮説5・week4のみ)
+
+
+class SurveySubmitRequest(BaseModel):
+    round: Literal["onboarding", "week4"]
+    answers: SurveyAnswersInput
+    # week4のみ任意(空白のみはNoneへ正規化。onboardingへの付与は422)
+    free_comment: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _round_shape(self) -> SurveySubmitRequest:
+        if self.round == "onboarding":
+            if self.answers.continuation is not None:
+                raise ValueError("continuation is only accepted for week4")
+            if self.free_comment is not None:
+                raise ValueError("free_comment is only accepted for week4")
+        elif self.answers.continuation is None:
+            raise ValueError("continuation is required for week4")
+        return self
+
+
+class RoundStatusResponse(BaseModel):
+    status: Literal["due", "answered", "not_due"]
+    available_at: datetime | None
+
+
+class SurveyStatusResponse(BaseModel):
+    onboarding: RoundStatusResponse
+    week4: RoundStatusResponse
+
+
+class SurveyAnsweredBody(BaseModel):
+    round: str
+    answered_at: datetime
+
+
+class SurveyAnsweredResponse(BaseModel):
+    survey: SurveyAnsweredBody
+
+
+@users_router.get("/me/survey", response_model=SurveyStatusResponse)
+async def get_survey_status(
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[SurveyService, Depends(get_survey_service)],
+) -> SurveyStatusResponse:
+    """ラウンド別のdue/answered判定(配信すべきラウンドの判定用・アクセス時判定)。"""
+    state: SurveyStatus = await svc.status(claims=claims)
+    logger.info("users.survey_status ok")
+    return SurveyStatusResponse(
+        onboarding=RoundStatusResponse(
+            status=state.onboarding.status, available_at=state.onboarding.available_at
+        ),
+        week4=RoundStatusResponse(
+            status=state.week4.status, available_at=state.week4.available_at
+        ),
+    )
+
+
+@users_router.post("/me/survey", status_code=201, response_model=SurveyAnsweredResponse)
+async def submit_survey(
+    body: SurveySubmitRequest,
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[SurveyService, Depends(get_survey_service)],
+) -> SurveyAnsweredResponse:
+    """回答の保存(ラウンド単位・単発)。ログはroundのみ(回答値・自由記述は出さない)。"""
+    free_comment = body.free_comment.strip() or None if body.free_comment else None
+    answers: dict = {"convenience": body.answers.convenience}
+    if body.answers.continuation is not None:
+        answers["continuation"] = body.answers.continuation
+    answered: SurveyAnswered = await svc.submit(
+        claims=claims,
+        round_=body.round,
+        answers=answers,
+        free_comment=free_comment,
+    )
+    logger.info("users.survey_submit ok round=%s", body.round)
+    return SurveyAnsweredResponse(
+        survey=SurveyAnsweredBody(
+            round=answered.round, answered_at=answered.answered_at
+        )
+    )

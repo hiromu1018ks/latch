@@ -105,6 +105,7 @@ def test_case_coverage_by_area():
         "notifications",
         "account",
         "ratelimit",
+        "survey",
     }
     missing = expected - areas
     assert not missing, f"未カバー領域: {missing}"

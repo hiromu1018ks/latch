@@ -641,3 +641,34 @@ helpers拡張: `createIntent`へrawText/softConstraints(非開示assert用固有
 ### 9.4 残る主要項目(backlog正本)
 
 P1残2項目(A-02=オーナー承認待ち・O-02=load環境実施)。P2以下はbacklog §12⑤⑥どおり。
+
+## 10. V1-P3 体感アンケート実装パス(2026-10-12・backlog §12 A-06)
+
+backlog A-06(実装欠落→実装+検証)を05 v0.7改版→backend(参照+Cloudflare)→frontend→E2Eの3層で実施。13 §3表2のPhase 1開始前要件を開発側で充足。
+
+### 10.1 実装テスト(仕様=05 v0.7・docsコミット6905c77→実装コミット)
+
+| 層 | 場所 | テスト | 対応 |
+|---|---|---|---|
+| 仕様 | docs/05-data-model-api.md v0.7 | survey_responses表・GET/POST /v1/users/me/survey・error 2件(SURVEY_ALREADY_ANSWERED/SURVEY_NOT_DUE)・配信契機4項・集計CLI | **A-06設計** |
+| backend参照 | alembic 0010+latch/users/survey.py+routes・obs/survey.py | unit 21(test_survey_service 16+test_survey_summary 5)・integration test_survey_api.py 12 | **API+集計** |
+| Cloudflare | migrations/0006_survey.sql+svc_users.py build_survey_service+state.py配線 | 契約local(in-process D1)survey 10ケース緑・cf-unit 129緑 | **D1側(E-01体制)** |
+| 契約 | tests/contracts(両harnessへactor sv1〜sv3+seed survey_onboarding_answered) | survey 10ケース=参照・D1両側緑(test_api_parity領域"survey"追加・baseline manifestのschema_head=0010へ再生成) | **パリティ** |
+| frontend | SurveyCard.jsx(03待機中の受動カード)+texts.js+styles.css(sv-*) | vitest latch-survey.test.jsx 8件(376緑) | **UI** |
+| E2E | e2e/survey.spec.js:19,52,66 | onboarding往復(active化→1問→送信→済み→再訪で出ない+DB証明)/未配信(Intentなし+draftのみユーザーに非表示)/week4(created_at過去化29日→3問→answers+free_commentのDB証明) | **A-06実機** |
+
+稼働実績(最終状態): **vitest 376・ci 50・staging 5・cf 2**=E2E 57テスト2回連続緑・backend全套2229/3 skipped(クリーンDB・load DB前提)。
+
+### 10.2 実機・実装で確認された観察(ドキュメント化価値のある発見)
+
+1. **契約ハーネストはケース毎にactorが新規provisionされる**(harness fixtureがfunctionスコープ): due状態を前提する連鎖ケース(onboarding回答→status変化→二重409等)はactorの状態を前提できず、各ケースのsetupで「Intent作成→回答」まで完結させるのが正規の書き方(初回実装の連鎖前提はSURVEY_NOT_DUEで失敗し発見)。consentケースが一見連鎖に見えたのは各ケース内でPOSTまで完結していたため
+2. **week4ラウンドのE2E駆動はsurvey_responses.created_atのSQL過去化(29日前)が正規手段**: 期限系E2E(U-19/T-02)と同型。Clock不使用=ブラウザ実時間由来の描画がない(ステータス取得はGET時のサーバ判定のため、過去化した瞬間にdueになる)
+3. **draftは「保存」でありactive化でないため配信契機1(status != 'draft'のIntent存在)の対象外**(E2E未配信ケースで実証)。active化後に全Intent削除したユーザーはdueでなくなる=削除が痕跡を消す限界として05 v0.7に記録済み
+4. **headピン試験(test_geo/test_obs_schemaのassert version=="0009")はマイグレーション追加のたび機械追随が必要**: 0010で2 failed→ピン更新で解消(0005/0009と同型の既知運用)
+5. **baseline manifestのschema_headがマイグレーション追加で変化**: `PYTHONPATH=tests uv run python -m contracts.regen_manifest`で更新しないとtest_baseline_manifest_currentが失敗(意図した変更なのでregenで正しい)
+6. **asyncpgはjsonb SELECT結果を自動でdict化**: 試験側でjson.loadsするとTypeError(answers列のassertはdict比較で直接)
+7. **D1側0006の適用経路は2つ自動化済み**: 契約localハーネスト(LocalD1Database.migrateがmigrations/配下を走査)とcf-e2e-server(build+migrate)。手動適用は不要
+
+### 10.3 CI(O-01)への影響
+
+本実装でCIが実行するテストは増えるのみ(順序・前提の変化なし): ci E2E 47→50・test-ci 2177→2229・vitest 368→376。alembic head=0010・D1 0006は各migrateステップが自動適用。**workflowの実pushと初回実行確認は引き続きユーザー指示待ち(人間領域の別承認のまま)**

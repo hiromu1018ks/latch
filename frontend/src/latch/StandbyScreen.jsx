@@ -41,6 +41,7 @@ import {
 } from "./texts.js";
 import { Icon } from "../ui/Icon.jsx";
 import { useChrome } from "../ui/chrome.jsx";
+import { SurveyCard } from "./SurveyCard.jsx";
 import { categoryIconName, splitStatuses } from "./home.js";
 
 const TIMER_TICK_MS = 1000;
@@ -343,6 +344,9 @@ export const StandbyScreen = ({ client }) => {
           {main ? <Orb intent={main} /> : null}
         </div>
       </section>
+
+      {/* 体感アンケート(V1-P3・05 v0.7)。dueのときだけ受動カードとして出る */}
+      <SurveyCard client={client} />
 
       <section className="sb-doing" aria-labelledby="h-doing">
         <h2 id="h-doing" className="sb-h2">いま、LATCHがしていること</h2>

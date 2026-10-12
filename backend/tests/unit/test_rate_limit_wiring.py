@@ -39,6 +39,7 @@ EXPECTED_PROTECTED_RATE_LIMITS = {
     "/v1/users": 1,
     "/v1/users/me": 2,  # GET + DELETE(M3 ws-6・退会)
     "/v1/users/me/consent": 2,  # M4 ws-5(POST + GET)
+    "/v1/users/me/survey": 2,  # V1-P3(体感アンケート GET + POST・05 v0.7)
     "/v1/users/me/blocks": 1,  # M3 ws-5(ブロック一覧)
     "/v1/users/{user_id}/block": 2,  # M3 ws-5(登録+解除)
 }
