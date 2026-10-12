@@ -1,6 +1,9 @@
-// E2E共通helper。実API=compose常設(127.0.0.1:8000)・実DB=latch-ci-db-1が前提。
+// E2E共通helper。既定の対象はci常設環境(実API=127.0.0.1:8000・実DB=latch-ci-db-1)。
+// LATCH_E2E_TARGET=staging でstaging(nginx 18000・DB=latch-staging-db-1・.staging/keys)
+// を向く(iss/aud/kidはSettings既定で共通・鍵だけ相違)。cloudflare(cf-dev 8787)は
+// 実APIのみ使いDB直接操作はしない(D1はAPI経由で観測)。
 // ユーザー払い出しは契約試験(tests/contracts/reference_harness.py)と同じ正規経路:
-// IdPトークン(RS256・backend同梱テスト鍵)→POST /v1/auth/token→POST /v1/users→consent。
+// IdPトークン(RS256)→POST /v1/auth/token→POST /v1/users→consent。
 // latch行は同harnessと同じ直接INSERT(IntentのみAPI作成・パイプライン非依存)。
 import { execFileSync } from "node:child_process";
 import { createSign } from "node:crypto";
@@ -9,11 +12,16 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { test as base, expect } from "@playwright/test";
 
-export const API_BASE = process.env.LATCH_E2E_API ?? "http://127.0.0.1:8000";
+export const TARGET = process.env.LATCH_E2E_TARGET ?? "ci";
+export const API_BASE =
+  process.env.LATCH_E2E_API ?? (TARGET === "staging" ? "http://127.0.0.1:18000" : TARGET === "cloudflare" ? "http://127.0.0.1:8787" : "http://127.0.0.1:8000");
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const IDP_KEY = readFileSync(
-  path.join(REPO_ROOT, "backend/src/latch/auth/testkeys/idp_test_private.pem"),
+  TARGET === "staging"
+    ? path.join(REPO_ROOT, ".staging/keys/idp_test_private.pem")
+    : path.join(REPO_ROOT, "backend/src/latch/auth/testkeys/idp_test_private.pem"),
 );
+const DB_CONTAINER = TARGET === "staging" ? "latch-staging-db-1" : "latch-ci-db-1";
 const IDP_KID = "test-idp-1";
 const IDP_ISS = "https://idp.ci.latch.test/google";
 const IDP_AUD = "latch-test-app";
@@ -118,18 +126,19 @@ export async function createIntent(user, { status = "active", location = "天文
 export function sql(statement) {
   return execFileSync(
     "docker",
-    ["exec", "latch-ci-db-1", "psql", "-U", "latch", "-d", "latch", "-tA", "-c", statement],
+    ["exec", DB_CONTAINER, "psql", "-U", "latch", "-d", "latch", "-tA", "-c", statement],
     { encoding: "utf8" },
   ).trim();
 }
 
-export function insertPairLatch(intentA, intentB, { status = "proposed" } = {}) {
-  // proposalは実パイプラインbuild_proposal()のsummary_only全フィールド形を模す
-  // (headcount+match_levelのみだとUIは最小形=照合表なしで描画されるため)。
+export function insertPairLatch(intentA, intentB, { status = "proposed", proposal } = {}) {
+  // 既定proposalは実パイプラインbuild_proposal()のsummary_only全フィールド形を
+  // 模す(headcount+match_levelのみだとUIは最小形=照合表なしで描画されるため)。
+  // proposalを渡すと最小形(hidden_until_match実運用姿)等を指定できる。
   const t = new Date(Date.now() + 2 * 3_600_000 + 9 * 3_600_000);
   const pad = (n) => String(n).padStart(2, "0");
   const timeSummary = `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())} ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`;
-  const proposal = {
+  const full = {
     time_summary: timeSummary,
     area_name: "天文館",
     headcount: 2,
@@ -138,10 +147,11 @@ export function insertPairLatch(intentA, intentB, { status = "proposed" } = {}) 
     budget: null,
     match_level: "medium",
   };
+  const json = JSON.stringify(proposal ?? full);
   const out = sql([
     "INSERT INTO latches (intent_ids, group_candidate_id, proposal, score, status, response_deadline, expires_at, created_at)",
     `VALUES (ARRAY['${intentA}'::uuid,'${intentB}'::uuid], NULL,`,
-    `  '${JSON.stringify(proposal)}'::jsonb, 0.85, '${status}',`,
+    `  '${json}'::jsonb, 0.85, '${status}',`,
     "  now() + interval '3 hours', now() + interval '120 hours', now())",
     "RETURNING id;",
   ].join(" "));
@@ -159,12 +169,54 @@ export function expireResponseDeadline(latchId) {
   sql(`UPDATE latches SET response_deadline = now() - interval '1 minute' WHERE id = '${latchId}'::uuid;`);
 }
 
-export async function pairLatchFixture({ status = "proposed", tag = "e2e" } = {}) {
+// グループ成立fixture(3人)。group_candidates行+group_candidate_idつきlatches行を
+// 直接INSERTする(契約harnessの直接INSERT手法と同じ・パイプライン非依存)。
+// member_scoresは回答時のcalibration用のためGET詳細では未使用 — 最小形で投入する。
+export function insertGroupLatch(intentIds, { status = "matched" } = {}) {
+  const ids = intentIds.map((id) => `'${id}'::uuid`).join(",");
+  const uuidOf = (out) =>
+    out
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(line));
+  const gidOut = sql(
+    [
+      "INSERT INTO group_candidates (intent_ids, member_scores, aggregate_score, status, created_at, updated_at)",
+      `VALUES (ARRAY[${ids}], '{}'::jsonb, 0.85, 'confirmed', now(), now())`,
+      "RETURNING id;",
+    ].join(" "),
+  );
+  const gid = uuidOf(gidOut);
+  if (!gid) throw new Error(`group_candidate id not parsed: ${gidOut}`);
+  const proposal = JSON.stringify({ headcount: intentIds.length, match_level: "high" });
+  const out = sql([
+    "INSERT INTO latches (intent_ids, group_candidate_id, proposal, score, status, response_deadline, expires_at, created_at)",
+    `VALUES (ARRAY[${ids}], '${gid}'::uuid,`,
+    `  '${proposal}'::jsonb, 0.85, '${status}',`,
+    "  now() + interval '3 hours', now() + interval '120 hours', now())",
+    "RETURNING id;",
+  ].join(" "));
+  const id = uuidOf(out);
+  if (!id) throw new Error(`latch id not parsed from psql output: ${out}`);
+  createdLatches.push(id);
+  return { latchId: id, groupCandidateId: gid };
+}
+
+// 通報の受け付け実績をDB側から数える(POST /v1/reportsは受付のみで取得APIなし)。
+export function reportsCount({ reporterId, reporteeId, latchId } = {}) {
+  const conds = [];
+  if (reporterId) conds.push(`reporter_id='${reporterId}'::uuid`);
+  if (reporteeId) conds.push(`reportee_id='${reporteeId}'::uuid`);
+  if (latchId) conds.push(`latch_id='${latchId}'::uuid`);
+  return Number(sql(`SELECT count(*) FROM reports ${conds.length ? "WHERE " + conds.join(" AND ") : ""};`));
+}
+
+export async function pairLatchFixture({ status = "proposed", tag = "e2e", proposal } = {}) {
   const userA = await provisionUser({ tag });
   const userB = await provisionUser({ tag });
   const intentA = await createIntent(userA);
   const intentB = await createIntent(userB);
-  const latchId = insertPairLatch(intentA, intentB, { status });
+  const latchId = insertPairLatch(intentA, intentB, { status, proposal });
   return { userA, userB, intentA, intentB, latchId };
 }
 
@@ -181,13 +233,22 @@ export async function seedStorage(context, { access, refresh }) {
 
 // afterAllから呼ぶベストエフォート後片付け(latch系行→ユーザー退会カスケード)。
 export async function cleanupAll() {
-  for (const id of createdLatches.splice(0)) {
-    try {
-      sql(
-        `DELETE FROM messages WHERE latch_id='${id}'::uuid; DELETE FROM latch_status_events WHERE latch_id='${id}'::uuid; DELETE FROM calibration_records WHERE latch_id='${id}'::uuid; DELETE FROM notifications WHERE payload->>'latch_id'='${id}'; DELETE FROM latches WHERE id='${id}'::uuid;`,
-      );
-    } catch {
-      /* 残ってもci DBの既存運用(リセットなし)と同じため警告のみ */
+  if (TARGET !== "cloudflare") {
+    // 参照実装系(ci/staging)はlatch子テーブルを直接SQL削除できる。
+    // cloudflare(cf-dev)はD1を直接触らない(APIの退会カスケードに任せる)
+    for (const id of createdLatches.splice(0)) {
+      try {
+        // FK順序: latch子tables → latches → group_candidates(latchesから参照されるため後)
+        const gid = sql(`SELECT group_candidate_id FROM latches WHERE id='${id}'::uuid;`);
+        sql(
+          `DELETE FROM messages WHERE latch_id='${id}'::uuid; DELETE FROM latch_status_events WHERE latch_id='${id}'::uuid; DELETE FROM calibration_records WHERE latch_id='${id}'::uuid; DELETE FROM notifications WHERE payload->>'latch_id'='${id}'; DELETE FROM reports WHERE latch_id='${id}'::uuid; DELETE FROM latches WHERE id='${id}'::uuid;`,
+        );
+        if (/^[0-9a-f-]{36}$/.test(gid)) {
+          sql(`DELETE FROM group_candidates WHERE id='${gid}'::uuid;`);
+        }
+      } catch {
+        /* 残ってもci DBの既存運用(リセットなし)と同じため警告のみ */
+      }
     }
   }
   for (const user of createdUsers.splice(0)) {

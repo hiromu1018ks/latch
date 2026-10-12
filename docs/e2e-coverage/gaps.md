@@ -2,6 +2,8 @@
 
 > **[2026-10-12追記]** 本書はUI振る舞い行列由来のギャップ(全17・実装済み)の記録である。
 > Phase 4パス2(総洗い出し)で判明した検証空間全体の残項目(88件)は **`backlog.md`** が正本。
+> **[2026-10-12実装パス追記]** backlog §12①(環境基盤E-01/E-03)+②(P0全4項目)を実施済み
+> (45テスト3project体制・結果はmatrix §7)。アプリバグfindings#2(お知らせpopover)を新規記録。
 
 前提: 既存367件のvitestは**モックfetchのコンポーネント試験**として強力だが、実ブラウザ×実API結合の証明はゼロ。本リストは ①完全未カバーcell ②partial cellの不足分 ③実API結合にのみ証明できる事柄 をcluster化したもの。Status: `open` → `implemented(file:line)` / `known-failure(findings#N)` / `waived(reason)`。
 

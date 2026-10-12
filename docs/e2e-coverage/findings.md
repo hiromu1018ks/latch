@@ -1,4 +1,4 @@
-# 発見事項(findings)— Phase 2時点 2026-10-12 / Phase 3追記あり
+# 発見事項(findings)— Phase 2時点 2026-10-12 / Phase 3追記あり / 環境基盤+P0パス追記あり
 
 アプリバグの記録(known-failure)・false-green・重複クラスタ・観察。**バグを発見したら findings#N として追記し、該当テストはtest.fixme+参照をつける**。
 
@@ -11,6 +11,13 @@
 - **影響**: 該当経由のユーザーは完全ログアウトし、保存済みrefreshも無効(refresh=localStorage 30日の継続設計と矛盾)。P1(コア継続性・認証)
 - **修正(2026-10-12)**: `createClient` 内で進行中のrefresh promiseを共有する単一フライト化(`refreshShared`)。並行401は1回のrefreshに束ねられ、全呼び出しが回転後のaccessで再送される
 - **検証**: 単体試験(client.test.js「並行401はrefresh 1回に束ねられる…」=368件緑)とE2E A5(accessなし再訪でstandby描画=36件緑・2回連続)で実API再現→修正→解消を確認
+
+### findings#2 — お知らせpopoverの初回オープンが起動時スナップショットを使う(2026-10-12発見・未修正)
+
+- **再現手順**: アプリ起動(Headerのpreloadが `/v1/notifications` を1回取得・`preloaded=true`)→ **起動後に**提案・成立通知が届く → お知らせpopoverを**初めて**開く。`NoticePopover.open`(frontend/src/latch/NoticePopover.jsx:57-68)は `preloaded.current` がtrueなら取得をスキップし起動時のitems(=空)で描画する
+- **実API検証(2026-10-12・staging E2E)**: UI預け入れ→実パイプラインで提案+成立通知がDBに存在(`GET /v1/notifications` で2件確認)しても、起動済みページのpopover初回オープンは「まだ新しい候補はありません」。2回目のオープン(開き直し)は再取得して正しく2行表示
+- **影響**: 起動中に提案が届いたユーザーが最初のお知らせ確認で「来ていない」と認識する(未読ドットも起動時値のまま)。Header.jsx:63のコメント「popoverを開くたびに取得」と実装が矛盾。P1(提案到達の視認性=サービス核心)
+- **備考**: hashのみ遷移ではページが再読み込みされない(同一文書遷移)ため、SPAを開き続ける通常使い方で必ず起きる。E2E側は現状「開き直し」で実データ到達を証明(pipeline-ui.spec.js:84のコメント参照)。修正はopen()でpreloaded分岐を削る(常に取得)かpreload結果の年齢を見る方向
 
 ## False greens(疑似緑 — partial格下げの根拠)
 

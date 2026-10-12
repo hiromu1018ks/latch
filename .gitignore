@@ -52,6 +52,7 @@ cloudflare/api/.venv/
 cloudflare/api/.venv-workers/
 cloudflare/api/python_modules/
 cloudflare/api/.wrangler/
+.cf-e2e-d1/
 cloudflare/jobs/.venv/
 cloudflare/jobs/.venv-workers/
 cloudflare/jobs/python_modules/

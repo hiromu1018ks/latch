@@ -3,31 +3,32 @@
 - 生成経緯: ユーザー指示「残り得るじゃなくてすべて洗い出せ」。スキルPhase 4(再分析)パス2として、受け入れ条件#1〜#27全行(docs/02)・FR抽出(docs/01・reviews)・パイプライン仕様(docs/06)・コスト保護(docs/04)・プライバシー(docs/08)・評価計画(docs/09)・NFR/リリース(docs/10・11)を総当たり走査し、既存資産(vitest 368・Playwright 36・backend unit/integration/contracts・staging S0〜S5+obs+nfr・load・G1/G2ゲート・cloudflare probe)との差分を列挙した
 - 本書の位置づけ: `gaps.md` はUI振る舞い行列由来のギャップ(全17・実装済み)。**本書はそれより広い検証空間の完全インベントリ**である。優先度は P0(安全・セキュリティ・コンプラ直接)> P1(受け入れ条件に直結)> P2(品質・網羅の厚み)> P3(運用・将来)
 - 凡例: 「性質」= ギャップの種別。**UI実機**(実ブラウザE2Eが必要)/ **実機**(実端末・実LLM・実障害)/ **自動化**(ハーネスを 作る必要)/ **実装欠落**(対象機能が存在せず検証不能)/ **要再実施**(資産はあるが条件付き)
+- **[2026-10-12 実装パス追記]** 推奨着手順①+②(環境基盤E-01/E-03とP0群P-01/A-01/U-01/U-06)を実装済み。Status列に `done(spec)` を付記。稼働実績: ci 40 / staging 3 / cloudflare 2 = **45テスト緑**(vitest 368無影響)。成果物は `frontend/tests/e2e-staging/`・`frontend/tests/e2e-cloudflare/`・`frontend/scripts/cf-e2e-server.mjs`・ci側safety/proposal-minimal spec。実機発見: **findings#2(お知らせpopover初回オープンが起動時スナップショット)**
 
 ## 0. 大前提の構造的ギャップ(すべての項目に効く3つ+1)
 
-| # | ギャップ | 影響 |
-|---|---|---|
-| S-1 | **実パイプライン×UI結合が両軸に存在しない** — Playwright 36件のlatchは全てSQL直挿入(helpers.js insertPairLatch)でworker/Layer1〜5/Jevを経由しない。staging S0〜S5は実パイプラインだがUIなし | 「UIから預けたIntentが実workerで候補→提案→通知→04画面に届く」連鎖が一度も実機検証されていない |
-| S-2 | **UI E2EはPostgreSQL参照実装(compose+vite)のみ** — Cloudflare実装(本番デプロイ経路)・staging(nginx 18000)・loadのいずれにもUI E2E未接続 | デプロイ経路のUI結合・staging資産(seed/Clock)のUI活用が空白 |
-| S-3 | **LLMが常にstub** — 実LLMはG1/G2ゲート(手動・課金)のみ。composeはstub Jev既定0.5<閾値0.60のため実パイプラインでも提案が形成されない | 精度・実APIレイテンシ下の挙動がUIで未検証 |
-| S-4 | **CIが存在しない**(GitHub Actionsなし) — 全試験がローカル手動実行 | 「もれなく」を継続的に保証する仕組みがない |
+| # | ギャップ | 影響 | 状態 |
+|---|---|---|---|
+| S-1 | **実パイプライン×UI結合が両軸に存在しない** — Playwright 36件のlatchは全てSQL直挿入(helpers.js insertPairLatch)でworker/Layer1〜5/Jevを経由しない。staging S0〜S5は実パイプラインだがUIなし | 「UIから預けたIntentが実workerで候補→提案→通知→04画面に届く」連鎖が一度も実機検証されていない | **解消(2026-10-12)**: staging=UI預け入れ→実worker提案→YES×2→成立チャット(e2e-staging/pipeline-ui.spec.js)・Cloudflare実装でも同チェーン(e2e-cloudflare/cf-smoke.spec.js) |
+| S-2 | **UI E2EはPostgreSQL参照実装(compose+vite)のみ** — Cloudflare実装(本番デプロイ経路)・staging(nginx 18000)・loadのいずれにもUI E2E未接続 | デプロイ経路のUI結合・staging資産(seed/Clock)のUI活用が空白 | **解消(2026-10-12)**: cf-dev(miniflare 8787・build済みassets配信・専用persist `.cf-e2e-d1`)+staging(18000・vite proxy env化)をPlaywright第2/3projectへ(`LATCH_E2E_PROJECTS=ci,staging,cloudflare`) |
+| S-3 | **LLMが常にstub** — 実LLMはG1/G2ゲート(手動・課金)のみ。composeはstub Jev既定0.5<閾値0.60のため実パイプラインでも提案が形成されない | 精度・実APIレイテンシ下の挙動がUIで未検証 | **一部解消**: staging(stub JEV noul0.90=スコア0.90)とcf(同0.9コード固定)は提案形成まで実機証明済み。実LLM(A-10/A-11)は残る |
+| S-4 | **CIが存在しない**(GitHub Actionsなし) — 全試験がローカル手動実行 | 「もれなく」を継続的に保証する仕組みがない | 残存(O-01) |
 
 ## 1. 実行ターゲット・環境軸
 
-| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 |
-|---|---|---|---|---|---|
-| E-01 | Cloudflare実装(cf-dev 8787)UI E2E | UI実機 | 契約130ケースがAPI面のみ。UIゼロ(matrix §1.1) | Playwright第2project(webServer=`make cf-dev`+`--var LATCH_LLM_STUB_JEV_NOUL=0.85`)。D1ローカルmigration適用のsetupスクリプト化が必要 | **P1**(=旧提案A) |
-| E-02 | Cloudflare実配備(workers.dev)UI E2E | 実機 | API側 `test_pipeline_remote_e2e.py`(LATCH_CF_REMOTE=1)のみ | 実配備URLへ同スペックのスモークproject(別承認) | P2 |
-| E-03 | staging(18000)へUI E2E接続 | UI実機 | stagingはAPIハーネス専用 | vite proxy向き先をenv化し18000へ。seed/Clock/実workerをUI試験に使う(F-01の土台) | **P1** |
-| E-04 | load環境でのUI到達性 | UI実機 | loadgenはAPI直叩き | 省略可(API面で十分)だが記録として明記 | P3 |
+| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 | Status |
+|---|---|---|---|---|---|---|
+| E-01 | Cloudflare実装(cf-dev 8787)UI E2E | UI実機 | 契約130ケースがAPI面のみ。UIゼロ(matrix §1.1) | Playwright第2project(webServer=`make cf-dev`+`--var LATCH_LLM_STUB_JEV_NOUL=0.85`)。D1ローカルmigration適用のsetupスクリプト化が必要 | **P1**(=旧提案A) | **done(e2e-cloudflare/cf-smoke.spec.js:13,42)** — webServer=`frontend/scripts/cf-e2e-server.mjs`(build+cf-sync+D1 migration+seed+pywrangler dev・persistは`.cf-e2e-d1`へ監視対象外)。stub JEVは0.9コード固定のため`--var`不要。同意導線+主幹作成+P-01チェーン(提案~5s・2回連続緑) |
+| E-02 | Cloudflare実配備(workers.dev)UI E2E | 実機 | API側 `test_pipeline_remote_e2e.py`(LATCH_CF_REMOTE=1)のみ | 実配備URLへ同スペックのスモークproject(別承認) | P2 | — |
+| E-03 | staging(18000)へUI E2E接続 | UI実機 | stagingはAPIハーネス専用 | vite proxy向き先をenv化し18000へ。seed/Clock/実workerをUI試験に使う(F-01の土台) | **P1** | **done(e2e-staging/pipeline-ui.spec.js)** — `LATCH_VITE_PROXY_TARGET`でvite proxy(5174)→18000。鍵=.staging/keys・DB=latch-staging-db-1をhelpersが対象切替。Clock=実時間保証(ensureStagingClockReal) |
+| E-04 | load環境でのUI到達性 | UI実機 | loadgenはAPI直叩き | 省略可(API面で十分)だが記録として明記 | P3 | — |
 
 ## 2. 実パイプライン×UI結合(S-1の展開)
 
-| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 |
-|---|---|---|---|---|---|
-| P-01 | UI作成Intent→実形成→04画面→回答のフルチェーン | UI実機 | staging S0〜S5がAPI面で実施。UIなし | E-01/E-03いずれかの環境で「2ユーザー意図→debounce待ち→04が届く→YES→成立」数本(debounce 10s+pipeline込みで1本30〜60秒) | **P0**(=旧提案A/F1基礎) |
-| P-02 | グループLATCH(3〜4人)のUI | UI実機 | staging/G3がAPI面で完備(#18)。UI完全空白 — 04の必要人数/残回答表示(partial_accept)・全員YES成立・通報対象ラジオ(N人)が未実機 | group fixture(intent 3つ+latch)で04/05 E2E。SQL直挿入でも即可能(実形成はP-01後) | **P1**(受け入れ#18) |
+| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 | Status |
+|---|---|---|---|---|---|---|
+| P-01 | UI作成Intent→実形成→04画面→回答のフルチェーン | UI実機 | staging S0〜S5がAPI面で実施。UIなし | E-01/E-03いずれかの環境で「2ユーザー意図→debounce待ち→04が届く→YES→成立」数本(debounce 10s+pipeline込みで1本30〜60秒) | **P0**(=旧提案A/F1基礎) | **done(e2e-staging/pipeline-ui.spec.js:22,84 + e2e-cloudflare/cf-smoke.spec.js:42)** — staging=UI預け入れ(01入力→02行編集→預ける)×2→実worker提案(debounce+tick込み実測~15s)→04最小形→YES×2→成立チャット双方向+お知らせ2種。cf実装でも同一チェーン(Queues即時経路~5s)。D-05回答期限式(target-60min)により短時間スロットは+15分期限になる実挙動も観測 |
+| P-02 | グループLATCH(3〜4人)のUI | UI実機 | staging/G3がAPI面で完備(#18)。UI完全空白 — 04の必要人数/残回答表示(partial_accept)・全員YES成立・通報対象ラジオ(N人)が未実機 | group fixture(intent 3つ+latch)で04/05 E2E。SQL直挿入でも即可能(実形成はP-01後) | **P1**(受け入れ#18) | — (参考: 通報dialogの対象ラジオ2人選択はU-01でgroup fixtureにより実機証明済み=safety.spec.js:50) |
 | P-03 | muted Intentの提案受信(通知なし・ホームの候補から回答可能) | UI実機 | staging S2#13・G3がAPI面。UI未実機 | notification_level=mutedなintentでlatch fixture→通知ドット増えない+候補一覧に出る | P2 |
 | P-04 | nearby_also存在通知の受信体験 | **実装欠落+UI実機** | backend/仕様(03 v0.4)にあるがfrontendにUI設定経路なし(HomeScreenはDEFAULT固定・nearby文字不在) | 実装(設定導線)が先。E2Eはnotification fixtureのnearby行(既読G-12の拡張) | P3 |
 | P-05 | 保留キュー→提示(D-08上限時の翈Bucket回し・期限再計算) | UI実機 | unit/integration/staging S1#8あり。UI体験なし | staging+Clock(E-03)で上限到達→時間経過→トースト/お知らせが出る | P2(FR-47) |
@@ -41,9 +42,9 @@
 
 ## 3. マッチング精度・評価軸(docs/09。旧提案Fの展開)
 
-| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 |
-|---|---|---|---|---|---|
-| A-01 | グラウンドトゥルース精度検証(適合/不適合/境界のintent群→実パイプライン→正しい提案だけ届く両方向assert) | 自動化+UI実機 | staging S1が個別項目単位。**精度/再現の統括的assertは不存在** | 8〜12ユーザー×適合対/不適合対/境界(時間隣接・距離境界・人数・予算・visibility混在)のfixture定義→E-01/E-03で実行→UI側+#/proposalsで行列検証 | **P0** |
+| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 | Status |
+|---|---|---|---|---|---|---|
+| A-01 | グラウンドトゥルース精度検証(適合/不適合/境界のintent群→実パイプライン→正しい提案だけ届く両方向assert) | 自動化+UI実機 | staging S1が個別項目単位。**精度/再現の統括的assertは不存在** | 8〜12ユーザー×適合対/不適合対/境界(時間隣接・距離境界・人数・予算・visibility混在)のfixture定義→E-01/E-03で実行→UI側+#/proposalsで行列検証 | **P0** | **done(e2e-staging/ground-truth.spec.js:30)** — 14ユーザー×7対(適合2: summary_only×2=全形提案・visibility混在=最小形提案/不適合5: 時間+5h・距離2.4km>半径和2km・人数min3・予算ペア300<500・カテゴリ不一致)。正例2対は提案到達+proposal形状Assert・負例5対×両者はlatch 0件Assert(正例観測+grace後)・UI側は#/proposals行列(全形=照合表あり/混在=なし/不適合=空状態)。スロットは相互3h以上分離で交差マッチ排除 |
 | A-02 | G2オフライン精度(precision@0.60=0.738・ECE 0.0988・AUC 0.751)の**合格基準確定** | 運用 | g2-jev-acceptance-criteria.md がオーナー承認待ち | 基準確定→make g2-gate を定期再実行(規律化) | **P1** |
 | A-03 | MLR前期比−5pt判定のベースライン記録・自動化 | 自動化 | MLR算出はkpi.py/staging完備。前期比判定なし | kpi_dailyの前期差分と閾値判定を追加 | P2 |
 | A-04 | segment別YES率の集計(仮説2: semantic≥10%かつlexicalの50%) | 自動化 | classify_segment(calibration.py:18)で記録済み・**集計/ダッシュボードなし** | calibration_recordsからsegment×回答の集計クエリ+KPI化 | P2 |
@@ -69,14 +70,14 @@
 
 ## 5. UI機能の残り(受け入れ#1〜#27とFRから。旧提案C+エージェント1の追加)
 
-| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 |
-|---|---|---|---|---|---|
-| U-01 | **通報dialogの実機E2E**(対象ラジオ→理由4択→POST) | UI実機 | vitest latch-safety:96 のみ。**docs/02の検証方法が唯一UI操作を明記するSafety項目(#21)なのにE2Eゼロ** | matched fixture→「通報・ブロック」→dialog完走 | **P0** |
+| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 | Status |
+|---|---|---|---|---|---|---|
+| U-01 | **通報dialogの実機E2E**(対象ラジオ→理由4択→POST) | UI実機 | vitest latch-safety:96 のみ。**docs/02の検証方法が唯一UI操作を明記するSafety項目(#21)なのにE2Eゼロ** | matched fixture→「通報・ブロック」→dialog完走 | **P0** | **done(e2e/safety.spec.js:20,50,80)** — 3形態: ①1対1成立=対象固定checked→理由4択→POST(reportee=相手をDB側証明) ②グループ成立(group_candidates+latches直接INSERT・3人)=対象ラジオ2人から選択(未選択で送信不可)→選択者がreportee ③1対1提案(04)=対象ラジオなし・reportee_id省略(案X)。POSTは受付のみのためreports表の行で証明 |
 | U-02 | ブロックdialog(H10)の実機(提案/成立画面起点) | UI実機 | vitestのみ。E2Eは設定解除(G-14)のみ | matched fixture→dialog→POST→ブロック一覧へ | **P1**(#20 UI面) |
 | U-03 | 成立後ブロック→チャット読取専用(D-23) | UI実機 | staging S4 D-23(API)・vitest | U-02の延長 | P2 |
 | U-04 | attendance happyの実機(2択→POST→済み) | UI実機 | vitest H7/H8のみ(gaps W-04関連でE2E対象外とした) | completed fixture→申告 | **P1**(原則6) |
 | U-05 | 両者YES→matched遷移の2ブラウザ連鎖 | UI実機 | response.specは片方YESまで。成立姿はfixture | 2コンテキストで順にYES→双方05へ | **P1**(#15) |
-| U-06 | hidden_until_match最小形04画面(照合表なし・一致度/期限/必要人数のみ) | UI実機 | E2E fixtureはsummary_only全形のみ。**実運用の既定姿が未実機** | proposalを{headcount,match_level}のみのfixture→最小形assert | **P0**(受け入れ#17・原則8) |
+| U-06 | hidden_until_match最小形04画面(照合表なし・一致度/期限/必要人数のみ) | UI実機 | E2E fixtureはsummary_only全形のみ。**実運用の既定姿が未実機** | proposalを{headcount,match_level}のみのfixture→最小形assert | **P0**(受け入れ#17・原則8) | **done(e2e/proposal-minimal.spec.js:11 + e2e-staging/pipeline-ui.spec.js:22)** — SQL fixture(p proposal={headcount,match_level})で04=照合表・4情報カードなし/非開示注記/まだ見えない1人/回答期限/YES可をAssert+実パイプライン版(UI預け入れはhidden確定送信のため実workerの提案が自動的に最小形=提案形状をtoEqualで証明) |
 | U-07 | visibility 2値比較(同一候補をsummary_only/hiddenで作り表示差assert)+ raw_text/名前/NG条件/座標の**否定的assert** | UI実機 | G3/stagingがAPI面(#22/#23)。UI 2値比較ゼロ | 2 fixture並列描画で差分+非表示検査 | **P1**(#22/#23) |
 | U-08 | 18〜19歳ユーザーのUI作成拒否(422 UNDER_AGE表示) | UI実機 | staging S5 D-10・G1 alcoholがAPI/LLM面。UIゼロ | helpersのbirth_date調整で alcohol系intent保存 | **P1**(#27) |
 | U-09 | 下書き→「直して預ける」→預けるのUI完走(draft→active化) | UI実機 | C5は行表示まで。#1の検証方法に明記の経路 | 03下書き行→02→預ける→active化 | **P1**(#1) |
@@ -165,3 +166,4 @@
 - 性質別(主分類): UI実機 約40 / 自動化ハーネス要 約10 / 実機(実端末・実LLM・実障害) 約8 / **実装欠落(検証以前に機能なし)** 8(V-01/V-02/A-05/A-06/O-06/P-04/C-01/X-04の一部)/ 要再実施・運用規律 約10
 - 優先度別: **P0: 4**(P-01実パイプライン×UI・A-01グラウンドトゥルース精度・U-01通報dialog・U-06 hidden_until_match最小形)/ **P1: 16**(E-01・E-03・P-02・P-08・A-02・T-01・T-02・U-02・U-04・U-05・U-07・U-08・U-09・U-19・O-01・O-02)/ P2: 約35 / P3: 約33
 - **推奨着手順**: ①環境基盤(E-01+E-03 → S-2/S-3解消) → ②P0群(P-01・A-01・U-01・U-06 → S-1解消・受け入れの最大穴) → ③P1のUI群(U-05/08/09/19+T-01/02) → ④O-01 CI載せ(以降の継続性) → ⑤残りP2 → ⑥実装欠落群(A-05/A-06/V-01/V-02/O-06/P-04)は製品判断を経て実装後に検証
+- **[2026-10-12] ①+②実施済み**: E-01/E-03(環境基盤)+P0全4項目(P-01・A-01・U-01・U-06)がdone。S-1/S-2解消・S-3はstub条件下で解消(実LLM残る)。残るP1は16中14(E-01/E-03分消化)。次は③のP1 UI群(U-05両者YES 2ブラウザ・U-08 UNDER_AGE・U-09下書き再開・U-19期限切れ04+T-01/T-02 staging Clock活用)— U-05/T-01/T-02は今回整備したstaging基盤の直接活用形。実行方法: `cd frontend && npm run test:e2e:staging`(staging環境前提=make staging-up)/ `npm run test:e2e:cf`(cf-devは自動build+migrate+起動)

@@ -528,3 +528,40 @@ BEFORE(§2.3)から変化したセルのみ記載(`implemented(spec:line)`=実E2
 - パス2は新規P0/P1ギャップを多数産出したため、**本来の終了条件(直近パスで新規P0/P1ゼロ)は不成立**。以前の§5報告は「UI振る舞い行列のスコープでは完了・検証空間全体では不完全」と訂正する
 - UI振る舞い行列への新規行(グループ04/05・通報dialog・attendance・hidden最小形・UNDER_AGE・下書き再開等)は backlog.md §5(U-01〜U-23)に未採番のまま列挙(実装時に行列へ採番・§2.3/§2.4へ反映)
 - 実装欠落のため検証不能な8項目(A/B基盤・アンケート・D-13第二段・Web Push登録・nearby UI導線・D-02警報線等)も洗い出し済み(backlog §3/§6/§10)
+
+## 7. 環境基盤+P0実装パス(2026-10-12・backlog §12①②)
+
+backlog §12の推奨着手順①(E-01+E-03)と②(P0全4項目)を実施した。**Playwrightはci 1projectから3projectへ**(ci=compose+vite・staging=nginx 18000+vite proxy・cloudflare=cf-dev 8787+build済みassets)。project選択は `LATCH_E2E_PROJECTS`(既定=ciのみ・`make e2e`の従来挙動は不変)。
+
+### 7.1 実装したテスト(45テスト稼働・全緑)
+
+| project | spec | テスト | 対応backlog項目 |
+|---|---|---|---|
+| ci(chromium) | tests/e2e/safety.spec.js | 3(1対1成立=対象固定→理由4択→POST/グループ成立=対象ラジオ2人/1対1提案=対象非開示の案X) | **U-01(P0)** |
+| ci(chromium) | tests/e2e/proposal-minimal.spec.js | 1(最小形04=照合表・4カードなし/期限/必要人数/YES可) | **U-06(P0・SQL fixture版)** |
+| ci(chromium) | 既存9spec | 40(36従来+新規4) | — |
+| staging | tests/e2e-staging/pipeline-ui.spec.js | 2(UI預け入れ×2→実worker提案→04最小形→YES×2→成立チャット双方向/お知らせ2種到達) | **E-03・P-01(P0)・U-06(実パイプライン版)** |
+| staging | tests/e2e-staging/ground-truth.spec.js | 1(適合2対=提案到達+形状・不適合5対=両者latch 0件・UI行列観測) | **A-01(P0)** |
+| cloudflare | tests/e2e-cloudflare/cf-smoke.spec.js | 2(未同意→onboarding同意→主幹作成/2ユーザーUI預け入れ→Queues評価→04最小形→YES×2→成立) | **E-01・P-01 cf版** |
+
+### 7.2 整備した実行基盤(テスト資産・アプリソース無変更)
+
+| 資産 | 内容 |
+|---|---|
+| `frontend/playwright.config.mjs` | 3project+project別webServer(ci=5173/staging=5174(proxy→18000)/cf=scripts/cf-e2e-server.mjs)。`LATCH_E2E_PROJECTS`で選択(既定ci) |
+| `frontend/vite.config.mjs` | proxy向き先を`LATCH_VITE_PROXY_TARGET`でenv化(未指定=8000で従来不変) |
+| `frontend/tests/e2e/helpers.js` | `LATCH_E2E_TARGET`でci/staging/cloudflareを切替(鍵=.staging/keys・DB=latch-staging-db-1・API base)。insertGroupLatch/group fixture/proposal指定対応/reportsCount追加 |
+| `frontend/tests/e2e-staging/helpers.js` | ensureStagingClockReal(ControlledClock=実時間保証)・waitForLatch(debounce+tick込み)・depositViaUi(UI預け入れ操作)・createGroundTruthIntent(境界値fixture) |
+| `frontend/scripts/cf-e2e-server.mjs` | cf版webServer(build→cf-sync→D1 migration+地物seed→pywrangler dev 8787)。persistは`.cf-e2e-d1`(リポジトリ直下・wranglerのファイル監視リロード問題の回避) |
+| `frontend/package.json` | `test:e2e:staging`/`test:e2e:cf`(+:report)スクリプト |
+
+### 7.3 実機で確認された実装挙動(ドキュメント化価値のある発見)
+
+1. **UI作成Intentの提案は自動的に最小形**: UIはvisibility=hidden_until_match確定送信のためbuild_proposalは{headcount,match_level}のみ生成(04=照合表なし)。staging・cf両実装でtoEqual証明
+2. **D-05回答期限式の実挙動**: 対象時刻が近いスロット(+1〜2h)では期限=通知+15分(target-60min<通知+15分となるため)。E2Eのスロット設計は+2h以上が安定
+3. **D1退会はlatchをcancelled化するがIntentは残る**(cf実装): 退会済みユーザーのIntentが残存し同一時間帯の再実行と交差マッチしうる→cf specはスロット分離(+7h)で対処
+4. **findings#2**: お知らせpopover初回オープンは起動時スナップショットを使用(通知到達が見えない)。staging E2Eが発見・2回目オープンで再取得することを確認済み
+
+### 7.4 残る主要項目(backlog正本・次の推奨=③P1 UI群)
+
+P1残14項目(E-01/E-03消化済み)。U-05(両者YES 2ブラウザ連鎖)・T-01/T-02(期限切れUI・staging Clock活用)・U-19/P-08(expired 04)は今回のstaging基盤の直接活用形で着手容易。CI載せ(O-01)は45テスト3project体制をGitHub Actionsへ乗せる段。
