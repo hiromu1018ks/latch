@@ -520,3 +520,11 @@ BEFORE(§2.3)から変化したセルのみ記載(`implemented(spec:line)`=実E2
 - **対象外**: Cloudflare実装(8787)向けE2E project(契約試験130件がAPIパリティを担保するため本パスでは対象外とした。必要時にwebServer追加で拡張可能)・W-01〜W-04のwaived(理由はgaps.md)
 - **E2Eの実行前提**: compose常設環境(`make up`+`make migrate`)・chromium導入済み・`make e2e`(=frontendの `npm run test:e2e:report`)
 - **録画アーカイブ**: 全テストを常時録画し `frontend/e2e-recordings/<実行日時>/index.html`(file://で開ける純静的ギャラリー・機能群セクション+注目点つき)で閲覧する。過去runは最新3件を保持。対話トリアッチは `npx playwright show-report`。ゆっくり再生は `LATCH_E2E_SLOWMO=300`
+
+## 6. Phase 4パス2 — 総洗い出し(2026-10-12・ユーザー指示)
+
+ユーザー指示「残り得るじゃなくてすべて洗い出せ」により、UI振る舞い行列より広い検証空間(受け入れ#1〜#27全行・FR・パイプライン・プライバシー・評価・NFR・リリース)を総当たり走査した。結果は **`backlog.md`(88項目・P0:4/P1:16/P2:約35/P3:約33)** が正本。
+
+- パス2は新規P0/P1ギャップを多数産出したため、**本来の終了条件(直近パスで新規P0/P1ゼロ)は不成立**。以前の§5報告は「UI振る舞い行列のスコープでは完了・検証空間全体では不完全」と訂正する
+- UI振る舞い行列への新規行(グループ04/05・通報dialog・attendance・hidden最小形・UNDER_AGE・下書き再開等)は backlog.md §5(U-01〜U-23)に未採番のまま列挙(実装時に行列へ採番・§2.3/§2.4へ反映)
+- 実装欠落のため検証不能な8項目(A/B基盤・アンケート・D-13第二段・Web Push登録・nearby UI導線・D-02警報線等)も洗い出し済み(backlog §3/§6/§10)

@@ -1,5 +1,8 @@
 # カバレッジギャップ(優先度つき・Phase 2 — 2026-10-12)
 
+> **[2026-10-12追記]** 本書はUI振る舞い行列由来のギャップ(全17・実装済み)の記録である。
+> Phase 4パス2(総洗い出し)で判明した検証空間全体の残項目(88件)は **`backlog.md`** が正本。
+
 前提: 既存367件のvitestは**モックfetchのコンポーネント試験**として強力だが、実ブラウザ×実API結合の証明はゼロ。本リストは ①完全未カバーcell ②partial cellの不足分 ③実API結合にのみ証明できる事柄 をcluster化したもの。Status: `open` → `implemented(file:line)` / `known-failure(findings#N)` / `waived(reason)`。
 
 ## P0(横断アクセス・安全)
