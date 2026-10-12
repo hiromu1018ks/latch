@@ -38,6 +38,7 @@ backend/data/
 .agents/
 .claude/skills/
 .hermes/
+.zcode/
 skills-lock.json
 
 # Interview drafts (面接説明用原稿・git管理外)
