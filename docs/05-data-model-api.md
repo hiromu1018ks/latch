@@ -1,10 +1,11 @@
 # LATCH データモデル・API仕様書
 
-- 文書バージョン: v0.7
+- 文書バージョン: v0.8
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28。v0.6更新: 2026-10-10。v0.7更新: 2026-10-12)
+- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28。v0.6更新: 2026-10-10。v0.7更新: 2026-10-12。v0.8更新: 2026-10-12)
 - 前提文書: 01 要件定義書 v0.7 / 02 スコープ合意書 v0.4 / 03 UX仕様書 v0.5 / 04 システムアーキテクチャ設計書 v0.5
+- v0.8の変更点(A/B基盤・MLRベースライン): 09 §5(A/B Test計画の共通規定=仕様正本)を実装に載せるためのデータモデル・適用規則・観測APIを規定した(13最終目的地ロードマップ V1-P4・A-05/A-03)。新表**ab_experiments / ab_assignments**(第2節)・**mlr_baselines**(第2節)・**GET /v1/users/me/ab**(第5節・割付の観測点)を追加。割付の算法(ユーザーIDハッシュ+Active Intent数層化)・割付時点(初回適用時)・ペア適用規則(混在ペアは対照値・FR-25)の実装規定・適用点(D-01閾値・D-08通知上限)・停止ルールと判定不能時の持続規定(09 §5)の表現を第2節に固定した。error codeの追加なし(新APIは読み取り専用で401のみ)
 - v0.7の変更点(体感アンケート): 09 §2.3の体験アンケート(仮説1・5の判定材料・13 §3表2のPhase 1開始前要件)をデータモデル・APIとして規定した。新表**survey_responses**(第2節)・**GET / POST /v1/users/me/survey**(第5節)・error code 2件(SURVEY_ALREADY_ANSWERED / SURVEY_NOT_DUE)・配信契機の実装方式(アクセス時判定・通知typeなし)と集計(`python -m latch.obs.survey`)を追加。回答データはユーザー単位とし、**個別Intentとの紐付け列を持たない**(08 §2.4・09 §2.3)
 - v0.6の変更点(UI v2基準切替): プロトタイプv2「夜と翡翠」への基準切替に伴うAPI改版(決定記録はdocs/plans/ui-v2/phase0-decisions.md)。主要変更は次のとおり。
   - **Phase 1B実装完了(2026-10-10)**: 上記5APIのbackend実装・契約試験・エンドポイント表・遷移表への反映まで完了。実装報告はdocs/plans/ui-v2/phase1b-report.md
@@ -65,6 +66,9 @@ users ──1:N── intents ──1:N── match_events
 users ──1:N── notifications / reports
 
 users ──1:N── survey_responses(体感アンケート回答・Intentと紐付かない・v0.7)
+
+users ──1:N── ab_assignments ──N:1── ab_experiments(A/B割付・v0.8)
+mlr_baselines(MLR週次中央値ベースラインの記録・v0.8・usersと紐付かない)
 ```
 
 01第17節の5 Entity(User, Intent, MatchCandidate, Latch, MatchEvent)に、D-06中間表現のgroup_candidates、そして第25節Safetyと03 D-18の実装に必要なblocks / reports / notifications / messagesを加える。friendshipsは02 D-03由来だが、**v0.4でMVP実装から外れた(将来版としてEntity定義のみ残置。MVPの参照経路は存在しない)**(02 v0.3 D-03再決定)。
@@ -249,6 +253,59 @@ calibration_records.proposal_snapshotはこのproposalと同形とする(09 D-09
 | answers | jsonb | NOT NULL | 設問種→5段階値の整数。`{"convenience": <1〜5>}`(onboarding)、`{"convenience": <1〜5>, "continuation": <1〜5>}`(week4)。convenience=便利さ(仮説1)・continuation=継続意向(仮説5)。値域外は422 VALIDATION_ERROR。設問種の追加は本書の改版を経る |
 | free_comment | text | NULL | week4のみの任意自由記述(最大2000字)。onboardingでは常にNULL |
 | created_at | timestamptz | NOT NULL | 回答時刻(Clock由来)。week4のdue判定の起点(初回回答から4週=28日) |
+
+### ab_experiments / ab_assignments(A/B割付・v0.8新設)
+
+09 §5(A/B Test計画の共通規定)の8対象のうち、サーバ側で値を解決してパイプラインへ適用する対象のための保持構造。**割付・適用状況はユーザーからは観測API(GET /v1/users/me/ab・第5節)を通してしか見えず、UIを持たない**(表示・通知の体感を変えない。frontendは本改版では不変)。
+
+#### ab_experiments(実験の登録)
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| experiment_key | text | PK | 実験キー=適用点名。本実装が解決するサーバ側適用点は `latch_threshold`(D-01提案閾値・float)・`notification_daily_limit`(D-08日次上限・int)・`notification_concurrent_limit`(D-08同時進行上限・int)の3つ。残る5対象(Candidate数・Jev判定軸・表示情報量・通知文・回答期限・グループ人数)はそれぞれの実装時にキーと値型を本書の改版を経て追加する |
+| status | text | NOT NULL, CHECK IN ('running','stopped') | runningの間のみ処置値が適用され得る。**stoppedは全群へ対照値を適用する**(下記「停止と持続規定」) |
+| control_value | text | NOT NULL | 対照値(textで保持・型はexperiment_keyの適用点が定義)。**原則として現行運用値と同値**(latch_threshold=0.60・notification_daily_limit=6・notification_concurrent_limit=3) |
+| treatment_value | text | NOT NULL | 処置値(同上) |
+| started_at | timestamptz | NOT NULL | 実験開始時刻(Clock由来)。この時刻以降の評価から適用される |
+| stopped_at | timestamptz | NULL | 停止時刻。status=stoppedのとき必須(アプリ層で保証) |
+
+行の作成・変更はCLI(`python -m latch.obs.ab`のstart/stop/list)のみが経路。**公開APIを持たない**(開始判断は運用=人間領域。D-02の「ベースライン計測期間中の本番変更凍結」との整合も運用規律として守る)。
+
+#### ab_assignments(ユーザー割付)
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| experiment_key | text | NOT NULL, FK→ab_experiments(cascade), PK(experiment_key, user_id)の一部 | 対象実験 |
+| user_id | uuid | NOT NULL, FK→users(退会cascade), PKの一部 | 割付対象ユーザー。**PKが「1ユーザー1実験1行=割付の安定性」をDBレベルで強制する**(一度割り当てられたvariantは再計算しない) |
+| variant | text | NOT NULL, CHECK IN ('control','treatment') | 群 |
+| stratum | text | NOT NULL | 割付時点のActive Intent数の層('0' / '1-2' / '3+')。層化の記録(分析用途。適用値の解決には使わない) |
+| assigned_at | timestamptz | NOT NULL | 割付時刻(Clock由来) |
+
+#### 割付と適用の実装規定(設計判断の固定・09 §5の実装解釈)
+
+09 §5は「1テスト1変数・2群」「割付はユーザーIDのハッシュで層化(Active Intent数の層)」「ペア適用規則(FR-25)」を仕様として固定しており、以下はその実装方式の確定である。
+
+1. **割付表かusers列か → 割付表(ab_assignments)。** 8対象が時期を異にして走るため実験軸が必要であり、users行へ列を足す方式は対象ごとの横膨張と未実施実験のNULL管理を生む。分析(群別KPI導出)は割付表とkpi_daily/latch_status_eventsの突合で完結する
+2. **割付時点 → 初回適用時(レイジー)。** ユーザー登録時に割ると全員がActive Intent 0の層に落ちて層化が空転するため、**最初に提案評価へ現れた時点**(実験running中にペア/集合の参加者として評価されたとき)で割付を確定する。層は割付時点のActive Intent数で計算して記録する。割付は適用経路からのみ発生し、観測API(GET /v1/users/me/ab)は割付を作らない
+3. **割付算法 → SHA-256ハッシュの偶奇。** `variant = sha256("{experiment_key}:{stratum}:{user_id}")` の先頭バイトの偶奇(奇数=treatment)。決定的(並行する初回適用が同じ値を計算)+層内でおおむね50/50。INSERTはON CONFLICT DO NOTHINGで冪等とし、挿入後に読み直した行を真実とする(層の読み時差で計算値が食い違う競合を残さない)
+4. **ペア適用規則(FR-25)→ 適用値の解決はペア/集合単位。** 評価の参加者(1対1は2者・グループは3〜4者)のvariantが全員同一のときのみその群の値を適用し、**混在ペア・混在集合は対照値**を適用する(時間交互切替しない)。個人単位の適用は行わない
+5. **適用点(本実装の3点)。** `latch_threshold` → Layer 5の初期評価(finalize)・保留キューの再提示(drain)・グループ集約チェック(06 §6〜§8の3経路)。`notification_daily_limit` → 提示時のD-08日次上限判定とnearby存在通知の上限判定。`notification_concurrent_limit` → 提示時のD-08同時進行上限判定。**実験行が存在しない・status!='running'・開始前のときは現行定数(latch_calcのLATCH_THRESHOLD=0.60・D08_DAILY_LIMIT=6・D08_CONCURRENT_LIMIT=3)をそのまま使う** — つまり実験を1行も作らない環境の挙動は従来と一字変わらない。drainの対象抽出は対照値・処置値の**小さい方**の閾値で行い、行ごとの適用は規則4で判定する(処置閾値を下げた実験で[処置値, 対照値)のスコア行が対象から漏れないため。閾値を上げた実験で既存candidate行が対照挙動で提示され得ることは保守側の許容)
+6. **停止と判定不能時の持続規定(09 §5)の表現 → status='stopped'。** 停止(有害シグナルによるもの・最小期間2週間の満了・判定不能の確定)はすべてstatus='stopped'で表現し、**全群へ対照値を適用する通常運用へ戻る**。割付行は残す(継続観察・再開時の同一割付)。有害シグナル(通報率・通知オフ率の急増)の検知はO-06の週次警報(kpi_alert)が担い、停止操作は人間がCLIで行う(09 §5「途中の判断は有害シグナルの停止ルールに限る」の実装解釈)
+7. **適用値の伝播。** 実験行の参照はプロセス内キャッシュ(30秒)で行う。開始/停止の反映は最大30秒+評価周期の遅延を持つ(即時反映を要求する運用場面はない)
+8. **観測APIは割付の公開面。** GET /v1/users/me/ab(第5節)は自分の割付一覧を返す読み取り専用API。将来のクライアント側適用対象(表示情報量・通知文)の取得面を兼ねる。variantの値自体はユーザー体験に表に出ない(閾値・上限はサーバ内部値)
+
+### mlr_baselines(MLR週次中央値ベースライン・v0.8新設)
+
+09 D-02の「Phase 2の4週間MLR週次値の中央値をベースラインとして記録し、以降は前期比マイナス5ポイント以内を維持条件とする」の記録の器(A-03)。**users・Intentと紐付ない観測用の独立表**(kpi_dailyと同型の位置づけ)。
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | uuid | PK | |
+| value | numeric | NOT NULL | 週次MLRの中央値(0〜1)。判定の基準値 |
+| source_weeks | jsonb | NOT NULL | 起点とした4週分の `{"week_start": "YYYY-MM-DD", "weekly_mlr": 0.0nn}` の配列(記録の根拠・再計算可能な痕跡) |
+| recorded_at | timestamptz | NOT NULL | 記録時刻(Clock由来) |
+
+行は追記のみ(再ベースライン〔A/B採用後の4週間再計測〕のたびに行を追加)。**判定はrecorded_at最新行を用いる**。記録・判定はCLI(`python -m latch.obs.mlr`のbaseline/show/check)。週次MLRの導出はkpi_dailyのmlr行(日次の分子/分母)を週へ集約した値(比率は保存しない規律どおり集計時に計算)。
 
 ## 3. Index設計
 
@@ -519,6 +576,23 @@ onboardingは`answers.convenience`のみを受理する。week4は`answers.conve
 
 **集計(判定材料の導出)。** 仮説1・5の判定(09 §2.3の事前固定基準)に必要な集計を`python -m latch.obs.survey`(latch/obs/survey.py)が1コマンドで出力する: ラウンド別回答数・convenienceの平均(仮説1: **week4の5段階平均が4.0以上**)・continuationの1〜5分布と4点以上の割合(仮説5: **継続意向4点以上の回答者が過半**)。判定の実施はPhase 2以降であり、本実装は判定材料の導出のみを担う(行動面の指標〔週次Intent再作成率・30日継続率〕はkpi.py既存の集計による)。
 
+### GET /v1/users/me/ab — 自分のA/B割付一覧(v0.8新設・09 §5)
+
+```
+request: (認証ヘッダのみ)
+response: 200 {"assignments": [
+             {"experiment": "latch_threshold",
+              "variant": "control" | "treatment",
+              "assigned_at": "2026-10-12T09:00:00+09:00"} ...]}
+errors:   401(認証欠落・既定の認証エラー)
+```
+
+読み取り専用。割付がまだ無いユーザーには空配列を返す(**このAPIは割付を作らない** — 割付は適用経路〔提案評価〕でのみ発生する。第2節の実装規定2)。停止済み実験の割付も返す(継続観察の素材)。応答にはstratumを含めない(内部の層記録は分析用途)。UIを持たない(frontendは本改版では不変)。
+
+**集計・運用の経路。** 実験の開始/停止・一覧は`python -m latch.obs.ab`(latch/obs/ab_cli.py)が担う。MLRベースラインの記録と前期比判定は`python -m latch.obs.mlr`(latch/obs/mlr.py)。D-02警報線(YES率10%未満・通知オフ率週比2倍)とA/B有害シグナル(通報率急増)の自動検知は週次警報ジョブ(latch/obs/kpi_alert.py・M4 ws-4のkpi_daily集計に乗る拡張)。いずれも判定の実施はPhase 2以降の運用であり、本実装は装置とその試験まで(09 §5/§6は仕様正本のまま)。
+
+
+
 ### その他のエンドポイント
 
 | メソッド/パス | 目的 | 認可・備考 |
@@ -536,6 +610,7 @@ onboardingは`answers.convenience`のみを受理する。week4は`answers.conve
 | POST /v1/sessions | セッション開始(04第2節・09第2.2節のDAU・再来訪計測) | request bodyは空。user_idと時刻のみを記録し、Intentの文言を含まない(08第2.4節)。response: 204 |
 | GET /v1/users/me/survey | 体感アンケートの自分の回答状況(v0.7・09 §2.3) | 本人のみ。round別のdue/answered判定+week4のavailable_at |
 | POST /v1/users/me/survey | 体感アンケートの回答保存(v0.7) | 本人のみ。ラウンド単位・単発(二重は409 SURVEY_ALREADY_ANSWERED)。設問構成と配信契機は上節の規定どおり |
+| GET /v1/users/me/ab | 自分のA/B割付一覧(v0.8・09 §5) | 本人のみ。読み取り専用・割付を作らない(空配列可)。UIなし |
 | GET /v1/users/me/blocks | ブロック一覧 | 本人のみ。ページネーション共通規定を適用 |
 | POST /v1/users/{id}/block | ブロック | 本人操作 |
 | DELETE /v1/users/{id}/block | ブロック解除 | 本人操作。過去の候補除外・読み取り専用化には遡及しない(08 D-23の「回収しない」と同じ線) |
@@ -592,5 +667,7 @@ onboardingは`answers.convenience`のみを受理する。week4は`answers.conve
 - 第18節: Index設計(第3節)の反映
 - 第17節(v0.7追加分): survey_responsesの追記(未反映・次回01改版時に反映)
 - 第19節(v0.7追加分): survey 2 API(GET/POST /v1/users/me/survey)の追加(未反映・次回01改版時に反映)
+- 第17節(v0.8追加分): ab_experiments・ab_assignments・mlr_baselinesの追記(未反映・次回01改版時に反映)
+- 第19節(v0.8追加分): GET /v1/users/me/abの追加(未反映・次回01改版時に反映)
 - 第19節: API一覧の拡張(parseのwarnings、responseの3値、友人・通知・通報系の追加)。第19節(v0.3追加分): 認証・ユーザー系(auth/token・refresh・logout、users/me、初回登録birth_date・18歳検証、04 D-21)、sessions、attendance(09 D-09)、ブロック一覧・解除、友人拒否・取り消し、ページネーション共通規定、エラーcode列挙。**第19節(v0.4追加分)**: GET /v1/intents(自Intent一覧・statusフィルタ)の追加、friends系の将来版化
 - 第26節: D-06は中間表現のみ解消(残りは06)と記録。**v0.4の反映**は02 v0.3 D-03再決定(visibility 2値の再定義・friendshipsの将来版化・proposal生成分岐)と下書き保存(draftの作成・active化・期限管理)として第26節へ記録済み(01 v0.4)
