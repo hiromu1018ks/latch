@@ -114,6 +114,7 @@ make cf-probe     # cf-dev起動中に実行(runt互換probe・結果をdocs/tes
 | backend 全試験(unit+integration・compose環境が必要) | `make test-ci`(workerの停止/復帰は自動) |
 | frontend 試験(vitest・実APIに触れない) | `cd frontend && npm test` |
 | frontend build | `cd frontend && npm run build` |
+| UI E2E(Playwright・実API・録画ギャラリー付き) | `make e2e`(compose常設+`make migrate`が前提) |
 | 契約試験(参照実装=PostgreSQL) | `cd backend && uv run pytest tests/contracts/test_api_parity.py -q`(worker停止が前提) |
 | 契約試験(Cloudflare D1実装) | `cd backend && uv run pytest tests/contracts/test_cloudflare_parity.py -q` |
 | Cloudflare資産の単体試験 | `make cf-unit` |

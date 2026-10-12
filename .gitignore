@@ -68,3 +68,5 @@ cloudflare/api/latch/
 # Playwright E2E成果物(frontend)
 frontend/test-results/
 frontend/playwright-report/
+frontend/e2e-report/
+frontend/e2e-recordings/

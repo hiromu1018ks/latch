@@ -1,7 +1,7 @@
 // G-01(P0): 他ユーザーのlatchへの横断アクセス。実セッション2名でのUI結合証明
 // (API面の遮断は契約試験のoutsiderケースが担保済み)。
 import { test, expect } from "./helpers.js";
-import { cleanupAll, pairLatchFixture, openAuthed } from "./helpers.js";
+import { cleanupAll, pairLatchFixture } from "./helpers.js";
 
 test.afterAll(cleanupAll);
 
@@ -16,10 +16,10 @@ test("関与しないユーザーがlatch URLを直叩きすると404表示+ホ�
   await expect(page.getByText("条件が、揃いそうです。")).toHaveCount(0);
 });
 
-test("自分のlatch URLは提案姿として開ける(対照・G1実E2E)", async ({ browser }) => {
+test("自分のlatch URLは提案姿として開ける(対照・G1実E2E)", async ({ openAuthed }) => {
   const { userA, latchId } = await pairLatchFixture({});
-  const { context, page } = await openAuthed(browser, userA, `/#/latches/${latchId}`);
-  await expect(page.getByText("条件が、揃いそうです。")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "参加する" })).toBeVisible();
-  await context.close();
+  const mine = await openAuthed(userA, `/#/latches/${latchId}`);
+  await expect(mine.page.getByText("条件が、揃いそうです。")).toBeVisible({ timeout: 15_000 });
+  await expect(mine.page.getByRole("button", { name: "参加する" })).toBeVisible();
+  await mine.close();
 });

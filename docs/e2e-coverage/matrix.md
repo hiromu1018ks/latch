@@ -518,4 +518,5 @@ BEFORE(§2.3)から変化したセルのみ記載(`implemented(spec:line)`=実E2
 - **完了**: すべてのギャップ(G-01〜G-17)が終端状態(implemented / known-failure / waived)。再分析パス1で新規P0/P1なし。vitest 367件は無影響(緑維持)
 - **既知の未解決**: なし(findings#1は2026-10-12にclient.jsへ単一フライト化で修正済み。単体client.test.js+実E2E A5の両方で解消を確認)
 - **対象外**: Cloudflare実装(8787)向けE2E project(契約試験130件がAPIパリティを担保するため本パスでは対象外とした。必要時にwebServer追加で拡張可能)・W-01〜W-04のwaived(理由はgaps.md)
-- **E2Eの実行前提**: compose常設環境(`make up`+`make migrate`)・chromium導入済み・`cd frontend && npx playwright test`
+- **E2Eの実行前提**: compose常設環境(`make up`+`make migrate`)・chromium導入済み・`make e2e`(=frontendの `npm run test:e2e:report`)
+- **録画アーカイブ**: 全テストを常時録画し `frontend/e2e-recordings/<実行日時>/index.html`(file://で開ける純静的ギャラリー・機能群セクション+注目点つき)で閲覧する。過去runは最新3件を保持。対話トリアッチは `npx playwright show-report`。ゆっくり再生は `LATCH_E2E_SLOWMO=300`

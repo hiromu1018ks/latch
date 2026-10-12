@@ -1,4 +1,4 @@
-.PHONY: cf-dev cf-probe cf-unit cf-sync cf-deploy setup up down ps logs lint test test-ci migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs loadusers loadperf loadbf loadmass load-stub-flat load-migrate load-geo-import staging-nfr-reset staging-nfr-test staging-probe staging-d16 staging-dump staging-db2-up staging-restore staging-db2-switch staging-db2-down
+.PHONY: cf-dev cf-probe cf-unit cf-sync cf-deploy setup up down ps logs lint test test-ci e2e migrate geo-download geo-import geo-verify g1-gate embed-smoke jev-smoke g2-gate staging-up staging-down staging-ps staging-logs staging-migrate staging-geo-import staging-keys staging-token staging-clock staging-publish staging-reset staging-test staging-obs-test load-up load-down load-ps seed-generate seed-verify dashboard-up dashboard-down dashboard-ps dashboard-logs loadusers loadperf loadbf loadmass load-stub-flat load-migrate load-geo-import staging-nfr-reset staging-nfr-test staging-probe staging-d16 staging-dump staging-db2-up staging-restore staging-db2-switch staging-db2-down
 
 setup: ## uv依存の導入
 	cd backend && uv sync
@@ -26,6 +26,9 @@ test-ci: ## ci環境試験(worker停止→unit+integration→subscription掃除�
 	docker compose stop worker
 	cd backend && uv run --group geo pytest; rc=$$?; \
 	LATCH_PUBSUB_EMULATOR_HOST=127.0.0.1:8085 uv run python -m latch.events purge-match-sub; docker compose start worker; exit $$rc
+
+e2e: ## UI E2E(Playwright・録画ギャラリー付き。前提: make up+migrate済み・chromium導入済み)
+	cd frontend && npm run test:e2e:report
 
 migrate: ## DBマイグレーションをheadまで適用(明示実行。API/Workerの起動時自動実行はしない)
 	cd backend && uv run alembic upgrade head

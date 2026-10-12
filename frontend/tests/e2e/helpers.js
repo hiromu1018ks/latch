@@ -179,14 +179,6 @@ export async function seedStorage(context, { access, refresh }) {
   );
 }
 
-export async function openAuthed(browser, user, url) {
-  const context = await browser.newContext();
-  await seedStorage(context, user);
-  const page = await context.newPage();
-  await page.goto(url);
-  return { context, page };
-}
-
 // afterAllから呼ぶベストエフォート後片付け(latch系行→ユーザー退会カスケード)。
 export async function cleanupAll() {
   for (const id of createdLatches.splice(0)) {
@@ -212,6 +204,9 @@ export async function cleanupAll() {
 }
 
 // 認証済み単一ユーザーを前提にするspec用の拡張fixture(1テスト=1ユーザー)。
+// openAuthedは第二ユーザー等の手動コンテキスト用: 設定のvideo:"on"はフィクスチャ
+// 経由のコンテキストにしか自動適用されないため、ここで明示的に録画し
+// testInfo.attachでテスト結果へ紐付ける(HTMLレポート・ギャラリー両方で見える)。
 export const test = base.extend({
   user: async ({}, use) => {
     const user = await provisionUser({});
@@ -221,5 +216,34 @@ export const test = base.extend({
     await seedStorage(page.context(), user);
     await use(page);
   },
+  openAuthed: [
+    async ({ browser }, use, testInfo) => {
+      const opener = async (user, url) => {
+        const context = await browser.newContext({
+          viewport: { width: 1280, height: 720 },
+          recordVideo: { dir: testInfo.outputDir, size: { width: 1280, height: 720 } },
+        });
+        await seedStorage(context, user);
+        const page = await context.newPage();
+        await page.goto(url);
+        return {
+          context,
+          page,
+          close: async () => {
+            const video = page.video();
+            await context.close();
+            if (video) {
+              await testInfo.attach("video", {
+                path: await video.path(),
+                contentType: "video/webm",
+              });
+            }
+          },
+        };
+      };
+      await use(opener);
+    },
+    { auto: true },
+  ],
 });
 export { expect };

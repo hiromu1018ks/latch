@@ -29,3 +29,26 @@ M1 ws-5: `prototype/` を出発点とする本実装(00 運用ルール6・03 §
 ## テスト
 
 `npm test`(vitest run・happy-dom・fetchモック。実api・実DB・実Redisを消費しない)
+
+## E2E(Playwright・実API)
+
+前提: repo rootで `make up` + `make migrate` 済み(compose常設api=127.0.0.1:8000)・
+chromium導入済み(初回のみ `npx playwright install chromium`)。
+
+| 目的 | コマンド |
+|---|---|
+| E2E実行のみ | `npm run test:e2e` |
+| E2E実行+録画ギャラリー生成 | `npm run test:e2e:report`(repo rootなら `make e2e`) |
+| ゆっくり再生で録画(視聴補助) | `LATCH_E2E_SLOWMO=300 npm run test:e2e:report` |
+| 対話型レポート(失敗トリアージ) | `npx playwright show-report` |
+
+### 録画ギャラリー(人間が俯瞰して閲覧するためのもの)
+
+`npm run test:e2e:report` を実行すると `frontend/e2e-recordings/<実行日時>/` に
+**テスト単位の動画(webm)** と `index.html` が生成される。**index.html をブラウザで
+開くだけ**(file:// で動く純静的。サーバー不要)で:
+
+- 機能群ごとのセクション(認証 / 同意 / 主幹フロー / 回答・undo / 成立・チャット …)と目次
+- 各カード = 動画プレイヤー + テスト題名 + 合否 + 所要秒数 + 「注目点」1行
+- 失敗テストは赤枠・赤badgeで強調される
+- 過去runは最新3件まで自動削除(動画はgit管理外)
