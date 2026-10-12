@@ -16,6 +16,28 @@ test("提案姿が実APIから描画され、YESで参加状態に遷移する(G
   await mine.close();
 });
 
+test("両者YESの2ブラウザ連鎖で双方の画面が05(成立)へ遷移する(U-05・受け入れ#15)", async ({ openAuthed }) => {
+  const { userA, userB, latchId } = await pairLatchFixture({});
+  const a = await openAuthed(userA, `/#/latches/${latchId}`);
+  await expect(a.page.getByText("条件が、揃いそうです。")).toBeVisible({ timeout: 15_000 });
+  await a.page.locator('[data-role="respond"][data-value="yes"]').click();
+  await expect(a.page.getByText("参加と回答しました。")).toBeVisible();
+  const b = await openAuthed(userB, `/#/latches/${latchId}`);
+  await expect(b.page.getByText("条件が、揃いそうです。")).toBeVisible({ timeout: 15_000 });
+  // B(第2コンテキスト)のYESが全員参加を確定させる
+  await b.page.locator('[data-role="respond"][data-value="yes"]').click();
+  await expect(b.page.getByText("全員が参加しました。")).toBeVisible({ timeout: 15_000 });
+  await b.page.getByRole("button", { name: "チャットを開く" }).click();
+  await expect(b.page.getByText("LATCHしました。")).toBeVisible({ timeout: 15_000 });
+  // Aは回答済みのまま再訪で成立姿(05)へ(同一hashのままではhashchangeが
+  // 発火しないため一旦03へ遷移してから開き直す — pipeline-uiと同手法)
+  await a.page.goto("/#/standby");
+  await a.page.goto(`/#/latches/${latchId}`);
+  await expect(a.page.getByText("LATCHしました。")).toBeVisible({ timeout: 15_000 });
+  await b.close();
+  await a.close();
+});
+
 test("undoするとopen姿に復帰し、回答2択が再表示される(G5・FG-07の新規証明)", async ({ openAuthed }) => {
   const { userA, latchId } = await pairLatchFixture({});
   const mine = await openAuthed(userA, `/#/latches/${latchId}`);

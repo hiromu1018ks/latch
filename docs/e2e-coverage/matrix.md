@@ -565,3 +565,39 @@ backlog §12の推奨着手順①(E-01+E-03)と②(P0全4項目)を実施した�
 ### 7.4 残る主要項目(backlog正本・次の推奨=③P1 UI群)
 
 P1残14項目(E-01/E-03消化済み)。U-05(両者YES 2ブラウザ連鎖)・T-01/T-02(期限切れUI・staging Clock活用)・U-19/P-08(expired 04)は今回のstaging基盤の直接活用形で着手容易。CI載せ(O-01)は45テスト3project体制をGitHub Actionsへ乗せる段。
+
+## 8. V1-P1「回答と期限」クラスタ実装パス(2026-10-12・backlog §12③+findings#2)
+
+backlog §12③のP1 UI群5項目(U-05・U-08・U-09・U-19+T-01/P-08統合・T-02)+findings#2修正を実施。
+
+### 8.1 実装テスト(計5新規+2改修・全緑2回連続以上)
+
+| project | spec | テスト | 対応backlog項目 |
+|---|---|---|---|
+| ci | e2e/response.spec.js:19 | 両者YESの2ブラウザ連鎖→双方05 | U-05(受け入れ#15) |
+| ci | e2e/errors-and-settings.spec.js:99 | 18〜19歳の飲酒Intent作成422 UNDER_AGE全体note | U-08(受け入れ#27 UI面) |
+| ci | e2e/main-flow.spec.js:78 | 下書き→直して預ける→active化→03待機中へ | U-09(受け入れ#1経路) |
+| staging | e2e-staging/expiry-ui.spec.js:56 | 期限経過04タイマー0:00→実sweeper expired→04 closed・03/お知らせから消失 | U-19+T-01+P-08(受け入れ#16・#4後半) |
+| staging | e2e-staging/expiry-ui.spec.js:116 | Intent expires_at経過→実sweeper expired→03待機中から消失 | T-02 |
+| staging | pipeline-ui.spec.js:84(改修) | お知らせ初回オープンで実データ(popover 3回クリックworkaround撤去) | findings#2修正のE2E証明 |
+| unit | latch-notice.test.jsx(改修) | preload後の初回openも必ずGET(起動後到着2件を初回描画) | findings#2 |
+
+稼働実績(最終状態): **vitest 368(2回)・ci 43(3回)・staging 5(3回)・cf 2(3回)**=E2E 50テスト。
+
+### 8.2 整備した基盤
+
+- helpersの`provisionUser`へ`birthDate`パラメータ(既定1990-06-15不変・U-08用)
+- staging expiry系のSQL過去化パターン: `UPDATE latches SET response_deadline = now() - interval '1 minute' WHERE id=...`(per-ID限定・staging postgresはtimestamptz列のためinterval式。D1/SQLiteのbigint microsと異なる)
+
+### 8.3 実機で確認された実装挙動(ドキュメント化価値のある発見)
+
+1. **04の期限切れ表示はブラウザ実時間由来**: DeadlineTimerはクライアント時刻の残時間計算のため、staging Clockを進めても04は「締切」にならない。期限切け切れUIのE2E正規手段は**SQLでresponse_deadlineを過去化**(backlog U-19記載どおり)。表示形は「締切」文字ではなく`[data-role=deadline]`の`0:00`+回答2択disabled(countdownTextは0未満を表示しない)
+2. **期限切れlatch/intentのexpired化は実sweeper(60秒tick)の成果として観測可能**: SQL過去化→最長~70秒でstatus=expired(P-08「sweeperの成果」の実測)
+3. **時間マッチングは3時間硬判定ではない**: layer3.time_closenessは飽和型(1−min(Δmin,180)/180)のためΔ≥3hでもrule寄与は0になるのみ。similarity・vocabが高いと遠隔スロットでも交差latchが生じうる(stub Jevは常に0.9で提案するため顕著)。**E2Eの候補一覧assertは自分のlatch(href)にスコープすべき**(`#proposalsScreen a.sb-row-link[href="#/latches/{id}"]`形式)
+4. **expiry系fixtureのスロット設計**: +11.5h(U-19)/+12.5h(T-02)でpipeline-ui(+2h/+6h)・ground-truth(D(2..5)=+39h以降)と分離。かつ**各テストはfinallyで自分のIntentをDELETE**(失敗残存Intentが次run・並走specと交差マッチしてD-08上限を食う実被害を確認)
+5. **draft→active化の成功遷移は#/standby(裸)**: ?deposited=1は新規作成経路のみ(PATCH経路は付かない)、「預けました。」トーストも出ない(遷移と一覧登場で判定)
+6. **ciのstub Parserはalcohol_involved=false固定**: U-08(UNDER_AGE)のUI実機はparse応答のroute書き換え(実応答のalcoholをtrueに・G1 alcoholゲートが実Parserの当該挙動を実証済み)で駆動するのが正規手段。02の「含む/含まない」segはD-04人数確認でありalcoholのUIスイッチではない
+
+### 8.4 残る主要項目(backlog正本)
+
+P1残9項目(P-02・A-02・U-02・U-04・U-07・O-01・O-02等)。次の推奨=④O-01 CI(GitHub Actions)載せ+残りP1 UI群(U-02ブロックdialog・U-04 attendance・U-07 visibility 2値比較)。findingsは#1・#2ともに修正済みで未解消ゼロ。

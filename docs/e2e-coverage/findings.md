@@ -12,12 +12,14 @@
 - **修正(2026-10-12)**: `createClient` 内で進行中のrefresh promiseを共有する単一フライト化(`refreshShared`)。並行401は1回のrefreshに束ねられ、全呼び出しが回転後のaccessで再送される
 - **検証**: 単体試験(client.test.js「並行401はrefresh 1回に束ねられる…」=368件緑)とE2E A5(accessなし再訪でstandby描画=36件緑・2回連続)で実API再現→修正→解消を確認
 
-### findings#2 — お知らせpopoverの初回オープンが起動時スナップショットを使う(2026-10-12発見・未修正)
+### findings#2 — お知らせpopoverの初回オープンが起動時スナップショットを使う(2026-10-12発見・**同日修正済み**)
 
 - **再現手順**: アプリ起動(Headerのpreloadが `/v1/notifications` を1回取得・`preloaded=true`)→ **起動後に**提案・成立通知が届く → お知らせpopoverを**初めて**開く。`NoticePopover.open`(frontend/src/latch/NoticePopover.jsx:57-68)は `preloaded.current` がtrueなら取得をスキップし起動時のitems(=空)で描画する
 - **実API検証(2026-10-12・staging E2E)**: UI預け入れ→実パイプラインで提案+成立通知がDBに存在(`GET /v1/notifications` で2件確認)しても、起動済みページのpopover初回オープンは「まだ新しい候補はありません」。2回目のオープン(開き直し)は再取得して正しく2行表示
 - **影響**: 起動中に提案が届いたユーザーが最初のお知らせ確認で「来ていない」と認識する(未読ドットも起動時値のまま)。Header.jsx:63のコメント「popoverを開くたびに取得」と実装が矛盾。P1(提案到達の視認性=サービス核心)
-- **備考**: hashのみ遷移ではページが再読み込みされない(同一文書遷移)ため、SPAを開き続ける通常使い方で必ず起きる。E2E側は現状「開き直し」で実データ到達を証明(pipeline-ui.spec.js:84のコメント参照)。修正はopen()でpreloaded分岐を削る(常に取得)かpreload結果の年齢を見る方向
+- **修正(2026-10-12・V1-P1)**: `open()`からpreloaded分岐を削除し**常にGET**する( preloadはヘッダー未読ドット判定のみに使用・行描画には使わない)。Headerコメントと実装の整合を回復
+- **検証**: 単体(latch-notice.test.jsx「preload後の初回openも必ずGETする…」=起動時0件→起動後に2件届く状態で初回オープンが2行描画・GET2回)とstaging実機(pipeline-ui.spec.js:84の「開き直し3回クリック」workaroundを撤去し初回オープン1回でproposal+成立の2行をassert)で修正を証明。vitest 368・staging E2E 5緑
+- **備考**: hashのみ遷移ではページが再読み込みされない(同一文書遷移)ため、SPAを開き続ける通常使い方で起きていた
 
 ## False greens(疑似緑 — partial格下げの根拠)
 

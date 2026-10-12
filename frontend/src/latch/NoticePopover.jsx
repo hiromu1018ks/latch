@@ -1,9 +1,11 @@
 // お知らせpopover(M3 ws-8 design §2.1〜§2.2・UI v2 Phase 5でv2部品へ再構成・
 // UI v2 Phase 6でReact化)。旧notice.js(素のDOM配線)をhook+コンポーネントへ
 // 載せ替えたもの。popoverを開くたびGET /v1/notifications?limit=20を1回取り直し
-// (開いた時点の最新)・表示された未読行へPOST read(開いた=見た)・起動時1回の
-// preload結果を初回描画に使い二重取得しない。取得失敗時は前回表示を維持・
-// 空状態も出さない(再訪で再試行・detailの再取得失敗と同型)。行は未読にaccの点と
+// (開いた時点の最新=起動後に届いた通知も初回オープンで描画する。findings#2
+// 修正でpreloaded分岐を削除・2026-10-12)・表示された未読行へPOST read
+// (開いた=見た)。起動時1回のpreloadはヘッダーの未読ドット判定だけに使う
+// (popoverの行描画には使わない)。取得失敗時は前回表示を維持・空状態も出さ
+// ない(再訪で再試行・detailの再取得失敗と同型)。行は未読にaccの点と
 // 「未読」の視覚隠し補読を添える。03のアプリ内トースト(候補の即時導線)とこの
 // 一覧(履歴)はD-14の判断で併存(統合の判断はphase5-report.mdに記録)。
 import { useCallback, useRef, useState } from "react";
@@ -21,7 +23,6 @@ export const useNotice = (client) => {
   const [cursor, setCursor] = useState(null);
   const [fetched, setFetched] = useState(false); // 空状態は1回以上取得した後だけ出す
   const [hasUnread, setHasUnread] = useState(false);
-  const preloaded = useRef(false); // 起動時取得の結果を初回描画に使い二重取得しない
 
   const updateDot = (list) => setHasUnread(list.some((item) => item.read_at == null));
 
@@ -34,9 +35,10 @@ export const useNotice = (client) => {
   };
 
   const preload = useCallback(async () => {
+    // 起動時1回: ヘッダーの未読ドット判定のための取得(popoverの行描画には
+    // 使わない — open()が常に最新を取り直すため二重保持しない)
     const data = await client.call("GET", "/v1/notifications?limit=20");
     apply(data);
-    preloaded.current = true;
   }, [client]);
 
   const markRead = useCallback(async () => {
@@ -57,16 +59,14 @@ export const useNotice = (client) => {
   }, [client]);
 
   const open = useCallback(async () => {
-    if (preloaded.current) {
-      preloaded.current = false; // 起動時取得の結果を初回描画に使い二重取得しない
-      setFetched(true);
-    } else {
-      try {
-        const data = await client.call("GET", "/v1/notifications?limit=20");
-        apply(data);
-      } catch {
-        return; // 前回表示を維持(空状態も出さない)
-      }
+    // 開くたびに必ず取得する(findings#2修正: preloaded分岐は起動後に届いた
+    // 通知を初回オープンで描画しない要因だった。Headerコメント「開くたびに
+    // 取得」との整合を回復)
+    try {
+      const data = await client.call("GET", "/v1/notifications?limit=20");
+      apply(data);
+    } catch {
+      return; // 前回表示を維持(空状態も出さない)
     }
     await markRead();
   }, [client, markRead]);

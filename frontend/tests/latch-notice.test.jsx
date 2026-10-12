@@ -324,23 +324,32 @@ describe("useNotice+NoticeList(design §2.1〜§2.2)", () => {
     expect(document.getElementById("noticeList").innerHTML).toBe(before);
   });
 
-  it("preload後の初回openはGETしない(二重取得なし)・nearby行はリンク化しない", async () => {
+  it("preload後の初回openも必ずGETする(起動後に届いた通知を初回オープンで描画・findings#2)・nearby行はリンク化しない", async () => {
+    let later = false;
     const { client, notice } = mountNoticeList(async (method) => {
       if (method === "POST") return null;
       return {
-        items: [
-          item("nearby_candidate", notificationLatch("candidate"), {
-            read_at: "2026-10-01T08:00:00+09:00",
-          }),
-        ],
+        items: later
+          ? [
+              item("proposal", notificationLatch("proposed")),
+              item("nearby_candidate", notificationLatch("candidate"), {
+                id: "n2",
+                read_at: "2026-10-01T08:00:00+09:00",
+              }),
+            ]
+          : [],
         next_cursor: null,
       };
     });
+    // 起動時preload=0件(この時点で通知はまだ届いていない)
     await act(async () => { await notice().preload(); });
+    expect(rows().length).toBe(0);
+    // 起動後に通知が2件届く → 初回オープンで取得し直して描画する
+    later = true;
     await act(async () => { await notice().open(); });
-    expect(client.call).toHaveBeenCalledTimes(1); // preloadのGETのみ
-    expect(document.querySelectorAll("a.notice-item").length).toBe(0); // nearbyは<div>
-    expect(rows().length).toBe(1);
+    expect(client.call.mock.calls.filter(([m]) => m === "GET").length).toBe(2); // preload+open
+    expect(document.querySelectorAll("a.notice-item").length).toBe(1); // nearbyは<div>
+    expect(rows().length).toBe(2);
   });
 });
 

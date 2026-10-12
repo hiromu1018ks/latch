@@ -104,11 +104,9 @@ test("成立までの通知がお知らせに届く(proposal+成立の2種)", as
   await expect(b.page.getByText("全員が参加しました。")).toBeVisible({ timeout: 15_000 });
 
   await a.page.goto("/#/");
-  // 注意: お知らせpopoverの初回オープンは起動時preloadのスナップショットを使う
-  // (NoticePopover.openのpreloaded分岐・findings#2)。通知はテスト中に届いたため
-  // 一度閉じて開き直す(2回目のオープンは必ずGETし直す)ことで実データを観測する。
-  await a.page.getByRole("button", { name: "お知らせ" }).click();
-  await a.page.getByRole("button", { name: "お知らせ" }).click();
+  // findings#2修正済み: 初回オープンが必ずGETし直すため、テスト中に届いた
+  // 通知(proposal+成立の2種)も開いた時点の最新として描画される
+  // (旧挙動は起動時preloadのスナップショットを使い開き直しが必要だった)。
   await a.page.getByRole("button", { name: "お知らせ" }).click();
   await expect(a.page.getByText(/条件が合う候補があります/).first()).toBeVisible({ timeout: 15_000 });
   await expect(a.page.getByText("LATCHが成立しました").first()).toBeVisible({ timeout: 15_000 });

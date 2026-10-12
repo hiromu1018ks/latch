@@ -34,7 +34,7 @@
 | P-05 | 保留キュー→提示(D-08上限時の翈Bucket回し・期限再計算) | UI実機 | unit/integration/staging S1#8あり。UI体験なし | staging+Clock(E-03)で上限到達→時間経過→トースト/お知らせが出る | P2(FR-47) |
 | P-06 | debounce 10s体感(更新連打→1回だけ候補トースト) | UI実機 | unit/integrationあり。UI×実workerなし | P-01環境で更新を2回→10s後に1回だけ通知 | P2 |
 | P-07 | 更新(PATCH)→reeval再評価の成果がUIへ | UI実機 | staging S1#7・integrationあり | P-01環境内で条件変更→候補変化をUIで観測 | P2 |
-| P-08 | expiry sweeper(60秒)の成果: 提案expiredで閉じる姿 | UI実機 | staging S3#16・integration。UIなし | staging+Clockで期限経過後04を開く→「この提案は成立しませんでした」 | **P1**(受け入れ#16 UI面) |
+| P-08 | expiry sweeper(60秒)の成果: 提案expiredで閉じる姿 | UI実機 | staging S3#16・integration。UIなし | staging+Clockで期限経過後04を開く→「この提案は成立しませんでした」 | **P1**(受け入れ#16 UI面) | **done(e2e-staging/expiry-ui.spec.js:56)** — U-19/T-01と同一シナリオ(response_deadline過去化→実sweeper 60秒tickのexpired化をwaitStatusで実測→04 closed) |
 | P-09 | ブロック済み相手から提案が来ない(実パイプライン) | UI実機 | staging S5#20・hardfilter:368がAPI面(負の証明) | E-03でブロック→意図→候補に出ない。UI観測は「出ないこと」の待ち時間設計が必要 | P2 |
 | P-10 | LLM失敗→フォールバック(Anthropic→TypeSafe)実API | 実機 | unit/integrationはエラー注入。実API切替は未実施 | 実LLMキーで障害注入は困難→フォールバック直接(jev-smoke FALLBACK=1)のUI接続はP3 | P3 |
 | P-11 | サーキットブレーカ開放(実API)・D-16上限での縮退体感 | 実機 | unit/integration/staging n3完備 | 実APIでは再現困難。staging n3をUI接続(E-03)すれば「その夜提案が来ない」体験のみ可能 | P3 |
@@ -58,15 +58,15 @@
 
 ## 4. 時間進行・Clock軸(旧提案Bの展開。staging ControlledClock活用)
 
-| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 |
-|---|---|---|---|---|---|
-| T-01 | 回答期限経過→「締切」表示→候補静かに消える | UI実機 | response.spec.js:59 はSQLで期限を過去化したundo 409のみ | staging+Clock(E-03)。期限切れ04実描画 | **P1** |
-| T-02 | Intent expires_at経過→expired・03からの消失 | UI実機 | staging S3#16・integration expiry_batches。UIなし | 同上 | **P1**(受け入れ#4後半) |
-| T-03 | attendance申告窓(3日)の開閉(窓超過で非表示) | UI実機 | vitest H8(WINDOW_CLOSED)のみ | staging+Clockでcompleted→3日経過 | P2 |
-| T-04 | completed遷移(対象時刻経過)→チャット「対象時刻を過ぎたため…」読取専用 | UI実機 | vitest H4②のみ | staging+Clock | P2 |
-| T-05 | JST日跨ぎ(0時リセット・日次/時/分レート制限バケット・RetentionJob) | UI実機 | unit test_jst_boundary・n3の0時リセット | staging+Clock 0時跨ぎシナリオ | P3 |
-| T-06 | 30分Bucket再評価・catch-upのUI面(期限2時間前の再提示) | UI実機 | staging n4完備(API) | E-03でClock前進→再提示観測 | P3 |
-| T-07 | チャット30秒ポーリング・通知5秒以内到達 | UI実機 | vitest(W-03)・load notify p95=4.92s | P-01環境内で経過観測(任意) | P3 |
+| ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 | Status |
+|---|---|---|---|---|---|---|
+| T-01 | 回答期限経過→「締切」表示→候補静かに消える | UI実機 | response.spec.js:59 はSQLで期限を過去化したundo 409のみ | staging+Clock(E-03)。期限切れ04実描画 | **P1** | **done(e2e-staging/expiry-ui.spec.js:56)** — U-19と同一シナリオで実施(期限過去化はSQL・Clockでなく。04=タイマー0:00+回答2択disabled→実sweeper expired化→03から自分のlatch行が消失) |
+| T-02 | Intent expires_at経過→expired・03からの消失 | UI実機 | staging S3#16・integration expiry_batches。UIなし | 同上 | **P1**(受け入れ#4後半) | **done(e2e-staging/expiry-ui.spec.js:116)** — expires_atをSQL過去化→実sweeper(60秒tick)の_expire_intent→03待機中から消失をreloadで観測 |
+| T-03 | attendance申告窓(3日)の開閉(窓超過で非表示) | UI実機 | vitest H8(WINDOW_CLOSED)のみ | staging+Clockでcompleted→3日経過 | P2 | |
+| T-04 | completed遷移(対象時刻経過)→チャット「対象時刻を過ぎたため…」読取専用 | UI実機 | vitest H4②のみ | staging+Clock | P2 | |
+| T-05 | JST日跨ぎ(0時リセット・日次/時/分レート制限バケット・RetentionJob) | UI実機 | unit test_jst_boundary・n3の0時リセット | staging+Clock 0時跨ぎシナリオ | P3 | |
+| T-06 | 30分Bucket再評価・catch-upのUI面(期限2時間前の再提示) | UI実機 | staging n4完備(API) | E-03でClock前進→再提示観測 | P3 | |
+| T-07 | チャット30秒ポーリング・通知5秒以内到達 | UI実機 | vitest(W-03)・load notify p95=4.92s | P-01環境内で経過観測(任意) | P3 | |
 
 ## 5. UI機能の残り(受け入れ#1〜#27とFRから。旧提案C+エージェント1の追加)
 
@@ -76,11 +76,11 @@
 | U-02 | ブロックdialog(H10)の実機(提案/成立画面起点) | UI実機 | vitestのみ。E2Eは設定解除(G-14)のみ | matched fixture→dialog→POST→ブロック一覧へ | **P1**(#20 UI面) |
 | U-03 | 成立後ブロック→チャット読取専用(D-23) | UI実機 | staging S4 D-23(API)・vitest | U-02の延長 | P2 |
 | U-04 | attendance happyの実機(2択→POST→済み) | UI実機 | vitest H7/H8のみ(gaps W-04関連でE2E対象外とした) | completed fixture→申告 | **P1**(原則6) |
-| U-05 | 両者YES→matched遷移の2ブラウザ連鎖 | UI実機 | response.specは片方YESまで。成立姿はfixture | 2コンテキストで順にYES→双方05へ | **P1**(#15) |
+| U-05 | 両者YES→matched遷移の2ブラウザ連鎖 | UI実機 | response.specは片方YESまで。成立姿はfixture | 2コンテキストで順にYES→双方05へ | **P1**(#15) | **done(e2e/response.spec.js:19)** — pairLatchFixture+openAuthed(userA/userB)の2コンテキストで順にYES→B「全員が参加しました。」→チャットを開く→05・Aは再訪で05到達 |
 | U-06 | hidden_until_match最小形04画面(照合表なし・一致度/期限/必要人数のみ) | UI実機 | E2E fixtureはsummary_only全形のみ。**実運用の既定姿が未実機** | proposalを{headcount,match_level}のみのfixture→最小形assert | **P0**(受け入れ#17・原則8) | **done(e2e/proposal-minimal.spec.js:11 + e2e-staging/pipeline-ui.spec.js:22)** — SQL fixture(p proposal={headcount,match_level})で04=照合表・4情報カードなし/非開示注記/まだ見えない1人/回答期限/YES可をAssert+実パイプライン版(UI預け入れはhidden確定送信のため実workerの提案が自動的に最小形=提案形状をtoEqualで証明) |
 | U-07 | visibility 2値比較(同一候補をsummary_only/hiddenで作り表示差assert)+ raw_text/名前/NG条件/座標の**否定的assert** | UI実機 | G3/stagingがAPI面(#22/#23)。UI 2値比較ゼロ | 2 fixture並列描画で差分+非表示検査 | **P1**(#22/#23) |
-| U-08 | 18〜19歳ユーザーのUI作成拒否(422 UNDER_AGE表示) | UI実機 | staging S5 D-10・G1 alcoholがAPI/LLM面。UIゼロ | helpersのbirth_date調整で alcohol系intent保存 | **P1**(#27) |
-| U-09 | 下書き→「直して預ける」→預けるのUI完走(draft→active化) | UI実機 | C5は行表示まで。#1の検証方法に明記の経路 | 03下書き行→02→預ける→active化 | **P1**(#1) |
+| U-08 | 18〜19歳ユーザーのUI作成拒否(422 UNDER_AGE表示) | UI実機 | staging S5 D-10・G1 alcoholがAPI/LLM面。UIゼロ | helpersのbirth_date調整で alcohol系intent保存 | **P1**(#27) | **done(e2e/errors-and-settings.spec.js:99)** — provisionUserへbirthDate拡張(2008-06-15=18歳)。ciのstub Parserはalcohol=false固定のためparse応答のみroute書き換え(429テストと同手法)でalcohol=trueに・サーバ422 UNDER_AGEと全体note表示は本物 |
+| U-09 | 下書き→「直して預ける」→預けるのUI完走(draft→active化) | UI実機 | C5は行表示まで。#1の検証方法に明記の経路 | 03下書き行→02→預ける→active化 | **P1**(#1) | **done(e2e/main-flow.spec.js:78)** — 下書き保存→03下書き行→「を直して預ける」(#/confirm?intent=)→02編集(時間/場所/人数確認/期限)→預ける(PATCH status=active)→03待機中へ移り下書き欄から消失 |
 | U-10 | NG条件注意表示「この条件は確実には除外できません」(D-04降格) | UI実機 | vitest(state/confirm)のみ | NG条件入り入力→02の注意文表示 | P2 |
 | U-11 | Parser失敗→構造化フォームフォールバック遷移(FR-43/D-17) | UI実機 | vitest applyParseFallback純関数のみ | route注入でparse 503→フォールバックUI遷移 | P2 |
 | U-12 | 通知許可トグルの実機(権限4状態) | UI実機 | vitest latch-settingsのみ | contextにpermission権限を与えてgranted/denied | P2 |
@@ -90,7 +90,7 @@
 | U-16 | 5条件行編集の実機網羅(時間・予算・目的行。現状人数/場所のみ) | UI実機 | vitest conditions完備・E2Eは2行 | 主幹フロー内で全行触る | P3 |
 | U-17 | 典型表現10件以上セットでの入力→保存完走(#1の検証方法の字義) | UI実機 | E2Eは2文。G1(32+3件)が精度面で担う設計 | suite化するかG1で十分の明記判断 | P3 |
 | U-18 | GEOCODING_FAILEDの実機(地名範囲外→場所行エラー) | UI実機 | vitest confirm.test(D6)。E2E未遭遇(地名制約内のため) | 「東京駅」のまま保存→422表示 | P2 |
-| U-19 | 期限切れ提案04の実描画(expired/closed姿) | UI実機 | vitest 4状態のみ | SQLでstatus過去化 or T-01 | **P1**(#16) |
+| U-19 | 期限切れ提案04の実描画(expired/closed姿) | UI実機 | vitest 4状態のみ | SQLでstatus過去化 or T-01 | **P1**(#16) | **done(e2e-staging/expiry-ui.spec.js:56)** — T-01/P-08と同一シナリオ(実sweeperのexpired化後・04=#detailScreenのclosed card「この提案は成立しませんでした」) |
 | U-20 | 解散(相手leave/退会)後の自分UI(「成立しませんませんでした」・読取専用) | UI実機 | staging S4 D-23(API)。UIなし | 相手がleave→自分の05がCLOSED/読取専用 | P2 |
 | U-21 | 退会(DELETE users/me)実行後のUI(セッション消失・データ消滅) | UI実機 | UIに退会導線なし(API専用)=境界確認事項 | API退会→UI再訪でパネル。境界L-08参照 | P3 |
 | U-22 | 通知3種×既読/未読のUI行列(attendance_request行) | UI実機 | vitest行列・G-12はproposal行のみ | notification fixture 3種 | P2 |
@@ -166,4 +166,5 @@
 - 性質別(主分類): UI実機 約40 / 自動化ハーネス要 約10 / 実機(実端末・実LLM・実障害) 約8 / **実装欠落(検証以前に機能なし)** 8(V-01/V-02/A-05/A-06/O-06/P-04/C-01/X-04の一部)/ 要再実施・運用規律 約10
 - 優先度別: **P0: 4**(P-01実パイプライン×UI・A-01グラウンドトゥルース精度・U-01通報dialog・U-06 hidden_until_match最小形)/ **P1: 16**(E-01・E-03・P-02・P-08・A-02・T-01・T-02・U-02・U-04・U-05・U-07・U-08・U-09・U-19・O-01・O-02)/ P2: 約35 / P3: 約33
 - **推奨着手順**: ①環境基盤(E-01+E-03 → S-2/S-3解消) → ②P0群(P-01・A-01・U-01・U-06 → S-1解消・受け入れの最大穴) → ③P1のUI群(U-05/08/09/19+T-01/02) → ④O-01 CI載せ(以降の継続性) → ⑤残りP2 → ⑥実装欠落群(A-05/A-06/V-01/V-02/O-06/P-04)は製品判断を経て実装後に検証
-- **[2026-10-12] ①+②実施済み**: E-01/E-03(環境基盤)+P0全4項目(P-01・A-01・U-01・U-06)がdone。S-1/S-2解消・S-3はstub条件下で解消(実LLM残る)。残るP1は16中14(E-01/E-03分消化)。次は③のP1 UI群(U-05両者YES 2ブラウザ・U-08 UNDER_AGE・U-09下書き再開・U-19期限切れ04+T-01/T-02 staging Clock活用)— U-05/T-01/T-02は今回整備したstaging基盤の直接活用形。実行方法: `cd frontend && npm run test:e2e:staging`(staging環境前提=make staging-up)/ `npm run test:e2e:cf`(cf-devは自動build+migrate+起動)
+- **[2026-10-12] ①+②実施済み**: E-01/E-03(環境基盤)+P0全4項目(P-01・A-01・U-01・U-06)がdone。S-1/S-2解消・S-3はstub条件下で解消(実LLM残る)。
+- **[2026-10-12 V1-P1] ③実施済み+findings#2修正**: ③のP1 UI群5項目(U-05・U-08・U-09・U-19+T-01/P-08統合・T-02)がdone・**findings#2修正済み**(open()常時GET化+pipeline-ui初回オープン証明に転換)。稼働実績: ci 43 / staging 5 / cloudflare 2 = **50テスト緑**(vitest 368・2回連続+α)。**期限切れ系はSQL過去化+実sweeper方式**(Clock不使用: 04の期限表示はブラウザ実時間由来のためClockで描画不能=matrix §7.3)。残るP1は16中9(P-02・A-02・U-02・U-04・U-07・O-01・O-02 ほか)。次は④O-01 CI載せと残りP1 UI群(U-02ブロックdialog・U-04 attendance・U-07 visibility 2値)。実行方法: `cd frontend && npm run test:e2e:staging`(staging環境前提=make staging-up)/ `npm run test:e2e:cf`(cf-devは自動build+migrate+起動)

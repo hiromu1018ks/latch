@@ -72,3 +72,36 @@ test("下書き保存→03の下書き行に現れる(C5)", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "下書き" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("link", { name: /を直して預ける/ })).toBeVisible();
 });
+
+// U-09(受け入れ#1の検証経路・D-13最小導線の実機証明): 下書き→03の下書き行→
+// 「直して預ける」で02編集→「預ける」(PATCH status=active)→active化まで完走。
+test("下書き→直して預ける→active化で03の待機中へ移る(U-09)", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#intentText").fill("天文館で明日のランチを3人で");
+  await expect(page.locator("#readChips .chip").first()).toBeVisible({ timeout: 15_000 });
+  await page.locator("#draftButton").click();
+  await expect(page.getByText("下書きを保存しました")).toBeVisible();
+  await page.goto("/#/standby");
+  const editLink = page.getByRole("link", { name: /を直して預ける/ });
+  await expect(editLink).toBeVisible({ timeout: 15_000 });
+  await editLink.click();
+  // 02編集モード(draft復元): 時間と場所を保存可能な値へ直して預ける
+  await expect(page.locator("#confirmScreen")).toBeVisible();
+  const timeText = futureTimeText(1);
+  await page.getByRole("button", { name: "時間を編集" }).click();
+  await page.locator("#edit-time").fill(timeText);
+  await page.getByRole("button", { name: "保存" }).click();
+  await page.getByRole("button", { name: "場所を編集" }).click();
+  await page.locator("#edit-location").fill("天文館");
+  await page.getByRole("button", { name: "保存" }).click();
+  await page.getByText("含む", { exact: true }).click();
+  await page.locator("#expiry").selectOption({ index: 2 });
+  await expect(page.locator("#depositButton")).toBeEnabled();
+  await page.locator("#depositButton").click();
+  // draft→active化の成功遷移は#/standby(新規作成と違い?deposited=1は付かない)
+  await expect(page).toHaveURL(/#\/standby/, { timeout: 15_000 });
+  // active化: 待機中に現れ、下書き欄にはもういない
+  await expect(page.locator(".sb-tag", { hasText: "天文館" }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "下書き" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /を直して預ける/ })).toHaveCount(0);
+});

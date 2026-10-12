@@ -6,7 +6,7 @@
 
 ## 現在
 
-- フェーズ: **M4完了・G4承認済み(2026-10-06)→ UI v2移行Phase 0完了(2026-10-10)→ UI v2 Phase 1〜6完了(2026-10-10)→ UI v2 Phase 7実施完了(2026-10-12)→ UI v2ゲート承認済み(2026-10-12)→ 実配備Cloudflareの実LLM切替(stub→real)実施(2026-10-12・V1-P1 A-2委任)**。次は**Phase 0(内部α)計画の立案 — ユーザーとの協議待ち**(12 v0.4第3.1節・UI v2欄参照。実LLM切替の詳細はCLOUDFLARE-MIGRATION-STATUS冒頭節)。ws-9(FCM実機送信)は資材待ちで独立挿入可
+- フェーズ: **M4完了・G4承認済み(2026-10-06)→ UI v2移行Phase 0完了(2026-10-10)→ UI v2 Phase 1〜6完了(2026-10-10)→ UI v2 Phase 7実施完了(2026-10-12)→ UI v2ゲート承認済み(2026-10-12)→ 実配備Cloudflareの実LLM切替(stub→real)実施(2026-10-12・V1-P1 A-2委任)→ E2EバックログP1「回答と期限」クラスタ8項目+findings#2修正完了(2026-10-12・V1-P1)**。次は**Phase 0(内部α)計画の立案 — ユーザーとの協議待ち**(12 v0.4第3.1節・UI v2欄参照。実LLM切替の詳細はCLOUDFLARE-MIGRATION-STATUS冒頭節・E2Eはbacklog §12)。ws-9(FCM実機送信)は資材待ちで独立挿入可
 - 実装言語: Python (FastAPI) — 2026-09-27決定
 - 起動モデル: スーパーバイザー(main)=Opus・作業エージェント(agent1〜4)=Sonnet(2026-10-03ユーザー指示)
 - 並列構成: worktree完全分離(herdr worktree)。ゲート毎に人間承認

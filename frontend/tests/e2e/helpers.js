@@ -67,7 +67,7 @@ export async function api(method, pathName, { token, body } = {}) {
   return { status: res.status, data };
 }
 
-export async function provisionUser({ consent = true, register = true, tag = "e2e" } = {}) {
+export async function provisionUser({ consent = true, register = true, tag = "e2e", birthDate = "1990-06-15" } = {}) {
   const subject = `${tag}-${Date.now().toString(36)}-${(seq++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const exchanged = await api("POST", "/v1/auth/token", {
     body: { provider: "google", idp_token: issueIdpToken(subject) },
@@ -85,7 +85,7 @@ export async function provisionUser({ consent = true, register = true, tag = "e2
   if (register) {
     const created = await api("POST", "/v1/users", {
       token: user.access,
-      body: { display_name: `E2E ${tag}`, birth_date: "1990-06-15" },
+      body: { display_name: `E2E ${tag}`, birth_date: birthDate },
     });
     if (created.status !== 201) {
       throw new Error(`users failed: ${created.status} ${JSON.stringify(created.data)}`);
