@@ -24,13 +24,21 @@ from latch.geo.service import GeoService
 from latch.intents.events import EVENT_CREATED, EVENT_EMBEDDING_COMPLETED, EVENT_UPDATED
 from latch.llm.gateway import build_worker_gateway
 from latch.notifications.sender import build_push_sender
+from latch.obs.alert_forward import make_forwarding_emitter
 from latch.obs.collector import MetricsCollector
 from latch.obs.kpi import KpiJob
-from latch.obs.kpi_alert import KpiAlertJob
+from latch.obs.kpi_alert import (
+    KpiAlertJob,
+)
+from latch.obs.kpi_alert import (
+    structured_log_alert as kpi_structured_log_alert,
+)
 from latch.obs.metrics import observe_pipeline_layer, observe_retrieval
 from latch.settings import Settings
+from latch.worker.anonymize import AnonymizeJob
 from latch.worker.backfill import BackfillRunner
 from latch.worker.cost import JevCostGuard, JevCostStore, ReevalGuard
+from latch.worker.cost.guard import structured_log_alert as cost_structured_log_alert
 from latch.worker.debounce import DebounceEntry, DebounceGroup, TrailingDebouncer
 from latch.worker.embedding import EmbeddingWorker
 from latch.worker.jev import JevWorker
@@ -177,7 +185,15 @@ class Worker:
                     engine=engine,
                     clock=self.clock,
                     gateway=gateway,
-                    guard=JevCostGuard(store=cost_store, clock=self.clock),
+                    guard=JevCostGuard(
+                        store=cost_store,
+                        clock=self.clock,
+                        alert_emitter=make_forwarding_emitter(
+                            cost_structured_log_alert,
+                            url=self.settings.alert_webhook_url,
+                            timeout_s=self.settings.alert_webhook_timeout_s,
+                        ),
+                    ),
                     cost_store=cost_store,
                 )
             # PushSender(M3 ws-3・design §2.1案A): StubPushSender(ドライラン)。
@@ -246,6 +262,9 @@ class Worker:
             # RetentionJob DI(M3 ws-6・design §2.5案A): 30日定期削除。
             # engineのみで動く(redis不要)のためResetJobと違い無条件構築
             retention_job = RetentionJob(engine=engine, clock=self.clock)
+            # D-13第二段の月次匿名化(V1-P5・V-02・08 §3.4)。engineのみで動く
+            # (RetentionJob同型の無条件構築・月初0時のみrun_once)
+            anonymize_job = AnonymizeJob(engine=engine, clock=self.clock)
             # KpiJob DI(M4 ws-4・design §2.3): engineのみで動く(redis不要・
             # RetentionJob同型の無条件構築)。注入済み資産の試験は再構築しない
             if self._kpi is None:
@@ -285,6 +304,7 @@ class Worker:
             if reset_job is not None:
                 reset_task = asyncio.create_task(reset_job.run(stop=self._stop))
             retention_task = asyncio.create_task(retention_job.run(stop=self._stop))
+            anonymize_task = asyncio.create_task(anonymize_job.run(stop=self._stop))
             kpi_task = asyncio.create_task(kpi_job.run(stop=self._stop))
             # D-02警報線・A/B有害シグナルの週次検知(V1-P4 O-06・05 v0.8規定6)。
             # kpi_dailyを材料にするためKpiJobと同じくengineのみで動く。
@@ -294,6 +314,11 @@ class Worker:
                 clock=self.clock,
                 redis=redis_client,
                 interval_sec=self.settings.obs_collect_interval_sec,
+                alert_emitter=make_forwarding_emitter(
+                    kpi_structured_log_alert,
+                    url=self.settings.alert_webhook_url,
+                    timeout_s=self.settings.alert_webhook_timeout_s,
+                ),
             )
             kpi_alert_task = asyncio.create_task(kpi_alert_job.run(stop=self._stop))
             collector_task = asyncio.create_task(collector.run(stop=self._stop))
@@ -309,6 +334,7 @@ class Worker:
             if reset_job is not None:
                 await reset_task
             await retention_task
+            await anonymize_task
             await kpi_task
             await kpi_alert_task
             await collector_task

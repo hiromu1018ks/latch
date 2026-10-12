@@ -1,4 +1,4 @@
-"""0008〜0011のスキーマ検証(M4 ws-4・UI v2 P1B・integration・test-ciで実行)。"""
+"""0008〜0012のスキーマ検証(M4 ws-4・UI v2 P1B・integration・test-ciで実行)。"""
 
 import pytest
 from sqlalchemy import text
@@ -6,13 +6,13 @@ from sqlalchemy import text
 pytestmark = pytest.mark.integration
 
 
-async def test_head_is_0011_in_obs_schema(db_engine):
-    """0011がhead(V1-P4追加・test_geoの追従と同一の検査をobs側でも持つ)。"""
+async def test_head_is_0012_in_obs_schema(db_engine):
+    """0012がhead(V1-P5追加・test_geoの追従と同一の検査をobs側でも持つ)。"""
     async with db_engine.connect() as conn:
         version = (
             await conn.execute(text("SELECT version_num FROM alembic_version"))
         ).scalar()
-    assert version == "0011"
+    assert version == "0012"
 
 
 async def test_three_obs_tables_exist(db_engine):

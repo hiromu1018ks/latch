@@ -1,10 +1,12 @@
 // 設定画面(M3 ws-8 design §2.4・M4 ws-5・UI v2 Phase 6でReact化)。旧settings.js
 // (3セクションのマウント指示)+permission.js/blocks.js/consent.jsの配線を
-// 1つの画面コンポーネントへ載せ替えたもの。3セクション(通知許可・ブロック管理・
-// LLM送信の同意)。規定のない要素(プロフィール編集・ログアウト・テーマ等)は
-// 置かない(design §1.4)。通知許可(D-18)とLLM送信同意(D-14)は根拠も効果も
-// 別物のため区分表示を維持する。
+// 1つの画面コンポーネントへ載せ替えたもの。通知セクションは許可状態+プッシュ
+// 登録(05 v0.9・V-01)+nearby設定(03 v0.6・P-04)で構成する。規定のない要素
+// (プロフィール編集・ログアウト・テーマ等)は置かない(design §1.4)。
+// 通知許可(D-18)とLLM送信同意(D-14)は根拠も効果も別物のため区分表示を維持する。
 import { PermissionControl } from "./PermissionControl.jsx";
+import { PushRegistrationCard } from "./PushRegistrationCard.jsx";
+import { NearbyToggle } from "./NearbyToggle.jsx";
 import { BlocksSection } from "./BlocksSection.jsx";
 import { ConsentCard } from "./ConsentCard.jsx";
 
@@ -19,6 +21,16 @@ export const SettingsScreen = ({ client }) => (
       <PermissionControl
         notificationApi={typeof Notification !== "undefined" ? Notification : undefined}
       />
+      <PushRegistrationCard
+        client={client}
+        notificationApi={typeof Notification !== "undefined" ? Notification : undefined}
+        serviceWorkerContainer={
+          typeof navigator !== "undefined" && navigator.serviceWorker
+            ? navigator.serviceWorker
+            : undefined
+        }
+      />
+      <NearbyToggle />
     </section>
     <section className="card settings-card" aria-labelledby="blockSettingsTitle">
       <h2 id="blockSettingsTitle" className="card-title">ブロック管理</h2>

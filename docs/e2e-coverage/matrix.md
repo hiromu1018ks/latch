@@ -709,3 +709,44 @@ backlog A-06(実装欠落→実装+検証)を05 v0.7改版→backend(参照+Clou
 ### 11.4 CI(O-01)への影響
 
 test-ciはworker停止で実行するため契約suite競合は発生しない(観察1は手動実行時のみ)。増分: unit +31(test_ab_rules 9+test_ab_service 9+test_kpi_alert 8+test_mlr 5・obs_kpi期待値1件修正)・integration +19(test_ab_api 9+test_kpi_alert_ci 6+test_mlr_ci 4)・cf-unit +3(test_ab_pipeline)・契約 +4ケース(ab)・ci E2E +2(ab.spec.js)・vitest不変(frontend変更なし)。alembic head=0011・D1 0007はmigrateステップが自動適用。**workflowの実pushは引き続きユーザー指示待ち**
+
+## 12. V1-P5 P2整備実装パス(2026-10-13・backlog §12 V-01+V-02+P-04+C-01+A-04+O-07+Q-02+Q-03)
+
+仕様=05 v0.9+03 v0.6+04 v0.7(コミット50f4fc9)→backend(参照+Cloudflare/D1)→frontend→契約→E2Eの層で実施。13 §3表2のPhase 2/3開始前要件に続き、**実装欠落群の開発側実装可能分をすべて潰した**(残り=X-04の一部=実機依存のみ)。V1フェーズ計画(V1-P4→V1-P5)はこれで完走。
+
+### 12.1 実装テスト(仕様=05 v0.9+03 v0.6+04 v0.7)
+
+| 層 | 場所 | テスト | 対応 |
+|---|---|---|---|
+| backend参照 | latch/users/push.py+users/routes.py(3API)+alembic 0012+users/service(退会時トークン削除) | unit test_push_service 9+integration test_push_token_api 10(upsert所有権移動・last4マスク・不在404・退会CASCADE・422群) | **V-01トークン登録** |
+| backend参照 | latch/worker/anonymize.py(AnonymizeJob)+worker/main.py配線 | unit test_worker_anonymize 9+integration test_anonymize_job 3(第一段済み行のみ変換・対象外スキップ・冪等) | **V-02月次匿名化** |
+| backend参照 | latch/obs/alert_forward.py+3系統配線(cost guard/lag_alert/kpi_alert)+settings 2項目 | unit test_alert_forward 6(stdlib asyncioサーバで受信証明・失敗はfalseで例外なし) | **C-01 alert転送** |
+| backend参照 | latch/obs/segment.py(週次集計+仮説2判定)+CLI | unit test_obs_segment 6(JST日付境界・週外除外・匿名化済みanswered_date形式も受理) | **A-04 segment別YES率** |
+| Cloudflare | migrations/0008_push_tokens.sql+svc_users.py(build_push_token_service+退会batchへpush_tokens削除)+state.py配線 | **実D1へ0008適用済み**(push_tokens確認)・CF契約はin-process parityが覆盖 | **D1側(V-01)** |
+| 契約 | tests/contracts(push_token領域10ケース+actor pu1/pu2+cleanup) | 参照157緑(worker停止条件)・D1 154緑・manifest schema_head=0012再生成 | **パリティ** |
+| frontend | latch-push-sw.js+pushRegistration.js+PushRegistrationCard+nearbyPreference.js+NearbyToggle+sessionsBeacon.js+App.jsx配線 | vitest 389(latch-push 13=SW登録/stubトークン/VAPID経路/許可なし/失敗握り+nearby読み書き+トグル) | **V-01/P-04/O-07 frontend** |
+| E2E | push-and-nearby.spec.js 4件+sessions-beacon.spec.js 2件+keyboard.spec.js 3件+a11y.spec.js 7件 | ci 68(=52+16)×2回連続緑・staging 5×2・cf 2×2 | **受信体験・計測・操作** |
+
+### 12.2 設計判断(根拠の記録)
+
+1. **D-02の読み替え(nearby設定導線)=廃止対象は「02作成フロー内のper-Intent選択UI」**: 設定画面(#/settings)の通知セクションへユーザー単位の既定トグル「近い条件の候補があれば知らせる」(既定オフ)を置き、ONで以後保存する新規Intentのnotification_level=nearby_alsoを送る。既存Intent・visibilityには遡及しない。設定値は端末保存(localStorage)としusers列・API値域は不変(backend変更ゼロ)。境界確認6(backlog §11.6)はこの形へ更新(visibilityのUI切替なしは不変)
+2. **pushトークンのupsert=所有権移動(409にしない)**: FCMトークンは端末+ブラウザ単位のため同一端末での再ログイン・アカウント切替で同一トークンが別ユーザーから登録され得る。UNIQUE(token)へのON CONFLICTでuser_idを登録者へ置換(05 v0.9 規定1)。削除は自分の行のみ(所有権移動済みトークンの解除は404=存在探査に使えない形)
+3. **実FCM送信と登録経路の分離**: 実FCM資材(VAPID鍵・Firebase構成)は人間領域(ws-9)のため、フロントは資材のある環境でPush API標準のsubscribe・**ない環境ではstub-プレフィックスの疑似トークン**を生成してAPI登録往復を完結させる。これにより登録経路(表・API・SW・UI)の試験可能性を資材待ちから分離した。headless ChromiumはNotification.permissionが常に"denied"を返す既知の挙動があり、E2Eのgranted側は許可状態のみinitScriptで与え(SW登録・POST・DBは実経路のまま)
+4. **退会はusers行を残置する設計のためpush_tokensは明示削除**: FK CASCADEはusers行物理削除でしか働かない。退会フロー(users service・D1のaccount_delete batch)へDELETE push_tokensを追加(送信先の自動失効)
+5. **A-04はkpi_dailyへ組み込まずCLI導出**: 仮説2の判定(semantic≥10%かつlexicalの50%)は週次・Phase 2の一回物的に近く、日次集計基盤へ常設行を持てる利益が小さい。mlr/surveyと同型の純関数+CLI(`python -m latch.obs.segment`)とし、匿名化済み行(answered_date形式)も集計対象に含めた
+6. **C-01の転送は発報の後置(fire-and-forget)**: 既存emitter(構造化ログ)を呼んだ後に非同期でHTTP POSTする。転送の成否が警報の成否に依存しない(04 v0.7)。emitterはsync callable(IF不変)のため実行ループへcreate_taskで投げる
+7. **axe走査はprefers-reduced-motion適用後に行う**: rise等の入場アニメーションがopacity中間値でaxeの色コントラスト計算を汚染する(実測: 04のpv-cardで300件超の偽陽性)。`page.emulateMedia({reducedMotion:"reduce"})`は全アニメを停止する既存CSS(media query)と整合する正規の採取条件
+8. **Q-01(firefox/webkit)は採用外を明記**: 導入可否が環境依存(本実施環境では公式サポート外OSでフォールバックビルドになる)のため。Q-04〜Q-07・O-08/O-09(P3/運用観察)・X-04(実機依存)・O-02(load再計測=実施条件判断を要する)・A-02(オーナー待ち)も本フェーズ対象外のまま
+
+### 12.3 実機・実装で確認された観察(ドキュメント化価値のある発見)
+
+1. **findings#3(ground-truth specのタイムボム)**: fixture共通期限D(7,"05:00")がJST 0:00〜4:59の実行でnow+7日超過の422になる(1日5時間の赤窓)。D(6,"23:59")へ修正。V1-P4時は深夜前の実行だったため潜在していた
+2. **staging E2Eの実行はnpm script経由が必須**: `LATCH_E2E_PROJECTS=staging npx playwright test`だけだとLATCH_E2E_TARGETが未設定になりユーザー払い出しがci API(8000)へ向き・ブラウザだけstaging(18000)を見る(全API 404)。`npm run test:e2e:staging`が正規経路
+3. **headless ChromiumのNotification.permissionは常に"denied"**(permissions.queryはgrantedを返すが同期getterは書き換わらない)。E2Eのgranted系はinitScriptでObject.definePropertyするのが実務解
+4. **axe-coreはアニメーション中間値で偽陽性を出す**(観察7のとおり)。加えて実違反1件を正しく検出した(NearbyToggleのcheckboxがaria-hidden装飾枠内=aria-hidden-focus serious)——静的検査をすり抜けた新規コンポーネントの構造欠陥をaxeが拾った
+5. **契約suiteのケース期待値はサーバ算出値を確認する**: push_token_list_after_registerの期待last4をfixtureトークン(…0002)と書き間違え登録トークンでなくclientスタブの応答値と比較して一度赤化。setupのHTTPチェーンとseedの区別を明確にする修正で解消
+6. **anonymizeのcreated_at丸めはJST日境界のUTC表現になる**(2026-09-20T12:34Z=JST 9/20 21:34→9/19T15:00Z)。期待値の計算をJST暦日付で行いUTC表現へ変換して比較する(asyncpgのdatetimeバインド規律〔matrix §11.3-6〕と同じく日付系はオブジェクト/暦日付で扱う)
+
+### 12.4 CI(O-01)への影響
+
+test-ci増分: **2289→2351(+62)** = unit 24(test_push_service 9+test_worker_anonymize 9+test_alert_forward 6)+integration 13(test_push_token_api 10+test_anonymize_job 3)+契約push_token 10ケース×両harness(参照157/D1 154)。ci E2Eは52→68(+16=push-and-nearby 4+a11y 7+keyboard 3+sessions-beacon 2)。vitest 376→389(+13)。cf-unit 132不変(新規契約はin-process parity側)。alembic head=0012・D1 0008はcf-e2e-serverのmigrationループとworkflowのmigrateステップが自動適用。**workflowの実pushは引き続きユーザー指示待ち**

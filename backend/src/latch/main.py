@@ -39,7 +39,12 @@ from latch.notifications import (
     make_notifications_service,
     notifications_router,
 )
-from latch.obs.lag_alert import QueueLagAlert
+from latch.obs.alert_forward import make_forwarding_emitter
+from latch.obs.lag_alert import (
+    QueueLagAlert,
+    structured_log_alert,
+    structured_log_resolve,
+)
 from latch.obs.middleware import HTTPMetricsMiddleware
 from latch.obs.sessions import obs_sessions_router
 from latch.ratelimit import make_rate_limiter
@@ -53,6 +58,7 @@ from latch.safety import (
 from latch.settings import Settings
 from latch.users.consent import ConsentService, make_consent_service
 from latch.users.errors import UsersError
+from latch.users.push import PushTokenService, make_push_token_service
 from latch.users.routes import users_router
 from latch.users.service import make_user_service
 from latch.users.survey import SurveyService, make_survey_service
@@ -81,6 +87,7 @@ async def _lifespan(app: FastAPI):
     build_consent = not hasattr(app.state, "consent_service")
     build_survey = not hasattr(app.state, "survey_service")
     build_ab = not hasattr(app.state, "ab_service")
+    build_push = not hasattr(app.state, "push_token_service")
     if not (
         build_auth
         or build_users
@@ -94,6 +101,7 @@ async def _lifespan(app: FastAPI):
         or build_consent
         or build_survey
         or build_ab
+        or build_push
     ):
         yield
         return
@@ -143,6 +151,11 @@ async def _lifespan(app: FastAPI):
         app.state.survey_service = make_survey_service(
             clock=app.state.clock, engine=engine
         )
+    if build_push:
+        # プッシュトークン登録(05 v0.9・V-01)。engine束ねのみ(redis不使用)
+        app.state.push_token_service = make_push_token_service(
+            clock=app.state.clock, engine=engine
+        )
     if build_ab:
         # A/B割付の観測API面(05 v0.8・読み取り専用。適用面はworker側が構築)
         from latch.ab.service import make_ab_service
@@ -175,6 +188,13 @@ async def _lifespan(app: FastAPI):
             oldest_threshold=settings.alert_queue_oldest_seconds,
             arm_ttl_s=settings.alert_queue_arm_ttl_sec,
             interval_sec=settings.alert_queue_interval_sec,
+            # C-01(04 v0.7): 構造化ログの後置にWebhook転送(未設定=ログのみ)
+            alert_emitter=make_forwarding_emitter(
+                structured_log_alert,
+                url=settings.alert_webhook_url,
+                timeout_s=settings.alert_webhook_timeout_s,
+            ),
+            resolve_emitter=structured_log_resolve,
         )
         lag_alert_stop = asyncio.Event()
         lag_alert_task = asyncio.create_task(queue_alert.run(stop=lag_alert_stop))
@@ -273,6 +293,7 @@ def create_app(
     safety_service=None,
     consent_service: ConsentService | None = None,
     survey_service: SurveyService | None = None,
+    push_token_service: PushTokenService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="LATCH API", lifespan=_lifespan)
     app.state.settings = settings if settings is not None else Settings()
@@ -285,6 +306,8 @@ def create_app(
         app.state.consent_service = consent_service
     if survey_service is not None:
         app.state.survey_service = survey_service
+    if push_token_service is not None:
+        app.state.push_token_service = push_token_service
     if intent_parse_service is not None:
         app.state.intent_parse_service = intent_parse_service
     if intent_service is not None:

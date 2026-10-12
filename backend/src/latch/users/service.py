@@ -232,6 +232,9 @@ class UserService:
                 await cascade(conn, _coerce_user_id(iid), now)
             await conn.execute(_DELETE_MESSAGES, {"user_id": row.id})
             await conn.execute(_DELETE_NOTIFICATIONS, {"user_id": row.id})
+            # 退会でプッシュトークンも消す(05 v0.9・users行は残置のためFK
+            # CASCADEが働かない=明示削除。送信先の自動失効)
+            await conn.execute(_DELETE_PUSH_TOKENS, {"user_id": row.id})
             await conn.execute(_ANONYMIZE_USER, {"user_id": row.id, "now": now})
         # uowコミット後に失効(引用#13。失効が先でも無害・logoutと同じ順序)
         await self._sessions.revoke_access(jti=claims.jti, exp=claims.exp, now=now)
@@ -280,6 +283,9 @@ _DELETE_MESSAGES = text("""
 """)
 _DELETE_NOTIFICATIONS = text("""
     DELETE FROM notifications WHERE user_id = CAST(:user_id AS uuid)
+""")
+_DELETE_PUSH_TOKENS = text("""
+    DELETE FROM push_tokens WHERE user_id = CAST(:user_id AS uuid)
 """)
 _ANONYMIZE_USER = text("""
     UPDATE users

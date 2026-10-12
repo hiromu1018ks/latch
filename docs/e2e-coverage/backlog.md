@@ -30,7 +30,7 @@
 | P-01 | UI作成Intent→実形成→04画面→回答のフルチェーン | UI実機 | staging S0〜S5がAPI面で実施。UIなし | E-01/E-03いずれかの環境で「2ユーザー意図→debounce待ち→04が届く→YES→成立」数本(debounce 10s+pipeline込みで1本30〜60秒) | **P0**(=旧提案A/F1基礎) | **done(e2e-staging/pipeline-ui.spec.js:22,84 + e2e-cloudflare/cf-smoke.spec.js:42)** — staging=UI預け入れ(01入力→02行編集→預ける)×2→実worker提案(debounce+tick込み実測~15s)→04最小形→YES×2→成立チャット双方向+お知らせ2種。cf実装でも同一チェーン(Queues即時経路~5s)。D-05回答期限式(target-60min)により短時間スロットは+15分期限になる実挙動も観測 |
 | P-02 | グループLATCH(3〜4人)のUI | UI実機 | staging/G3がAPI面で完備(#18)。UI完全空白 — 04の必要人数/残回答表示(partial_accept)・全員YES成立・通報対象ラジオ(N人)が未実機 | group fixture(intent 3つ+latch)で04/05 E2E。SQL直挿入でも即可能(実形成はP-01後) | **P1**(受け入れ#18) | **done(e2e/group.spec.js:12)** — insertGroupLatch(proposed)→Aの04(必要3人=まだ見えない2人)→YES→回答待ち2人(partial_accept)→B YES(1人が回答済み)→A再訪で現況→C YESでallIn「3人全員が参加しました。」→チャットを開く→05ヒーロー3人+メンバー3行(B/C/あなた)→latch=matched・Intent 3件matched化・成立通知3行(D-20同時送信)をDB側証明 (参考: 通報対象ラジオ2人選択はU-01でgroup fixtureにより実機証明済み=safety.spec.js:50) |
 | P-03 | muted Intentの提案受信(通知なし・ホームの候補から回答可能) | UI実機 | staging S2#13・G3がAPI面。UI未実機 | notification_level=mutedなintentでlatch fixture→通知ドット増えない+候補一覧に出る | P2 |
-| P-04 | nearby_also存在通知の受信体験 | **実装欠落+UI実機** | backend/仕様(03 v0.4)にあるがfrontendにUI設定経路なし(HomeScreenはDEFAULT固定・nearby文字不在) | 実装(設定導線)が先。E2Eはnotification fixtureのnearby行(既読G-12の拡張) | P3 |
+| P-04 | nearby_also存在通知の受信体験 | UI実機 | **実装済み(2026-10-12・V1-P5・03 v0.6)** | E2Eはnotification fixtureのnearby行(既読G-12の拡張) | P3 | **done(設計判断=03 v0.6〔D-02の廃止対象=02作成フロー内per-Intent選択UIと読み替え・設定画面のトグル「近い条件の候補があれば知らせる」既定オフ・ONで以後の新規Intent保存時notification_level=nearby_also・端末保存・muted導線なし〕・frontend=NearbyToggle+nearbyPreference.js+Home/ConfirmScreenの保存値結合)** — E2E push-and-nearby.spec.js 2件(トグルON→UI保存のIntentがnearby_alsoをDB証明+nearby_candidate行「近い条件の候補があるようです。」リンクなし受信=G-12拡張)。backlog §11.6境界確認も更新(visibility不変・notification_levelは設定トグル経由のみ) |
 | P-05 | 保留キュー→提示(D-08上限時の翈Bucket回し・期限再計算) | UI実機 | unit/integration/staging S1#8あり。UI体験なし | staging+Clock(E-03)で上限到達→時間経過→トースト/お知らせが出る | P2(FR-47) |
 | P-06 | debounce 10s体感(更新連打→1回だけ候補トースト) | UI実機 | unit/integrationあり。UI×実workerなし | P-01環境で更新を2回→10s後に1回だけ通知 | P2 |
 | P-07 | 更新(PATCH)→reeval再評価の成果がUIへ | UI実機 | staging S1#7・integrationあり | P-01環境内で条件変更→候補変化をUIで観測 | P2 |
@@ -47,7 +47,7 @@
 | A-01 | グラウンドトゥルース精度検証(適合/不適合/境界のintent群→実パイプライン→正しい提案だけ届く両方向assert) | 自動化+UI実機 | staging S1が個別項目単位。**精度/再現の統括的assertは不存在** | 8〜12ユーザー×適合対/不適合対/境界(時間隣接・距離境界・人数・予算・visibility混在)のfixture定義→E-01/E-03で実行→UI側+#/proposalsで行列検証 | **P0** | **done(e2e-staging/ground-truth.spec.js:30)** — 14ユーザー×7対(適合2: summary_only×2=全形提案・visibility混在=最小形提案/不適合5: 時間+5h・距離2.4km>半径和2km・人数min3・予算ペア300<500・カテゴリ不一致)。正例2対は提案到達+proposal形状Assert・負例5対×両者はlatch 0件Assert(正例観測+grace後)・UI側は#/proposals行列(全形=照合表あり/混在=なし/不適合=空状態)。スロットは相互3h以上分離で交差マッチ排除 |
 | A-02 | G2オフライン精度(precision@0.60=0.738・ECE 0.0988・AUC 0.751)の**合格基準確定** | 運用 | g2-jev-acceptance-criteria.md がオーナー承認待ち | 基準確定→make g2-gate を定期再実行(規律化) | **P1** |
 | A-03 | MLR前期比−5pt判定のベースライン記録・自動化 | 自動化 | 実装済み(05 v0.8・2026-10-12 V1-P4) | kpi_dailyの前期差分と閾値判定を追加 | P2 | **done(実装=latch/obs/mlr.py〔weekly集約・4週中央値record_baseline・check=ベースライン比−5pt判定+前週比参考値〕+mlr_baselines表〔alembic 0011/D1 0007〕+CLI `python -m latch.obs.mlr baseline --week|show|check`)** — unit test_mlr.py 6件+integration test_mlr_ci.py 4件(記録→判定ok/below_baseline・ベースラインなし誤判定なし・再ベースライン追記と最新行採用)。判定実施(ベースライン記録そのもの)はPhase 2運用 |
-| A-04 | segment別YES率の集計(仮説2: semantic≥10%かつlexicalの50%) | 自動化 | classify_segment(calibration.py:18)で記録済み・**集計/ダッシュボードなし** | calibration_recordsからsegment×回答の集計クエリ+KPI化 | P2 |
+| A-04 | segment別YES率の集計(仮説2: semantic≥10%かつlexicalの50%) | 自動化 | **実装済み(2026-10-12・V1-P5)** | 判定実施はPhase 2以降の運用 | P2 | **done(実装=latch/obs/segment.py〔weekly_segment_yes純関数=prediction.segment×actual_responsesの週集計・匿名化済み行のanswered_date形式も受理・hypothesis2_verdict=semantic≥10%かつlexicalの50%のAND〕+CLI `python -m latch.obs.segment [--week]`)** — unit test_obs_segment 6件(日付境界JST・週外除外・両形式・no_data)。kpi_dailyへの常設組み込みはしない設計判断(仮説2判定は週次・mlr/surveyと同型のCLI導出=根拠はmatrix §12)。判定実施はPhase 2運用 |
 | A-05 | A/B基盤(D-01閾値0.60/0.50・D-08通知上限。割付・ペア適用・停止ルール) | 実装+UI実機 | 実装済み(05 v0.8・2026-10-12 V1-P4) | 基盤実装が先(09 §5)。E2Eは割付の再現性試験 | P2(実装後) | **done(仕様=05 v0.8〔割付表ab_experiments/ab_assignments+実装規定8件〕・参照=latch/ab/{rules,service}.py+alembic 0011+latch_engine/group_engine適用点3経路+D-08上限2経路+GET /v1/users/me/ab+CLI latch/obs/ab.py・Cloudflare=migrations/0007_ab_mlr.sql+svc_ab.py+pipeline.py適用+state.py配線〔実D1適用済み〕)** — 契約ab 4ケース両側緑・integration test_ab_api.py 9件(閾値反転/混在=対照/停止=全群対照/D-08処置値1で保留)+cf-unit test_ab_pipeline.py 3件+E2E ab.spec.js 2件(実worker経由の割付発生と安定性・観測APIは割付を作らない)。開始/停止判断は運用=人間領域 |
 | A-06 | 体感アンケート(仮説1/5: オンボ直後+4週後・5段階) | 実装+UI実機 | 実装済み(05 v0.7・2026-10-12 V1-P3) | 実装→E2Eで完結 | P3 | **done(仕様=05 v0.7・backend=latch/users/survey.py+users/routes.py+alembic 0010+obs/survey.py集計CLI・Cloudflare=migrations/0006_survey.sql+svc_users.py・UI=SurveyCard.jsx〔03待機中の受動カード〕+texts.js)** — 契約試験survey 10ケース(参照+D1両側緑)・integration test_survey_api.py 12件・unit 21件・E2E e2e/survey.spec.js:19,52,66(onboarding往復=active化後1問→送信→済み→再訪で出ないをDB証明/未配信=Intentなし+draftのみユーザーに非表示/week4=初回回答29日前SQL過去化→3問→answers+free_commentをDB証明)。集計は`cd backend && uv run python -m latch.obs.survey`(ラウンド別n・convenience平均・継続意向分布・仮説1/5判定フラグ) |
 | A-07 | 1成立あたりAIコスト(通貨)KPI | 自動化 | METRIC_KEYSに不在(jev_usage_tokens_totalはある) | 換算レート挟んだ集計追加 | P2 |
@@ -100,8 +100,8 @@
 
 | ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 |
 |---|---|---|---|---|---|
-| V-01 | FCM実送信とOS通知経路(ロック画面・通知履歴)の実端末表示 | 実機+**実装欠落**(frontendにWeb Push/FCM登録コードなし) | backendはドライラン記録のみ | 実装(プッシュ登録)→実機端末試験。E2Eでは原理的に不可と明記 | P2(実装後) |
-| V-02 | D-13第二段の月次匿名化バッチ | **実装欠落** | deletion.py:49にコメントのみ。仕様(08 §3.4)未実装 | 実装が先。10 §4相当試験も不可能状態 | P2(実装後) |
+| V-01 | FCM実送信とOS通知経路(ロック画面・通知履歴)の実端末表示 | 実機 | **登録経路は実装済み(2026-10-12・V1-P5)**。実端末表示=実FCM送信はws-9(資材待ち=人間領域) | 実機端末試験はws-9(資材待ち)。実送信のE2Eは原理的に不可と明記 | P2(ws-9) | **done(登録経路=05 v0.9〔push_tokens表+POST/GET/DELETE /v1/users/me/push-token〕・backend=latch/users/push.py+alembic 0012+users/service退会時トークン削除・Cloudflare=migrations/0008_push_tokens.sql〔**実D1適用済み**〕+svc_users.py+state.py・frontend=latch-push-sw.js+pushRegistration.js+PushRegistrationCard〔stub-プレフィックス疑似トークンで登録往復=資材待ちと分離〕)** — 契約push_token 10ケース両側緑・integration test_push_token_api 10件(upsert所有権移動・last4マスク・退会CASCADE)・E2E push-and-nearby.spec.js 2件(登録往復DB証明・許可拒否時アプリ内通知到達D-18)。実FCM送信はws-9(人間領域) |
+| V-02 | D-13第二段の月次匿名化バッチ | **実装済み(2026-10-12・V1-P5)** | latch/worker/anonymize.py(AnonymizeJob=RetentionJob同型の月初0時発火) | 10 §4相当試験も実施済み | P2 | **done(実装=latch/worker/anonymize.py〔08 §3.4の3変換=時刻系JST日丸め/proposal_snapshot粒度低下=時間帯ビン昼夕夜+市区町村+人数ビン+category_secondary・対象日時除去/actual_responses=value+answered_dateのみ〕+worker/main.py配線)** — unit test_worker_anonymize 9件(純関数+月初判定・注入sleepで決定的)+integration test_anonymize_job 3件(第一段済み行のみ変換・未実施/済み行スキップ・冪等再実行0件・created_at JST日丸め)。暦月境界はFakeClock月初直撃+SQL値固定で表現(V1-P4知見適用) |
 | V-03 | 通報理由の被通報者非開示(実機再確認) | UI実機 | API面(integration)で非開示担保 | U-01の延長で相手画面に何も出ないassert | P2 |
 | V-04 | 同意文面と08 D-14要件の突合(送信先名称・学習禁止・再確認導線) | 運用 | E2E consent.specは挙動のみ。文言突合は明示手順なし | 文言レビュー記録化 | P3 |
 
@@ -109,7 +109,7 @@
 
 | ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 |
 |---|---|---|---|---|---|
-| C-01 | D-16 alertの宛先・エスカレーション | 運用(実装欠落) | 構造化ログのみ(04:148で運用設計に委ねる) | 宛先実装(メール等) | P2 |
+| C-01 | D-16 alertの宛先・エスカレーション | 運用 | **転送器は実装済み(2026-10-12・V1-P5・04 v0.7)**。宛先URLの調達と重大度別エスカレーションは運用=人間領域 | 宛先URLをenvへ設定(運用) | P2 | **done(開発側整備分=latch/obs/alert_forward.py〔make_forwarding_emitter=構造化ログの後置にWebhook HTTP POST・未設定=ログのみ=従来挙動・転送失敗はWARNINGで発報を壊さない〕+3系統へ配線〔cost guard D-16・QueueLagAlert・KpiAlertJob〕+settings alert_webhook_url/timeout_s)** — unit test_alert_forward 6件(stdlib asyncioサーバで受信証明・non-2xx/接続失敗はfalseで例外なし・URL空はbase素通り)。重大度別エスカレーションは引き続き運用設計 |
 | C-02 | 実TypeSafe/Anthropic障害時のbreaker実証 | 実機 | unit/integrationの注入のみ | 実APIでは再現困難→jev-smoke系で限定 | P3 |
 | C-03 | 認証系レート制限(provider+subject 60/分)の実発火 | UI実機 | integration test_ratelimit_api(429)あり | U-13と同時にauth/tokenバースト | P3 |
 
@@ -127,8 +127,8 @@
 | ID | 項目 | 性質 | 現状 | 検証方針案 | 優先 |
 |---|---|---|---|---|---|
 | Q-01 | firefox/webkitクロスブラウザ | UI実機 | chromiumのみ | `npx playwright install firefox webkit`+projects追加 | P2 |
-| Q-02 | キーボードのみ操作(dialogのEsc・Tab順・focus管理) | UI実機 | a11y静的検査はvitest(latch-shell) | 実キー操作E2E | P2 |
-| Q-03 | axe-core自動a11y検査(全画面) | 自動化 | なし | @axe-core/playwright導入・違反ゼロpin | P2 |
+| Q-02 | キーボードのみ操作(dialogのEsc・Tab順・focus管理) | UI実機 | **実施済み(2026-10-12・V1-P5)** | 実キー操作E2E | P2 | **done(e2e/keyboard.spec.js 3件)** — 03取り下げdialog(Tab到達→Enter→dialog内focus trap12 Tab→Escで閉じopener復帰・Intentは残る)・05通報dialog(通報する→理由ラジオへTab→矢印で1選択→Esc)・お知らせpopover(Tab+Enter→Esc+focus復帰)。dialogは<dialog>.showModalのネイティブ挙動に依存する設計の実証 |
+| Q-03 | axe-core自動a11y検査(全画面) | 自動化 | **実施済み(2026-10-12・V1-P5)** | @axe-core/playwright導入・違反ゼロpin | P2 | **done(@axe-core/playwright導入+e2e/a11y.spec.js 7件=未認証01/認証済み01/02/03/04全形/05成立/一覧2種+設定+同意/お知らせpopover開状態。WCAG2.xAA tagsで違反ゼロpin)** — 走査はprefers-reduced-motion適用後(rise等の入場アニメ中間opacityで誤検出するため)。実違反1件を検出し修正=NearbyToggleのcheckboxがaria-hidden装飾枠内にあった(aria-hidden-focus serious→入力を枠外へ出す構成に修正)。04のpv-card色コントラスト指摘はアニメーション中間値由来の誤検出と確認(静的値はt3=5.2:1基準超え) |
 | Q-04 | 視覚リグレッション(夜と翡翠デザインの漂移) | 自動化 | なし(手動390pxキャプチャのみ) | toHaveScreenshot(閾値運用) | P3 |
 | Q-05 | FCP/LCP等UI体感の計測ハーネス | 自動化 | なし | lighthouse-ci or Playwright trace中心の簡易計測 | P3 |
 | Q-06 | モバイル幅群(390/720境界・横画面)・タッチ操作 | UI実機 | misc.spec 390pxのみ | viewport行列化 | P3 |
@@ -144,7 +144,7 @@
 | O-04 | ws8が発見したロールバック手順書の不備修正(build サービス名・nginx 502→restart・文言) | 運用 | walkthroughのfindings止まり | docs/plans/M4/ws-8-rollback.md更新+再演習 | P2 |
 | O-05 | 重大事故時の即時停止判断フロー演習 | 運用 | なし | ドライラン手順化 | P3 |
 | O-06 | D-02警報線(YES率<10%・通知オフ率週比2倍)の自動検知 | 自動化 | 実装済み(05 v0.8・2026-10-12 V1-P4) | 閾値監視+通知 | P2(実装後) | **done(実装=latch/obs/kpi_alert.py〔KpiAlertJob・workerでKpiJobと同tick・完了週のyes率<10%・mute_rate/report_rate週比2倍を検知し構造化ログWARNING発報・(週,kind)毎Redisアームキー単発化〕+kpi.pyへreport_rate週次〔09 v0.7 §2.2通報率〕・媒体はlag_alert/D-16と同じ構造化ログ=04 §5先例)** — unit test_kpi_alert.py 8件+integration test_kpi_alert_ci.py 6件(発報1回+単発化・min_den抑止・前週0は急増外・無データ無発報)。発報を見た見直し起動はPhase 2運用。CF側jobはT10(observability)で移植〔表はD1 0007で作成済み〕 |
-| O-07 | E2E実行がsessions計測/KPIに乗ることの確認 | UI実機 | obs sessions APIは実装済み | E2E中にPOST /v1/sessions発火をnetwork観測 | P3 |
+| O-07 | E2E実行がsessions計測/KPIに乗ることの確認 | UI実機 | **実装済み(2026-10-12・V1-P5)** | E2E中にPOST /v1/sessions発火をnetwork観測 | P3 | **done(frontend=api/sessionsBeacon.js〔起動時とトークン接続直後の2契機・fire-and-forget〕+App.jsx配線)** — E2E sessions-beacon.spec.js 2件(認証済み起動でnetwork観測+sessions表DB証明・未認証起動では発火しない) |
 | O-08 | 録画ギャラリーの長期運用(容量・保持3件の確認) | 運用 | 導入済(9fdf48e) | 運用観察 | P3 |
 | O-09 | cleanup残存データ(e2eユーザー/latch)の蓄積監視 | 運用 | ベストエフォート(catch付き) | 定期的な件数確認かプレフィックス掃除タスク | P3 |
 
@@ -155,7 +155,7 @@
 3. 所属情報の収集・所属Hard Filter — 登録フィールド3つのみ・hardfilter系統に所属なし
 4. ユーザーのミュート・スパム/不適合検知 — 実装なし(notification_level=mutedはIntent単位の別物・混同注意)
 5. 自前パスワード認証 — TokenPanelは開発導線(本番IdP代替)
-6. visibility/notification_levelの**UI切替導線**(D-02廃止) — UIは常にhidden_until_match/proposals_onlyで確定送信。**E2E fixtureがsummary_only形を使うのは「API側で設定された提案の表示検証」として正当**(02:122がAPI直叩きと明記)・逆にUIから切替操作を書かない
+6. visibility/notification_levelの**UI切替導線**(D-02廃止) — visibilityは常にhidden_until_matchで確定送信。**notification_levelのみ03 v0.6で設定画面のnearbyトグル経由を解禁**(既定オフ=proposals_only・ON=nearby_also・02作成フロー内の選択UIとmutedはUI経路なしのまま)。**E2E fixtureがsummary_only形を使うのは「API側で設定された提案の表示検証」として正当**(02:122がAPI直叩きと明記)・逆に02作成フローでの切替操作を書かない
 7. 「辞退する(no)」UI導線(D-05廃止) — 回答2択はyes/deferのみ。noはAPI直叩き(s2_item14実施済み)
 8. 廃止UI要素(下書き確認モーダル・「Intent N件」popover)の不存在
 9. 公開範囲違反での不成立経路 — Layer 1にvisibility判定なし(D-03再決定)。**visibilityがHard Filterで除外される試験を書かない**
@@ -163,7 +163,7 @@
 ## 12. 集計と推奨着手順
 
 - 総項目数: **88**(S:4 / E:4 / P:12 / A:11 / T:7 / U:23 / V:4 / C:3 / X:4 / Q:7 / O:9)
-- 性質別(主分類): UI実機 約40 / 自動化ハーネス要 約10 / 実機(実端末・実LLM・実障害) 約8 / **実装欠落(検証以前に機能なし)** 4(V-01/V-02/P-04/C-01/X-04の一部。**A-06は2026-10-12 V1-P3・A-05/O-06/A-03は2026-10-12 V1-P4で実装+検証済み**)/ 要再実施・運用規律 約10
+- 性質別(主分類): UI実機 約40 / 自動化ハーネス要 約10 / 実機(実端末・実LLM・実障害) 約8 / **実装欠落(検証以前に機能なし)はX-04の一部のみ(実機依存)**(V-01/V-02/P-04/C-01は2026-10-12 V1-P5・A-06はV1-P3・A-05/O-06/A-03はV1-P4で実装+検証済み)/ 要再実施・運用規律 約10
 - 優先度別: **P0: 4**(P-01実パイプライン×UI・A-01グラウンドトゥルース精度・U-01通報dialog・U-06 hidden_until_match最小形)/ **P1: 16**(E-01・E-03・P-02・P-08・A-02・T-01・T-02・U-02・U-04・U-05・U-07・U-08・U-09・U-19・O-01・O-02)/ P2: 約35 / P3: 約33
 - **推奨着手順**: ①環境基盤(E-01+E-03 → S-2/S-3解消) → ②P0群(P-01・A-01・U-01・U-06 → S-1解消・受け入れの最大穴) → ③P1のUI群(U-05/08/09/19+T-01/02) → ④O-01 CI載せ(以降の継続性) → ⑤残りP2 → ⑥実装欠落群(A-05/A-06/V-01/V-02/O-06/P-04)は製品判断を経て実装後に検証
 - **[2026-10-12] ①+②実施済み**: E-01/E-03(環境基盤)+P0全4項目(P-01・A-01・U-01・U-06)がdone。S-1/S-2解消・S-3はstub条件下で解消(実LLM残る)。
@@ -171,3 +171,4 @@
 - **[2026-10-12 V1-P2] ④+残りP1 UI群実施済み**: ④O-01(CI workflow作成・**実pushは承認待ち**)+P1 UI群4項目(U-02・U-04・U-07・P-02)がdone。稼働実績: ci 47 / staging 5 / cloudflare 2 = **54テスト緑**(vitest 368)。**残るP1は16中2(A-02=オーナー承認待ち・O-02=load環境実施)** — P1の開発側実装は出揃い。発見=①同一Intent対へのopen状態latch二重挿入はuq_latches_intent_ids_open(M2 0004)で禁止→2値比較は同一条件の別ペアで実施 ②make lint既存drift 2件(test_llm_real*.py=V1-P1 A-2残)を回収 ③CI順序の欠陥2件(test_expiry_batches計数assertのDB残存感度→E2Eを先に走らせない・geofeatures空だと契約/intent系が422大量失敗→投入はtest-ci前後2回)をローカルドライランで発見し順序確定(以上=matrix §9.2)
 - **[2026-10-12 V1-P3] A-06体感アンケート実装+検証済み(13§3表2のPhase 1開始前要件を開発側で充足)**: 仕様=05 v0.7(表survey_responses・GET/POST /v1/users/me/survey・配信契機=アクセス時判定/通知typeなし・集計CLI)→参照(alembic 0010)+Cloudflare(migrations 0006)両実装・契約survey 10ケース両側緑・E2E e2e/survey.spec.js 3件(onboarding往復・未配信・week4のSQL過去化駆動)。稼働実績: **ci 50 / staging 5 / cloudflare 2 = 57テスト緑(2回連続)・vitest 376・backend全套2229(クリーンDB)**。実装欠落群は残り7(A-05/V-01/V-02/O-06/P-04/C-01/X-04の一部)。次はV1-P4(O-06+A-03+A-05=観測・判定・A/B基盤)
 - **[2026-10-12 V1-P4] O-06+A-03+A-05実装+検証済み(観測・判定・A/B基盤)**: 仕様=05 v0.8(ab_experiments/ab_assignments/mlr_baselines+割付と適用の実装規定8件)+09 v0.7(§2.2へ通報率行・§5/§6は不変)→参照(alembic 0011+latch/ab+obs/{ab,mlr,kpi_alert}.py+適用点=latch_engine 3経路/group_engine/D-08 2経路+GET /v1/users/me/ab)+Cloudflare(migrations/0007_ab_mlr.sql+svc_ab.py+pipeline.py適用・**実D1適用済み**)両実装。契約ab 4ケース両側緑・E2E ab.spec.js 2件(実worker経由の割付発生+安定性・観測APIは割付を作らない)。実装欠落群は残り4(V-01/V-02/P-04/C-01/X-04の一部)。次はV1-P5(backlog P2整備)
+- **[2026-10-13 V1-P5] P2整備8項目実装+検証済み(実装欠落群の開発側分を潰す)**: 仕様=05 v0.9(push_tokens+3API)+03 v0.6(nearby設定導線)+04 v0.7(alert転送媒体)→V-01(alembic 0012+D1 0008**実D1適用済み**+SW+登録往復E2E・送信はws-9=人間領域)・V-02(AnonymizeJob=08 §3.4の3変換・月初0時発火)・P-04(設定トグル+nearby_also保存DB証明)・C-01(alert_forward=3系統へWebhook転送・未設定はログのみ)・A-04(obs/segment.py週次集計+仮説2判定・CLI)・O-07(sessionsBeacon+E2E network観測)・Q-02(keyboard 3件)・Q-03(@axe-core/playwright導入・全画面違反ゼロpin・aria-hidden-focus実違反1件修正)。採用外=Q-01(firefox/webkit=環境依存)・Q-04〜Q-07・O-08/O-09・X-04・O-02・A-02。稼働実績: **ci 68 / staging 5 / cloudflare 2 = 75テスト緑(ci・stagingは2回連続)**・vitest 389・backend全套2351(クリーンDB)・cf-unit 132・契約参照157/D1 154。**実装欠落はX-04の一部(実機依存)のみ残り・V1フェーズ計画(V1-P4→V1-P5)完走** → 次はPhase 0(内部α)計画立案(ユーザー協議)

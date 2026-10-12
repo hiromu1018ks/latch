@@ -11,13 +11,16 @@ import { createParseFlow } from "./parseFlow.js";
 import { readSlots } from "./conditions.js";
 import { createSaveFlow } from "./save.js";
 import {
-  DEFAULT_NOTIFICATION_LEVEL,
   DEFAULT_VISIBILITY,
   conditionTags,
   depositedAgoText,
   expiryLine,
   formatCategoryPrimary,
 } from "./format.js";
+import {
+  notificationLevelFor,
+  readNearbyEnabled,
+} from "../latch/nearbyPreference.js";
 import { useChrome } from "../ui/chrome.jsx";
 import { Icon } from "../ui/Icon.jsx";
 import { pairCandidateLatch, splitStatuses, categoryIconName } from "../latch/home.js";
@@ -117,7 +120,7 @@ export const HomeScreen = ({ client, state, getState, setState }) => {
       getState,
       getOptions: () => ({
         visibility: DEFAULT_VISIBILITY, // D-02: 選択UIなし・既定値で確定送信
-        notificationLevel: DEFAULT_NOTIFICATION_LEVEL,
+        notificationLevel: notificationLevelFor(readNearbyEnabled()), // 03 v0.6: 設定トグル経由のみ
         expiresAt: null,
       }),
       onBusy: setDraftBusy,

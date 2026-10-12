@@ -190,3 +190,10 @@ class Settings(BaseSettings):
     # 発報の単発化アームキー(Redis SET NX)のTTL秒。条件成立中の1回発報を
     # 2インスタンス間で担保し・プロセス死亡後の再武装はTTL失効で回復する
     alert_queue_arm_ttl_sec: int = 180
+
+    # --- alert転送(C-01・04 v0.7・V1-P5) ---
+    # alert系3種(D-16 80%・Queue lag・D-02警報線/A/B有害シグナル)のWebhook転送先。
+    # 空(既定)=構造化ログのみ(従来挙動)。宛先URLの調達は運用=人間領域
+    alert_webhook_url: str = ""
+    # 転送HTTP POSTのタイムアウト秒(失敗はWARNINGログ・発報を壊さない)
+    alert_webhook_timeout_s: float = 3.0

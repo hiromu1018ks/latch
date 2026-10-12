@@ -119,6 +119,8 @@ def test_alert_settings_are_exactly_five_fields(monkeypatch):
         "alert_queue_interval_sec",
         "alert_queue_pending",
         "alert_queue_oldest_seconds",
+        "alert_webhook_url",  # C-01(V1-P5・04 v0.7)
+        "alert_webhook_timeout_s",
         "alert_queue_arm_ttl_sec",
     }
 

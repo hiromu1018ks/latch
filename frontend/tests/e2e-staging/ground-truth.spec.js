@@ -38,7 +38,10 @@ test("グラウンドトゥルース: 適合対のみ提案・不適合対には
     const ib = await createGroundTruthIntent(b, optsB);
     return { a, b, ia, ib };
   };
-  const EXPIRES = D(7, "05:00"); // 全fixture共通(D+7 5:00・sweeperに存活させる)
+  // 全fixture共通(D+6 23:59・sweeperに存活させる)。D+7の固定時刻は
+  // JST 0:00〜4:59の実行でnow+7日超過の422になるタイムボム(findings#3)。
+  // D(6,23:59)なら常にdiff<7日で時刻非依存
+  const EXPIRES = D(6, "23:59");
 
   // 不適合対はwhenだけでは足りない差分をoptsBへ
   const fitSummary = await pair("gt-fs", { when: D(2, "06:30"), expiresAt: EXPIRES }, { when: D(2, "06:30"), expiresAt: EXPIRES });

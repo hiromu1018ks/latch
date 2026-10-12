@@ -15,7 +15,11 @@ import { ExtraChips, SlotRows } from "./SlotRows.jsx";
 import { createSaveFlow } from "./save.js";
 import { applyExpiryOptions, fetchExpiryOptions, selectedExpiry } from "./expiry.js";
 import { applyIntentSnapshot } from "./state.js";
-import { DEFAULT_NOTIFICATION_LEVEL, DEFAULT_VISIBILITY } from "./format.js";
+import { DEFAULT_VISIBILITY } from "./format.js";
+import {
+  notificationLevelFor,
+  readNearbyEnabled,
+} from "../latch/nearbyPreference.js";
 import { Icon } from "../ui/Icon.jsx";
 
 export const ConfirmScreen = ({ client, state, getState, setState, intentId }) => {
@@ -147,7 +151,7 @@ export const ConfirmScreen = ({ client, state, getState, setState, intentId }) =
         intentIdRef.current != null && editingStatusRef.current === "draft" ? "active" : null,
       getOptions: () => ({
         visibility: DEFAULT_VISIBILITY, // D-02: 既定値で確定送信
-        notificationLevel: DEFAULT_NOTIFICATION_LEVEL,
+        notificationLevel: notificationLevelFor(readNearbyEnabled()), // 03 v0.6: 設定トグル経由のみ
         expiresAt: selectedExpiry(expirySelectRef.current).expiresAt,
         softExtras: extrasRef.current,
       }),

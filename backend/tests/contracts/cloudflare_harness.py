@@ -453,6 +453,7 @@ class CloudflareHarness:
         await self._d1_batch(
             [
                 # FK参照元から先に消く(journal→commands・ownership→intents/latches)
+                f"DELETE FROM push_tokens WHERE user_id IN {u}",
                 f"DELETE FROM ab_assignments WHERE user_id IN {u}",
                 "DELETE FROM ab_experiments WHERE experiment_key IN"
                 " ('latch_threshold', 'notification_daily_limit',"

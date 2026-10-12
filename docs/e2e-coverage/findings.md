@@ -21,6 +21,14 @@
 - **検証**: 単体(latch-notice.test.jsx「preload後の初回openも必ずGETする…」=起動時0件→起動後に2件届く状態で初回オープンが2行描画・GET2回)とstaging実機(pipeline-ui.spec.js:84の「開き直し3回クリック」workaroundを撤去し初回オープン1回でproposal+成立の2行をassert)で修正を証明。vitest 368・staging E2E 5緑
 - **備考**: hashのみ遷移ではページが再読み込みされない(同一文書遷移)ため、SPAを開き続ける通常使い方で起きていた
 
+### findings#3 — ground-truth specのEXPIRESがJST 0:00〜4:59の実行で+7日超過422(2026-10-13発見・**同日修正済み**)
+
+- **再現手順**: `tests/e2e-staging/ground-truth.spec.js` をJST 0:00〜4:59に実行する。fixtureの共通期限 `EXPIRES = D(7, "05:00")` は「JST実行日+7日の05:00」だが、実行時刻が05:00を回ると now+7日 の上限を最大4時間超える(保存検証の「現在+7日超は422」に抵触)。JST 05:00〜23:59の実行では diff≤7日 で通る
+- **実API検証(2026-10-13 00:08 JST)**: staging E2E実行で `422 VALIDATION_ERROR "expires_at exceeds 7 days"`(ground-truth 1件のみ赤・他4件緑)。V1-P4時(深夜前の実行)は通過していたため潜在していたタイムボム
+- **影響**: テスト資産側の欠陥(製品コードは正しく拒否している)。specが1日のうち5時間赤になる。P2(継続実行の信頼性)
+- **修正(2026-10-13・V1-P5)**: EXPIRESを `D(6, "23:59")` へ変更(常に diff<7日 で時刻非依存。fixtureの開始時刻はD(2)〜D(5)のため期限として十分)
+- **検証**: 修正後にstaging E2E 5件緑(00:2x JST実行=旧仕様の赤窓内での実証)
+
 ## False greens(疑似緑 — partial格下げの根拠)
 
 | ID | テスト | 問題 | 影響cell |

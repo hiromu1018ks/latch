@@ -59,6 +59,9 @@ ACTOR_SPEC: dict[str, dict[str, Any]] = {
     "ab1": {"register": True, "consent": True},  # 割付なし(空配列固定)
     "ab2": {"register": True, "consent": True},  # seed=latch_threshold/treatment
     "ab3": {"register": True, "consent": True},  # seed=notification_daily_limit/control
+    # push(V1-P5・05 v0.9)。トークン登録API用(setupのHTTP POSTで状態を作る)
+    "pu1": {"register": True, "consent": True},  # 登録・一覧の主
+    "pu2": {"register": True, "consent": True},  # 所有権移動の受け手
 }
 
 
@@ -400,6 +403,13 @@ class ReferenceHarness:
     async def cleanup(self) -> None:
         p = {"p": self._prefix + "%"}
         async with self._engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "DELETE FROM push_tokens WHERE user_id IN"
+                    " (SELECT id FROM users WHERE auth_subject LIKE :p)"
+                ),
+                p,
+            )
             await conn.execute(
                 text(
                     "DELETE FROM ab_assignments WHERE user_id IN"

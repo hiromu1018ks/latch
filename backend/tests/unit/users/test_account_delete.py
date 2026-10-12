@@ -138,6 +138,7 @@ async def test_delete_account_cascades_all_intents_and_user_updates():
             FakeResultNone(),
             FakeResultNone(),
             FakeResultNone(),
+            FakeResultNone(),
         ]
     )
     sessions = RecordingSessions()
@@ -150,12 +151,14 @@ async def test_delete_account_cascades_all_intents_and_user_updates():
     assert "DELETE FROM messages" in calls[1][0]
     assert calls[1][1]["user_id"] == USER_ID  # sender_id一致(design §2.3)
     assert "DELETE FROM notifications" in calls[2][0]
-    anonymize = calls[3][0]
+    assert "DELETE FROM push_tokens" in calls[3][0]  # V1-P5退会でトークンも失効
+    assert calls[3][1]["user_id"] == USER_ID
+    anonymize = calls[4][0]
     assert "UPDATE users" in anonymize
     assert "退会したユーザー" in anonymize
     assert "'{}'::jsonb" in anonymize
     assert "'deleted:' || id::text" in anonymize
-    assert calls[3][1] == {"user_id": USER_ID, "now": NOW}
+    assert calls[4][1] == {"user_id": USER_ID, "now": NOW}
 
 
 async def test_delete_account_revokes_sessions_after_tx_exit():
@@ -197,7 +200,13 @@ async def test_delete_account_with_no_intents_is_idempotent_shape():
     """Intent 0件でもユーザー単位処理は走る(冪等再実行の形状)。"""
     cascades: list = []
     uow = ScriptedUow(
-        [RowsResult([]), FakeResultNone(), FakeResultNone(), FakeResultNone()]
+        [
+            RowsResult([]),
+            FakeResultNone(),
+            FakeResultNone(),
+            FakeResultNone(),
+            FakeResultNone(),
+        ]
     )
     svc = _svc(
         uow=uow,
@@ -206,7 +215,7 @@ async def test_delete_account_with_no_intents_is_idempotent_shape():
     )
     await svc.delete_account(claims=CLAIMS)  # 例外なし
     assert cascades == []
-    assert len(uow.conn.calls) == 4  # SELECT+messages+notifications+users
+    assert len(uow.conn.calls) == 5  # SELECT+messages+notifications+push_tokens+users
 
 
 async def test_delete_account_without_uow_or_sessions_503():

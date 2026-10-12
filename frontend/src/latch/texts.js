@@ -218,6 +218,18 @@ export const PERMISSION_UNSUPPORTED_TEXT = "この環境では通知を利用で
 export const PERMISSION_NOTE_TEXT = "許可しなくても、アプリ内のお知らせで確認できます。";
 export const PERMISSION_REQUEST_LABEL = "通知の許可を求める";
 
+// プッシュ登録(05 v0.9・V-01)。{last4}はpushRegistrationのtokenLast4。
+export const PUSH_REGISTERED_TEXT = "この端末で通知を受け取ります";
+export const PUSH_NO_PERMISSION_TEXT =
+  "通知の許可がないため、プッシュ通知の登録はありません。お知らせはアプリ内で届きます。";
+export const PUSH_UNAVAILABLE_TEXT = "この環境ではプッシュ通知を利用できません。";
+export const PUSH_ERROR_TEXT = "プッシュ通知の登録に失敗しました。";
+
+// nearby設定(03 v0.6・設定画面のトグル)
+export const NEARBY_SETTING_LABEL = "近い条件の候補があれば知らせる";
+export const NEARBY_SETTING_NOTE =
+  "閾値に達しなかった近い条件の候補がいるとき、その存在だけをお知らせに追加します。内容や相手は表示されません。";
+
 // ブロック管理・登録(design §2.6〜§2.7)
 export const BLOCKS_EMPTY_TEXT = "ブロックしているユーザーはいません";
 export const BLOCK_UNBLOCK_LABEL = "解除する";

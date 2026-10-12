@@ -9,6 +9,7 @@
 // 意図文言をログに出さない(01 §21)。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "./api/client.js";
+import { reportSessionStart } from "./api/sessionsBeacon.js";
 import { createAppState } from "./appState.js";
 import { parseHash } from "./router.js";
 import { createFormState } from "./intent/state.js";
@@ -156,6 +157,13 @@ const AppBody = ({
     ensureConsentGuidance(client).catch(() => {});
   }, [session, client]);
 
+  // セッション開始ビーコン(O-07・04 §2): 起動時に1回だけ(失敗は握る)。
+  // トークンパネル接続直後の契機はonConnected側で送る(1マウント1回の担保)
+  useEffect(() => {
+    if (!session.hasTokens()) return;
+    reportSessionStart({ client });
+  }, [session, client]);
+
   return (
     <>
       <a className="skip" href="#main">本文へスキップ</a>
@@ -167,6 +175,7 @@ const AppBody = ({
         visible={tokenPanelVisible}
         onHide={hideTokenPanel}
         onConnected={() => {
+          reportSessionStart({ client }); // セッション開始(O-07・接続=新セッション)
           ensureConsentGuidance(client).catch(() => {}); // 接続後の未同意誘導(a)
         }}
       />

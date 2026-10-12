@@ -283,3 +283,85 @@ async def get_my_ab_assignments(
             for v in views
         ]
     )
+
+
+# -- プッシュ通知トークン登録(05 v0.9・08 §2.6) -----------------------------
+
+
+def get_push_token_service(request: Request):
+    """app.state.push_token_service へのアクセス(lifespanまたはテスト注入)。"""
+    return request.app.state.push_token_service
+
+
+class PushTokenRegisterRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)  # 05 v0.9の422条件
+    platform: Literal["web"] = "web"  # MVPはwebのみ
+
+
+class PushTokenDeleteRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)
+
+
+class PushTokenBody(BaseModel):
+    token_last4: str
+    platform: str
+    registered_at: datetime
+
+
+class PushTokenRegisteredResponse(BaseModel):
+    push_token: PushTokenBody
+
+
+class PushTokenListResponse(BaseModel):
+    tokens: list[PushTokenBody]
+
+
+@users_router.post(
+    "/me/push-token", status_code=201, response_model=PushTokenRegisteredResponse
+)
+async def register_push_token(
+    body: PushTokenRegisterRequest,
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[object, Depends(get_push_token_service)],
+) -> PushTokenRegisteredResponse:
+    """トークン登録(upsert・所有権移動)。ログはイベント名のみ(トークン値不許可)。"""
+    view = await svc.register(claims=claims, token=body.token, platform=body.platform)
+    logger.info("users.push_token_register ok")
+    return PushTokenRegisteredResponse(
+        push_token=PushTokenBody(
+            token_last4=view.token_last4,
+            platform=view.platform,
+            registered_at=view.registered_at,
+        )
+    )
+
+
+@users_router.get("/me/push-token", response_model=PushTokenListResponse)
+async def list_push_tokens(
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[object, Depends(get_push_token_service)],
+) -> PushTokenListResponse:
+    """登録済みトークン一覧(token_last4マスク付き・0件可)。"""
+    views = await svc.list(claims=claims)
+    logger.info("users.push_token_list ok n=%d", len(views))
+    return PushTokenListResponse(
+        tokens=[
+            PushTokenBody(
+                token_last4=v.token_last4,
+                platform=v.platform,
+                registered_at=v.registered_at,
+            )
+            for v in views
+        ]
+    )
+
+
+@users_router.delete("/me/push-token", status_code=204)
+async def delete_push_token(
+    body: PushTokenDeleteRequest,
+    claims: Annotated[AccessTokenClaims, Depends(require_authenticated)],
+    svc: Annotated[object, Depends(get_push_token_service)],
+) -> None:
+    """登録解除(許可取り下げ・ログアウト時のクリーンアップ経路)。"""
+    await svc.remove(claims=claims, token=body.token)
+    logger.info("users.push_token_delete ok")

@@ -160,9 +160,11 @@ LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
   secrets(2026-10-12〜): LATCH_LLM_MODE=real・LATCH_ANTHROPIC_API_KEY・
   LATCH_GEMINI_API_KEY・LATCH_TYPESAFE_API_KEY(鍵値は.env由来・repo外)
 - D1: latch-core(id: f40367ac-7631-4506-a083-c52e7ab51787)
-  マイグレーション0001〜0007適用済み(0005・0006は2026-10-12に実D1へ適用。
+  マイグレーション0001〜0008適用済み(0005・0006は2026-10-12に実D1へ適用。
   0006_survey.sql=V1-P3体感アンケートのsurvey_responses表。0007_ab_mlr.sql=
-  V1-P4 A/B基盤のab_experiments/ab_assignments+mlr_baselines 3表・2026-10-12適用)+
+  V1-P4 A/B基盤のab_experiments/ab_assignments+mlr_baselines 3表・2026-10-12適用。
+  0008_push_tokens.sql=V1-P5プッシュトークン登録のpush_tokens表〔05 v0.9〕・
+  2026-10-13適用・push_tokens表の実在確認済み)+
   geofeatures 7行+probe_events表
   (cron稼働証跡として継続記録)
 - Queues: latch-jobs-probe(producer=env.JOBS・consumer=パイプライン評価)

@@ -2155,6 +2155,177 @@ CASES: list[ContractCase] = [
         E(401),
         source_test="test_ab_api.test_ab_status_requires_auth",
     ),
+    # ================= push_token(プッシュトークン登録・05 v0.9) =================
+    C(
+        "push_token_list_empty",
+        "push_token",
+        "登録がないユーザーは空配列",
+        R("GET", "/v1/users/me/push-token", actor="pu1"),
+        E(200, json_equals={"tokens": []}),
+        source_test="test_push_token_api.test_register_roundtrip_masked_response",
+    ),
+    C(
+        "push_token_register_masked",
+        "push_token",
+        "登録は201・token_last4/platform/registered_atのみ(トークン全文なし)",
+        R(
+            "POST",
+            "/v1/users/me/push-token",
+            json={"token": "stub-contract-token-0001", "platform": "web"},
+            actor="pu1",
+        ),
+        E(
+            201,
+            json_equals={
+                "push_token.token_last4": "0001",
+                "push_token.platform": "web",
+            },
+            json_contains=("push_token.registered_at",),
+        ),
+        effects="push_tokens行1件(token全文は応答に出ない)",
+        source_test="test_push_token_api.test_register_roundtrip_masked_response",
+    ),
+    C(
+        "push_token_list_after_register",
+        "push_token",
+        "登録後の一覧はlast4マスク付き1件",
+        R("GET", "/v1/users/me/push-token", actor="pu1"),
+        E(
+            200,
+            json_equals={"tokens.0.token_last4": "0002", "tokens.0.platform": "web"},
+            json_contains=("tokens.0.registered_at",),
+        ),
+        setup=(
+            (
+                "register",
+                R(
+                    "POST",
+                    "/v1/users/me/push-token",
+                    json={"token": "stub-contract-token-0002", "platform": "web"},
+                    actor="pu1",
+                ),
+                E(201),
+            ),
+        ),
+        effects="push_tokens行1件",
+        source_test="test_push_token_api.test_register_roundtrip_masked_response",
+    ),
+    C(
+        "push_token_re_register_moves_ownership",
+        "push_token",
+        "同一トークンの別ユーザー再登録は所有権移動として201(409にしない)",
+        R(
+            "POST",
+            "/v1/users/me/push-token",
+            json={"token": "stub-contract-token-0003", "platform": "web"},
+            actor="pu2",
+        ),
+        E(201, json_equals={"push_token.token_last4": "0003"}),
+        setup=(
+            (
+                "first_owner",
+                R(
+                    "POST",
+                    "/v1/users/me/push-token",
+                    json={"token": "stub-contract-token-0003", "platform": "web"},
+                    actor="pu1",
+                ),
+                E(201),
+            ),
+        ),
+        effects="push_tokens行1件(user_id=pu2)",
+        source_test="test_push_token_api.test_register_same_token_moves_ownership",
+    ),
+    C(
+        "push_token_delete_roundtrip",
+        "push_token",
+        "登録→解除は204・再解除は404",
+        R(
+            "DELETE",
+            "/v1/users/me/push-token",
+            json={"token": "stub-contract-token-0004"},
+            actor="pu1",
+        ),
+        E(204),
+        setup=(
+            (
+                "register",
+                R(
+                    "POST",
+                    "/v1/users/me/push-token",
+                    json={"token": "stub-contract-token-0004", "platform": "web"},
+                    actor="pu1",
+                ),
+                E(201),
+            ),
+        ),
+        effects="push_tokens行0件",
+        source_test="test_push_token_api.test_delete_roundtrip",
+    ),
+    C(
+        "push_token_delete_unknown_404",
+        "push_token",
+        "未登録トークンの解除は404 NOT_FOUND",
+        R(
+            "DELETE",
+            "/v1/users/me/push-token",
+            json={"token": "stub-contract-unknown"},
+            actor="pu1",
+        ),
+        E(404, error_code="NOT_FOUND"),
+        source_test="test_push_token_api.test_delete_roundtrip",
+    ),
+    C(
+        "push_token_register_empty_422",
+        "push_token",
+        "空トークンは422 VALIDATION_ERROR",
+        R(
+            "POST",
+            "/v1/users/me/push-token",
+            json={"token": "", "platform": "web"},
+            actor="pu1",
+        ),
+        E(422, error_code="VALIDATION_ERROR"),
+        source_test="test_push_token_api.test_register_validation_422",
+    ),
+    C(
+        "push_token_register_bad_platform_422",
+        "push_token",
+        "platform=iosは422(MVPはwebのみ)",
+        R(
+            "POST",
+            "/v1/users/me/push-token",
+            json={"token": "stub-t", "platform": "ios"},
+            actor="pu1",
+        ),
+        E(422, error_code="VALIDATION_ERROR"),
+        source_test="test_push_token_api.test_register_validation_422",
+    ),
+    C(
+        "push_token_register_unauthorized",
+        "push_token",
+        "認証欠落は401",
+        R(
+            "POST",
+            "/v1/users/me/push-token",
+            json={"token": "stub-t", "platform": "web"},
+        ),
+        E(401),
+        source_test="test_push_token_api.test_register_requires_auth",
+    ),
+    C(
+        "push_token_register_unregistered_user_404",
+        "push_token",
+        "未登録JWT(users行なし)は404 NOT_FOUND",
+        R(
+            "POST",
+            "/v1/users/me/push-token",
+            json={"token": "stub-t", "platform": "web"},
+            actor="ghost",
+        ),
+        E(404, error_code="NOT_FOUND"),
+        source_test="test_push_token_api.test_register_unregistered_user_404",
+    ),
 ]
 
 # -- 将来回帰ケース(T0: SQL fakeでは見逃す系統。バグを正解fixtureにしない) --------

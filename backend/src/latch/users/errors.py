@@ -68,3 +68,10 @@ class SurveyNotDueError(UsersError):
 
     http_status = 409
     code = "SURVEY_NOT_DUE"
+
+
+class PushTokenNotFoundError(UsersError):
+    """登録解除対象のトークンがない(05 v0.9・自分の登録でない場合を含む)。"""
+
+    http_status = 404
+    code = "NOT_FOUND"

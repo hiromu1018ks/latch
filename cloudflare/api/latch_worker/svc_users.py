@@ -20,7 +20,8 @@ from latch.adapters.d1.atomic import D1AtomicRepository
 from latch.auth.tokens import AccessTokenClaims
 from latch.domain.time import from_micros, micros
 from latch.users.consent import ConsentService
-from latch.users.errors import UserExistsError
+from latch.users.errors import UserExistsError, UserNotFoundError
+from latch.users.push import PushTokenService, PushTokenView
 from latch.users.service import NewUser, UserRow, UserService
 from latch.users.survey import SurveyService
 
@@ -115,7 +116,8 @@ class D1UsersFacade(UserService):
                 raise UserNotFoundError("user not found")
             now = self._clock.now()
             user_id = str(row.id)
-            # messages/notifications削除(参照実装の単位。blocks/reportsは保持)
+            # messages/notifications/push_tokens削除(参照実装の単位。
+            # blocks/reportsは保持・users行は残置のためpush_tokensは明示削除)
             await self._d1.batch(
                 [
                     self._d1.prepare(
@@ -123,6 +125,9 @@ class D1UsersFacade(UserService):
                     ).bind(user_id),
                     self._d1.prepare(
                         "DELETE FROM notifications WHERE user_id = ?"
+                    ).bind(user_id),
+                    self._d1.prepare(
+                        "DELETE FROM push_tokens WHERE user_id = ?"
                     ).bind(user_id),
                 ]
             )
@@ -288,4 +293,101 @@ def build_survey_service(db, clock) -> SurveyService:
         has_activated_intent=has_activated_intent,
         exists_user=exists_user,
         insert_answer=insert_answer,
+    )
+
+
+def build_push_token_service(db, clock) -> PushTokenService:
+    """PushTokenService本体へD1関数を注入(05 v0.9・V-01)。
+
+    upsert=所有権移動の規則は本体PushTokenServiceが持つIF契約どおり
+    (ON CONFLICT(token) DO UPDATE)。時刻はmicros整数。
+    """
+
+    async def exists_user(claims: AccessTokenClaims) -> bool:
+        row = (
+            await db.prepare(
+                "SELECT 1 AS x FROM users"
+                " WHERE auth_provider = ? AND auth_subject = ?"
+            )
+            .bind(claims.auth_provider, claims.auth_subject)
+            .first()
+        )
+        return row is not None
+
+    async def upsert(claims, token, platform, now):
+        import uuid as uuid_mod
+
+        row = (
+            await db.prepare(
+                "INSERT INTO push_tokens"
+                " (id, user_id, token, platform, created_at, updated_at, last_seen_at)"
+                " SELECT ?, u.id, ?, ?, ?, ?, ?"
+                "  FROM users u"
+                " WHERE u.auth_provider = ? AND u.auth_subject = ?"
+                " ON CONFLICT (token) DO UPDATE"
+                "  SET user_id = excluded.user_id, platform = excluded.platform,"
+                "      updated_at = excluded.updated_at,"
+                "      last_seen_at = excluded.last_seen_at"
+                " RETURNING substr(token, -4) AS last4, platform, last_seen_at"
+            )
+            .bind(
+                str(uuid_mod.uuid4()),
+                token,
+                platform,
+                micros(now),
+                micros(now),
+                micros(now),
+                claims.auth_provider,
+                claims.auth_subject,
+            )
+            .first()
+        )
+        if row is None:
+            raise UserNotFoundError("user not found")
+        return PushTokenView(
+            token_last4=row["last4"],
+            platform=row["platform"],
+            registered_at=from_micros(int(row["last_seen_at"])),
+        )
+
+    async def list_tokens(claims: AccessTokenClaims) -> list:
+        rows = (
+            await db.prepare(
+                "SELECT substr(token, -4) AS last4, platform, last_seen_at"
+                " FROM push_tokens"
+                " WHERE user_id = (SELECT id FROM users"
+                "  WHERE auth_provider = ? AND auth_subject = ?)"
+                " ORDER BY last_seen_at DESC, token"
+            )
+            .bind(claims.auth_provider, claims.auth_subject)
+            .all()
+        )
+        return [
+            PushTokenView(
+                token_last4=row["last4"],
+                platform=row["platform"],
+                registered_at=from_micros(int(row["last_seen_at"])),
+            )
+            for row in rows
+        ]
+
+    async def delete_token(claims: AccessTokenClaims, token: str) -> bool:
+        row = (
+            await db.prepare(
+                "DELETE FROM push_tokens"
+                " WHERE token = ? AND user_id = (SELECT id FROM users"
+                "  WHERE auth_provider = ? AND auth_subject = ?)"
+                " RETURNING id"
+            )
+            .bind(token, claims.auth_provider, claims.auth_subject)
+            .first()
+        )
+        return row is not None
+
+    return PushTokenService(
+        clock=clock,
+        exists_user=exists_user,
+        upsert=upsert,
+        list_tokens=list_tokens,
+        delete_token=delete_token,
     )
