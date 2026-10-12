@@ -1,10 +1,11 @@
 # LATCH データモデル・API仕様書
 
-- 文書バージョン: v0.6
+- 文書バージョン: v0.7
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28。v0.6更新: 2026-10-10)
+- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28。v0.6更新: 2026-10-10。v0.7更新: 2026-10-12)
 - 前提文書: 01 要件定義書 v0.7 / 02 スコープ合意書 v0.4 / 03 UX仕様書 v0.5 / 04 システムアーキテクチャ設計書 v0.5
+- v0.7の変更点(体感アンケート): 09 §2.3の体験アンケート(仮説1・5の判定材料・13 §3表2のPhase 1開始前要件)をデータモデル・APIとして規定した。新表**survey_responses**(第2節)・**GET / POST /v1/users/me/survey**(第5節)・error code 2件(SURVEY_ALREADY_ANSWERED / SURVEY_NOT_DUE)・配信契機の実装方式(アクセス時判定・通知typeなし)と集計(`python -m latch.obs.survey`)を追加。回答データはユーザー単位とし、**個別Intentとの紐付け列を持たない**(08 §2.4・09 §2.3)
 - v0.6の変更点(UI v2基準切替): プロトタイプv2「夜と翡翠」への基準切替に伴うAPI改版(決定記録はdocs/plans/ui-v2/phase0-decisions.md)。主要変更は次のとおり。
   - **Phase 1B実装完了(2026-10-10)**: 上記5APIのbackend実装・契約試験・エンドポイント表・遷移表への反映まで完了。実装報告はdocs/plans/ui-v2/phase1b-report.md
   - expiry-optionsの選択肢を4値から**3値(今日 22:00 / 今日 23:59 / 明日 5:00)**へ変更(D-01。completion.pyの選択肢生成を更新。実装はUI v2 Phase 1B)
@@ -62,6 +63,8 @@ users ──1:N── intents ──1:N── match_events
         └── nullable FK ── group_candidates
 
 users ──1:N── notifications / reports
+
+users ──1:N── survey_responses(体感アンケート回答・Intentと紐付かない・v0.7)
 ```
 
 01第17節の5 Entity(User, Intent, MatchCandidate, Latch, MatchEvent)に、D-06中間表現のgroup_candidates、そして第25節Safetyと03 D-18の実装に必要なblocks / reports / notifications / messagesを加える。friendshipsは02 D-03由来だが、**v0.4でMVP実装から外れた(将来版としてEntity定義のみ残置。MVPの参照経路は存在しない)**(02 v0.3 D-03再決定)。
@@ -234,6 +237,19 @@ calibration_records.proposal_snapshotはこのproposalと同形とする(09 D-09
 | anonymized_at | timestamptz | NULL | 匿名化の実施時刻。NULL=未処理。NOT NULLならlatch_id・intent_idsはNULL(CHECKで強制) |
 | created_at / updated_at | timestamptz | NOT NULL | updated_atはactual_attended / cancelled_afterの収集時(D-09)更新で進む |
 
+### survey_responses(体感アンケートの回答・v0.7新設)
+
+09 §2.3の体験アンケート(仮説1「待つ体験を便利と感じる」・仮説5「検索しない様式が継続につながる」の判定材料)の回答を保持する。**回答はユーザー単位・ラウンド単位であり、個別Intentとの紐付け列を持たない**(08 §2.4「アンケート等の意図的な集計イベントを追加する場合も、個別Intentの文言を含めない」・09 §2.3「回答データは個別Intentの文言と紐付けない」)。
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | uuid | PK | |
+| user_id | uuid | NOT NULL, FK→users(退会cascade) | 回答者 |
+| round | text | NOT NULL, CHECK(round IN ('onboarding', 'week4')) | 配信ラウンド。onboarding=オンボーディング直後(初回Intent active化後)・week4=4週後。**UNIQUE(user_id, round)が「単発の配信」(09 §2.3)をDBレベルで強制する**(回答は初回のみ受理・訂正不可) |
+| answers | jsonb | NOT NULL | 設問種→5段階値の整数。`{"convenience": <1〜5>}`(onboarding)、`{"convenience": <1〜5>, "continuation": <1〜5>}`(week4)。convenience=便利さ(仮説1)・continuation=継続意向(仮説5)。値域外は422 VALIDATION_ERROR。設問種の追加は本書の改版を経る |
+| free_comment | text | NULL | week4のみの任意自由記述(最大2000字)。onboardingでは常にNULL |
+| created_at | timestamptz | NOT NULL | 回答時刻(Clock由来)。week4のdue判定の起点(初回回答から4週=28日) |
+
 ## 3. Index設計
 
 01第18節の要件に対し、PostgreSQLでの実装を次のように定める。検索順序は固定せず、選択度の高い条件を複合Indexで covering する。
@@ -295,6 +311,8 @@ CREATE INDEX idx_intents_embedding ON intents
 | 409 | CHAT_READONLY | ブロック適用中(08 D-23)または参加取り消し済み(D-08)のLATCHへの送信 | チャット送信 |
 | 409 | ATTENDANCE_ALREADY_SUBMITTED | 実施自己申告の二重回答(訂正不可) | attendance |
 | 409 | ATTENDANCE_WINDOW_CLOSED | completed遷移から3日経過後の自己申告 | attendance |
+| 409 | SURVEY_ALREADY_ANSWERED | アンケート回答の二重回答(ラウンド単位・訂正不可。v0.7) | survey |
+| 409 | SURVEY_NOT_DUE | 配信対象外のラウンドへの回答(onboarding=active化されたIntentがまだない / week4=初回回答から28日未経過または初回未回答。v0.7) | survey |
 | 409 | USER_EXISTS | 登録済みのauth_subjectでの初回登録 | POST /v1/users |
 | 422 | VALIDATION_ERROR | 必須欠落・値域外・過去時刻・対象領域上限(7日)超過等(03 v0.4 D-19、下記の時刻検証) | intents系・users系 |
 | 422 | UNDER_AGE | 18歳未満の登録・20歳未満の飲酒Intent作成(08 D-10) | POST /v1/users・intents作成更新 |
@@ -464,6 +482,43 @@ errors:   409 ATTENDANCE_ALREADY_SUBMITTED(二重回答) / 409 ATTENDANCE_WINDOW
 
 completed遷移後のLATCHに対し、参加者が「実際に会いましたか?」に1タップで回答する(09 D-09)。`attended: true`はcalibration_records.actual_attended=trueへ、`attended: false`はcancelled_after=trueへ反映する。対象はcompletedのLATCHのみで、遷移から3日以内(超過は409)。回答は初回のみ受理し訂正不可とする(Ground Truthの純度を保つため。誤操作は運用で対処)。無回答(スキップ)はこのAPIを叩かないことで表現され、欠測として扱う(09 D-09)。
 
+### GET /v1/users/me/survey・POST /v1/users/me/survey — 体感アンケート(v0.7新設・09 §2.3)
+
+**GET /v1/users/me/survey — 自分の回答状況(配信すべきラウンドの判定用)**
+
+```json
+response: 200
+{
+  "onboarding": {"status": "not_due", "available_at": null},
+  "week4":      {"status": "not_due", "available_at": null}
+}
+```
+
+各ラウンドの`status`は`due`(未回答かつ配信条件を満たす)/ `answered`(回答済み)/ `not_due`(未回答かつ配信条件未達)の3値。`available_at`はweek4のみ意味を持ち、onboarding回答済みなら「onboarding回答時刻+28日」の絶対時刻、それ以外はnull。本人のみ(未登録JWTは404 NOT_FOUND・consentと同一挙動)。
+
+**POST /v1/users/me/survey — 回答の保存(単発)**
+
+```json
+request(onboarding):  {"round": "onboarding", "answers": {"convenience": 4}}
+request(week4):       {"round": "week4", "answers": {"convenience": 4, "continuation": 5},
+                        "free_comment": "待っているだけで提案が届くのが楽しい(任意・最大2000字)"}
+response: 201 {"survey": {"round": "onboarding", "answered_at": "2026-10-12T09:00:00+09:00"}}
+errors:   409 SURVEY_ALREADY_ANSWERED(二重回答)/ 409 SURVEY_NOT_DUE(配信条件未達)
+          422 VALIDATION_ERROR(round値不正・answersの値域外・必須設問欠落・onboardingへのcontinuation/ free_comment付与・free_comment 2000字超過)
+          404 NOT_FOUND(未登録)
+```
+
+onboardingは`answers.convenience`のみを受理する。week4は`answers.convenience`と`answers.continuation`を必須とし、`free_comment`を任意で受理する。回答はラウンドごとに初回のみ受理し訂正不可とする(09 §2.3「単発の配信」・UNIQUE(user_id, round)のDB強制)。
+
+**配信契機の実装方式(設計判断)。** 09 §2.3「定量5段階はオンボーディング直後(初回Intent保存後)と4週後の2回、アプリ内で配信する(1回あたり3設問以内)」を次のように実装する。
+
+1. **onboardingラウンドのdue条件 = active化されたIntentの存在。** ユーザーに`status != 'draft'`のIntentが1件でも存在するときdueとする(active・paused・matched・expired・cancelledは「かつてactive化された」痕跡として含む。draftは保存でありactive化でないため含めない)。判定はアクセス時(GETの応答時)に行い、スケジューラを用いない。active化後に全Intentを削除したユーザーはdueでなくなる(削除はIntent行ごと痕跡を消すため。この限界はここに記録しておく)
+2. **week4ラウンドのdue条件 = onboarding回答から28日(4週)経過。** 起点を「初回回答時刻(survey_responses.created_at)」に置く(本表内で完結し、計測起点が一意に定まる)。onboarding未回答者のweek4は発生しない — 単発の配信を徹底し、未回答者への再催促を行わない(09 §2.3「押しつけにならない」)
+3. **通知typeは追加しない。** プッシュ・お知らせ・バッジ・モーダルによる催促を行わず(D-08の通知日次上限も消費しない)、03待機中画面への受動的な配信カードで表示する(回答しなくても他の操作を妨げない)。回答済みラウンドは二度と表示しない(status=answeredとUNIQUE制約で担保)
+4. **設問構成。** onboarding=便利さ5段階(convenience)の1問。week4=便利さ(convenience)+継続意向(continuation)の5段階2問+任意の自由記述1問の計3問(1回あたり3設問以内の上限内)。設問文言(日本語)はfrontendの文言集約ファイル(texts.js)に単一ソースを置く(M3 ws-7流儀)。03への画面仕様の反映は次回03改版時に行う(プロトタイプv2にアンケート画面はなく、運用ルール6により03が実装状況との対応を管理する)
+
+**集計(判定材料の導出)。** 仮説1・5の判定(09 §2.3の事前固定基準)に必要な集計を`python -m latch.obs.survey`(latch/obs/survey.py)が1コマンドで出力する: ラウンド別回答数・convenienceの平均(仮説1: **week4の5段階平均が4.0以上**)・continuationの1〜5分布と4点以上の割合(仮説5: **継続意向4点以上の回答者が過半**)。判定の実施はPhase 2以降であり、本実装は判定材料の導出のみを担う(行動面の指標〔週次Intent再作成率・30日継続率〕はkpi.py既存の集計による)。
+
 ### その他のエンドポイント
 
 | メソッド/パス | 目的 | 認可・備考 |
@@ -479,6 +534,8 @@ completed遷移後のLATCHに対し、参加者が「実際に会いましたか
 | POST /v1/latches/{id}/messages | チャット送信 | 参加者・matched以降。ブロック適用中のLATCHは409 CHAT_READONLY(08 D-23) |
 | GET /v1/latches/{id}/messages | チャット取得 | 参加者。ページネーション共通規定を適用 |
 | POST /v1/sessions | セッション開始(04第2節・09第2.2節のDAU・再来訪計測) | request bodyは空。user_idと時刻のみを記録し、Intentの文言を含まない(08第2.4節)。response: 204 |
+| GET /v1/users/me/survey | 体感アンケートの自分の回答状況(v0.7・09 §2.3) | 本人のみ。round別のdue/answered判定+week4のavailable_at |
+| POST /v1/users/me/survey | 体感アンケートの回答保存(v0.7) | 本人のみ。ラウンド単位・単発(二重は409 SURVEY_ALREADY_ANSWERED)。設問構成と配信契機は上節の規定どおり |
 | GET /v1/users/me/blocks | ブロック一覧 | 本人のみ。ページネーション共通規定を適用 |
 | POST /v1/users/{id}/block | ブロック | 本人操作 |
 | DELETE /v1/users/{id}/block | ブロック解除 | 本人操作。過去の候補除外・読み取り専用化には遡及しない(08 D-23の「回収しない」と同じ線) |
@@ -533,5 +590,7 @@ completed遷移後のLATCHに対し、参加者が「実際に会いましたか
 - 第17節(v0.2追加分): users.birth_date・intents.alcohol_involved・calibration_recordsの追記、messagesのブロック時読み取り専用化の追記(08 D-10・D-13・D-23)
 - 第17節(v0.3追加分): structured_dataの正式JSONスキーマ(downgraded_from_ngフラグ)、match_candidates.prev_latch_score・prev_evaluated_at、group_candidates.prev_aggregate_scoreと集合内user_id一意制約、latches.proposalの正式構造、match_eventsのUNIQUE制約とevent_typeへのembedding_completed追加、latch_status_eventsの新設(06 v0.3)
 - 第18節: Index設計(第3節)の反映
+- 第17節(v0.7追加分): survey_responsesの追記(未反映・次回01改版時に反映)
+- 第19節(v0.7追加分): survey 2 API(GET/POST /v1/users/me/survey)の追加(未反映・次回01改版時に反映)
 - 第19節: API一覧の拡張(parseのwarnings、responseの3値、友人・通知・通報系の追加)。第19節(v0.3追加分): 認証・ユーザー系(auth/token・refresh・logout、users/me、初回登録birth_date・18歳検証、04 D-21)、sessions、attendance(09 D-09)、ブロック一覧・解除、友人拒否・取り消し、ページネーション共通規定、エラーcode列挙。**第19節(v0.4追加分)**: GET /v1/intents(自Intent一覧・statusフィルタ)の追加、friends系の将来版化
 - 第26節: D-06は中間表現のみ解消(残りは06)と記録。**v0.4の反映**は02 v0.3 D-03再決定(visibility 2値の再定義・friendshipsの将来版化・proposal生成分岐)と下書き保存(draftの作成・active化・期限管理)として第26節へ記録済み(01 v0.4)
