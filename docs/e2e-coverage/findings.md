@@ -1,0 +1,37 @@
+# 発見事項(findings)— Phase 2時点 2026-10-12
+
+アプリバグの記録(known-failure)・false-green・重複クラスタ・観察。**バグを発見したら findings#N として追記し、該当テストはtest.fixme+参照をつける**(現時点でバグは未発見)。
+
+## False greens(疑似緑 — partial格下げの根拠)
+
+| ID | テスト | 問題 | 影響cell |
+|---|---|---|---|
+| FG-01 | latch-shell.test.jsx:224-244 | バッジ表示の検証がテスト内Badgeコンポーネント(実CountPill=Header.jsx:49-58のロジック複製)頼み。実CountPillが非0件表示を壊しても緑のまま | J1 |
+| FG-02 | latch-standby.test.jsx:172-191 | 取り下げ後のcounts検査が`chrome.current.counts`(コンテキスト内部値)で、Header/Tabbar実DOMバッジの検証ではない | J1・E3 state補強 |
+| FG-03 | latch-notice.test.jsx:258-274 | 既読化後の再判定がitem.read_atローカルmutateのみでサーバ再取得なし。既読persistの実証ではない | J4 persist |
+| FG-04 | latch-consent.test.jsx:102-114 | 「通常画面へ戻る」の証明がonAgreedスパイ呼び出しまで。SettingsScreen.jsx:44-46のhash遷移が壊れても緑 | B3 |
+| FG-05 | smoke.test.js:199-213 | tabbar/a11yの検証がstyles.css文字列含有一致。実ビューポート描画を証明しない | J3 |
+| FG-06 | confirm.test.jsx:256-260 | 編集モードのclientモックがフォールスルーでも同一`{intent}`を返す。GETパスの誤り(誤endpointへのGET)を検出不能 | D8(GETパス面) |
+| FG-07 | latch-detail.test.jsx:190-193 | undo後refreshのモックが常にjoined latchを返す。**undo→open復帰表示が壊れても緑**(かつ復帰をassertするテストが全ファイルに存在しない) | G5 |
+
+## 重複クラスタ(統合検討・削除・統合はユーザーの判断)
+
+1. hash→section切替の3重: smoke.test.js:74-98 / latch-shell.test.jsx:15-41 / latch-shell.test.jsx:107-120 — 後者が非active unmountまで見る最強。前2つを集約検討
+2. トークンパネル表示の2重: smoke.test.js:159-165 / latch-shell.test.jsx:122-126 — shell版が文言まで見る上位互換
+3. D-04(+1換算)の3重: format.test.js:191-197 / format.test.js:271-283 / confirm.test.jsx:138-158
+4. 保存リクエストbodyの2重: save.test.js:84-98(flow層) / confirm.test.jsx:105-136(UI層・網羅的)
+5. チャット送信の2層: latch-chat.test.jsx:126-149 / latch-detail.test.jsx:615-639
+6. undo POSTの3箇所: latch-detail.test.jsx:199-202, 279-282 / latch-respond.test.js:50-56
+7. defer+reasons bodyの2箇所: latch-detail.test.jsx:247-249, 376-378 / latch-respond.test.js:36-42
+8. 取り下げflowの3重: latch-standby.test.jsx:134-170(メイン)/172-191(counts)/348-379(他行)— 担当分離は意図的だがdialog文言検証は1箇所化可能
+9. blocks空状態文言の3回: latch-blocks.test.jsx:53-58, 96-98, 136-138
+10. skip link/a11y CSS検査の2重: smoke.test.js:199-213 / latch-shell.test.jsx:293-301
+
+## 観察・仕様確認事項
+
+- **OBS-01(A7)**: 未登録トークン保持者(交換済み・users行なし)の期待挙動が未定義。登録UIが存在せずPOST /v1/usersはAPI専用のため通常到達しないが、仕様として決める価値あり。W-01でwaive
+- **OBS-02**: TokenPanel.jsx:19がfetchを注入不可で直参照しており、unitでパネルUI結合(接続・エラー文言)が書けない構造。G-03(E2E)が天然の証明場所
+- **OBS-03**: HomeScreenのcomposer配線(型入力→parse→chips→CTA有効化)がtests全体で未証明(型入力fireEventがゼロ)。純関数層への分解テストのみ。G-02が最初の証明
+- **OBS-04**: D-05で辞退(no)送信導線は廃止・回答2択は「YES/見送り(defer)」。matrix行G3はPhase 2で「my_response=noの受信表示」へ修正済み
+- **OBS-05**: withdraw成功後に/v1/intentsを再取得しない(StandbyScreen.jsx:302はlatchesのみ)。取り下げ永続はE2Eでの再取得(G-06)で証明する
+- **OBS-06**: E6トーストの「remountで出ない」がモジュール共有Set(toastShown・StandbyScreen.jsx:49)依存で、ファイル内テスト順序変更で偽陰性化しうる(現時点ではfalse-greenではない)

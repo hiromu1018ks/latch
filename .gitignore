@@ -64,3 +64,7 @@ backend/.wrangler/
 .zcodeignore
 # 本体実装: ビルド時にbackend/src/latchからコピーされる(make cf-sync)
 cloudflare/api/latch/
+
+# Playwright E2E成果物(frontend)
+frontend/test-results/
+frontend/playwright-report/

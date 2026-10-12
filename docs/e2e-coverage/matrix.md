@@ -1,0 +1,444 @@
+# E2Eカバレッジマトリクス(LATCH)
+
+- 生成: 2026-10-12 — e2e-coverage-architect Phase 0(インベントリ)
+- 対象: リポジトリルート `/home/misty/Projects/latch`(commit aaa23c6 時点・clean tree)
+- 本書の役割: インベントリ(§1)→ 振る舞い行列(§2・Phase 1)→ ギャップ(§3・Phase 2)の正本。優先度つきギャップは `gaps.md`、発見事項は `findings.md` が持つ
+- 前提ルール: 本分析はアプリケーションソースを変更しない。触れるのはテストコード・テスト設定・`docs/e2e-coverage/` 配下のみ
+
+---
+
+## 1. インベントリ(Phase 0)
+
+### 1.1 スタックとサービス構成
+
+Monorepo(3実装領域)。**同一API契約の2実装が存在**する点が本分析の前提条件:
+
+| 領域 | スタック | 役割 |
+|---|---|---|
+| `frontend/` | React 19 + Vite 6.4.2 SPA(自作hashルーター・`frontend/src/router.js`)・vitest 3 + RTL + happy-dom | UI。全API同一オリジン相対 `/v1/...`。CORSなし |
+| `backend/` | Python 3.13 + FastAPI + PostgreSQL 17(PostGIS+pgvector) + Redis + Pub/Sub(エミュレータ) + worker(uvicorn) | **参照実装**。compose常設ci環境(`make up`)で api=127.0.0.1:8000 |
+| `cloudflare/api/` | Cloudflare Workers(python_workers)+ D1 + Queues + Workers Assets(`frontend/dist/client` を同オリジン配信) | **Cloudflare実装**。`make cf-dev` で miniflare=127.0.0.1:8787(単一オリジン)。実配備の経路 |
+
+- 2実装のAPIパリティは `backend/tests/contracts/`(参照133 / Cloudflare 130ケース)が保証済み → **UI E2Eは片方のオリジンで実施すればAPI契約面はもう片方も担保されている**構図
+- マッチング(候補→提案形成)はworkerがPub/Sub経由で非同期処理(debounce 10s)。同期APIだけではlatchは生成されない
+
+### 1.2 起動方法(2026-10-12 実機検証済み)
+
+**主目標(compose + vite dev — PlaywrightのwebServerに接続済み)**
+
+| 手順 | コマンド | 検証結果 |
+|---|---|---|
+| 1. API常設環境 | `make up`(repo root) | 全5コンテナhealthy(db/redis/pubsub/api/worker)✅ |
+| 2. マイグレーション | `make migrate` | alembic head適用 ✅(起動時自動適用はない・明示実行の規律) |
+| 3. API到達 | `GET http://127.0.0.1:8000/health` | `{"status":"ok","server_time":...}` ✅ / 未認証APIは401 `UNAUTHENTICATED` ✅ |
+| 4. フロント | `cd frontend && npm run dev`(=Playwright webServerが起動) | `http://127.0.0.1:5173/` 200 ✅(`/v1` を8000へproxy・`frontend/vite.config.mjs:12-14`) |
+
+**代替目標(Cloudflare実装・単一オリジン)**
+
+`make cf-dev`(別ターロングラン)→ `http://127.0.0.1:8787`。Workers Assets配信のbuild済みフロント+API+ローカルD1。提案形成を動かすには `--var LATCH_LLM_STUB_JEV_NOUL=0.85` が必要。ローカルD1へのmigration手動適用が別途必要(docs/plans/CLOUDFLARE-MIGRATION-STATUS.md)。**Phase 3で第二projectとして追加可能。現時点では主目標のみ接続**
+
+### 1.3 Playwright(ブートストラップ記録)
+
+**導入前の状態**: Playwright/Cypress/Puppeteer なし。**UI自動E2Eはゼロ**。コミットログの「実機E2E」は手動の実ブラウザ検証である(`docs/plans/ui-v2/phase7-report.md` §3・26操作表。「chrome検査用Probe」はvitest内のReactコンテキストcapture部品でブラウザは無関係)
+
+**今回追加したファイル(スキルPhase 0ブートストラップ)**:
+
+| ファイル | 内容 |
+|---|---|
+| `frontend/package.json` / `package-lock.json` | `@playwright/test` をdevDependenciesへ追加 |
+| `frontend/playwright.config.mjs` | testDir=`tests/e2e`・baseURL=5173・webServer=`npm run dev`(reuseExistingServer)・chromium単一・trace=retain-on-failure |
+| `frontend/tests/e2e/` | スペック置き場(空・Phase 3から投入) |
+| `.gitignore`(root) | `frontend/test-results/` `frontend/playwright-report/` の2行 |
+| `~/.cache/ms-playwright/` | chromium + chromium-headless-shell を`npx playwright install chromium`で導入 |
+
+vitestのincludeは `tests/**/*.test.{js,jsx}`(`frontend/vitest.config.mjs`)で、Playwrightの `*.spec.js` と衝突しない。
+
+**Baseline(2026-10-12)**: `npx playwright test --pass-with-no-tests` → exit 0。スペック0件・前提失敗なし。既存E2E suiteが存在しないため記録すべき既存赤はなし
+
+### 1.4 画面ルート(frontend SPA・hashルーター)
+
+`parseHash()`(`frontend/src/router.js:28-50`)。未知のhash・uuid形式不正はすべてhomeへfall-through。
+
+| ルート | 画面 | 目的 |
+|---|---|---|
+| `#/` | 01 預ける(HomeScreen) | composer入力→parse結果の下書き・待機中の意思カード・下書き保存 |
+| `#/confirm[?intent={uuid}]` | 02 読み解き確認(ConfirmScreen) | parse結果の確認・5条件行編集・人数seg・期限3択・保存。`?intent=`は03「条件を直す」編集モード(GET復元→PATCH) |
+| `#/standby[?deposited=1]` | 03 待機中(StandbyScreen) | 残時間タイマー・条件を直す・取り下げdialog・下書き行。`deposited=1`は02からの着地 |
+| `#/proposals` | 簡易一覧・候補タブ(ListsScreen) | proposed/partial_acceptなlatch一覧(D-11) |
+| `#/matched` | 簡易一覧・成立タブ(ListsScreen) | matched/completedなlatch一覧 |
+| `#/latches/{uuid}` | 04候補/05成立(DetailScreen) | 1画面3姿(提案・成立・チャット)。回答2択・undo・.ics・leave・attendance・通報・ブロック |
+| `#/settings` | 設定(SettingsScreen) | 通知許可・ブロック管理・LLM同意の3セクション |
+| `#/onboarding` | LLM同意オンボーディング | 未同意時に誘導(起動時+422 CONSENT_REQUIRED検出時の2経路) |
+
+navは「預ける/待機中/候補/成立」4項目+バッジ(counts)。720px以下は下部tabbar。主な画面側遷移: 02でstate空→01へ戻す・`#/latches/{id}`の404/403→「提案が見つかりません」+home導線・未同意→`#/onboarding`・編集復元失敗→03へ。
+
+### 1.5 APIエンドポイント(参照実装・`backend/src/latch/main.py:290-298`登録)
+
+**ops(認証不要・レート制限なし)**: `GET /health`(server_time付き)・`GET /metrics`(参照実装のみ)
+
+**公開(認証不要・auth系独自レート制限=provider+subject単位60/分)**:
+
+| メソッド+パス | 目的 |
+|---|---|
+| POST /v1/auth/token | IdPトークン(google/apple)→アクセスJWT+リフレッシュ交換 |
+| POST /v1/auth/refresh | リフレッシュ回転(30日) |
+
+**認証必須(全てBearer JWT・API全体60req/分/user・401→429の順で構造保証)**:
+
+| メソッド+パス | 目的 |
+|---|---|
+| POST /v1/auth/logout | 失効リスト+族失効・204冪等 |
+| POST /v1/users | 初回登録(201)。18歳未満422 UNDER_AGE・重複409 |
+| GET /v1/users/me | 本人プロファイル |
+| DELETE /v1/users/me | 退会(204)・全Intentカスケード |
+| POST /v1/users/me/consent | LLM同意記録(冪等・後勝ち) |
+| GET /v1/users/me/consent | 同意状態(未同意は200 null) |
+| POST /v1/intents/parse | 自然文→構造化プレビュー(保存しない・1-300字) |
+| GET /v1/intents/expiry-options | 期限3択+default_index(未認証401を実測確認済み) |
+| POST /v1/intents | Intent作成(201・draft/active)。active上限5・作成20/日 |
+| GET /v1/intents | 自Intent一覧(status filter・cursor/limit) |
+| GET /v1/intents/{intent_id} | 取得(他人は404) |
+| PATCH /v1/intents/{intent_id} | 全置換更新(更新6/時) |
+| DELETE /v1/intents/{intent_id} | 取り下げ(cancelled遷移・204) |
+| POST /v1/intents/{intent_id}/pause | 一時停止 |
+| POST /v1/intents/{intent_id}/resume | 再開 |
+| GET /v1/latches | 本人関与latch一覧(candidate除外) |
+| GET /v1/latches/{latch_id} | 詳細(04/05切替の供給源) |
+| POST /v1/latches/{latch_id}/response | 回答(yes/decline+reasons) |
+| POST /v1/latches/{latch_id}/response/undo | 回答取り消し(D-06) |
+| POST /v1/latches/{latch_id}/leave | 参加のみ取り消し(D-08) |
+| POST /v1/latches/{latch_id}/messages | チャット投稿(matchedのみ・201) |
+| GET /v1/latches/{latch_id}/messages | チャット一覧(閲覧は状態不問) |
+| POST /v1/latches/{latch_id}/attendance | 実施自己申告(D-09・3日以内・初回のみ) |
+| GET /v1/notifications | お知らせ一覧 |
+| POST /v1/notifications/{notification_id}/read | 既読(204冪等) |
+| GET /v1/users/me/blocks | ブロック一覧 |
+| POST /v1/users/{user_id}/block | ブロック登録(201冪等) |
+| DELETE /v1/users/{user_id}/block | 解除(204・行なし404) |
+| POST /v1/reports | 通報(201・受付のみ) |
+| POST /v1/sessions | アクセス計測(204。**参照実装のみ**) |
+
+Cloudflare実装の差分: `/health`がstatusのみ・`/v1/sessions`と`/metrics`なし・`/probe/*`検証ルート群あり(非本体API)。
+
+### 1.6 認証モデル
+
+- **仕組み**: IdPトークン(RS256・JWKS検証)→ `POST /v1/auth/token` で独自JWT(HS256・1時間)と回転式リフレッシュ(30日)へ交換。**自動登録なし** — users表に無ければ `profile_complete=false` で通り、明示 `POST /v1/users` で登録
+- **同意ゲート**: 未同意ユーザーのparse/active Intent作成は422 `CONSENT_REQUIRED`(フロントは横断検出で`#/onboarding`へ誘導)
+- **未認証応答**: 401 + `{"error":{"code":"UNAUTHENTICATED",...}}`(欠落/無効/期限切れ/失効すべて同形)。フロントはrefresh 1回試行→失敗でsession破棄+トークンパネル再表示
+- **ロール/権限**: **存在しない**(全ユーザー同権)。所有権は本人のprovider+subject一致のみ(他人は404 NOT_FOUND/403 FORBIDDEN)
+- **開発用トークン**: `cd backend && uv run python -m latch.auth issue-idp-token --provider google --subject <任意>`(同梱staging鍵で署名・API検証設定と自動一致)。**E2Eでの認証はこのCLI→UIトークンパネル入力、またはsessionStorage `latch-access` / localStorage `latch-refresh` 直置き**(access=sessionStorage・refresh=localStorage・`frontend/src/api/session.js:4-5`)
+- 正規ユーザー作成のフルチェーン: CLI発行→auth/token→POST /v1/users→consent
+
+### 1.7 データ・永続化・シード
+
+- **ストレージ**: PostgreSQL(PostGIS+pgvector必須)。マイグレーション0001〜0009(users/intents/match_candidates/group_candidates/latches/match_events/messages/blocks/reports/notifications/calibration_records/geofeatures/sessions/kpi_*等)。Redis=セッション・レート制限・Clock。Pub/Sub+worker=マッチングパイプライン
+- **起動時シード: なし**。地物(geofeatures)も `make geo-import` が明示必要
+- **ci DBの現在の実態(2026-10-12確認)**: users=53行(残存試験データ・subjectプレフィックスm2ws6-/t0c-等)。geofeatures=7行(天文館・伊敷町・大字草牟田・バー宵待・城山ホテル等・鹿児島市周辺=integration/contracts試験のseed由来)。**→ Intent作成E2Eの地名はこの7地物の範囲で書く必要がある**(範囲外は422 GEOCODING_FAILED)
+- **リセット戦略: なし**(TRUNCATEしない運用)。既存試験は一意subjectプレフィックスで分離+teardown削除。**E2Eも同様に「自己データ作成・一意プレフィックス・共有状態をassertしない」設計が必須**
+- **レート制限(設計制約)**: API全体60req/分/user・Intent作成20/日・Intent更新6/時・active Intent上限5件。並列workerで同一ユーザーを叩くと429になる → **E2Eはテストごとに別ユーザー(別subject)を払い出す**
+- **worker非同期性**: Intent保存→publish→debounce 10s→パイプライン→latch生成。UI E2Eで04/05画面を開くにはlatchをAPI/DB側で直接作る(契約harness `reference_harness.py` のactor provisioningが参照実装)か、残存データのuuidを利用する。**Phase 3でlatch fixture戦略を決定**
+- **時刻**: 全時刻Clock経由(FR-41)。JST基準の表示・期限が多く、フロント試験はfake timersで固定済み。E2Eでは実時間で動く(apiのserver_timeはUTC)
+
+### 1.8 既存テストカタログ
+
+**frontend(vitest・367件・実APIに触れないfetchモック全)** — 28ファイル:
+
+| ファイル | カバー内容(1行) |
+|---|---|
+| router.test.js | parseHash全ルート解析(未知hash→home・uuid検証)・旧createRouter |
+| client.test.js | APIクライアント: Bearer・envelope→ApiError・401→refresh再送/clear |
+| session.test.js | トークン保存(access=sessionStorage/refresh=localStorage)・exchange |
+| app-state.test.js | ensureMeキャッシュ・reset |
+| smoke.test.js | index.html/styles静的検査+App描画スモーク・全ルートsection存在 |
+| state.test.js | フォーム状態: 必須欠落・applyParseResult・人数確認D-04 |
+| parseFlow.test.js | parse送信制御: 1秒debounce・同一テキスト不送・abort |
+| save.test.js | 保存flow: 事前ブロック・errorPlacement(422/429/503)・二重送信防止 |
+| format.test.js | 表示書式純関数: 時刻/場所/人数/予算・buildCreateRequest |
+| highlight.test.js | 02原文ハイライト: 5条件マッチ・重なり優先 |
+| expiry.test.js | 期限select: fetchExpiryOptions・選択肢構成 |
+| conditions.test.jsx | 02の5行(SlotRows)構成・行編集書き戻し |
+| confirm.test.jsx | 02画面: 保存POST/PATCH(編集)・D-04・GEOCODING_FAILED・空state戻し |
+| latch-view.test.js | view.js純関数: latchMode 3姿・残時間書式・照合表 |
+| latch-respond.test.js | 回答flow: yes/defer・undo・409収束・429文言 |
+| latch-calendar.test.js | .ics生成(RFC5545) |
+| latch-home.test.jsx | 01待機中カード・splitStatuses・バッジ |
+| latch-standby.test.jsx | 03画面: タイマー・取り下げdialog・着地・下書きD-13 |
+| latch-lists.test.jsx | D-11一覧: 行様式・空状態・追頁 |
+| latch-detail.test.jsx | 04提案姿(4状態・undo・defer)と05成立姿(ヒーロー・カレンダー・leave・attendance・チャット)・404/403(640行・最大) |
+| latch-chat.test.jsx | 05チャット: ページング・30秒ポーリング・読取専用・XSS |
+| latch-notice.test.jsx | お知らせ: type×status行列・既読化・追頁 |
+| latch-safety.test.jsx | 通報・ブロック統合dialog: 対象ラジオ・理由ステップ |
+| latch-attendance.test.jsx | 実施自己申告: 2択・409二種 |
+| latch-blocks.test.jsx | ブロック管理: 一覧・解除・404収束 |
+| latch-consent.test.jsx | LLM同意: ConsentCard・consentGate誘導2経路 |
+| latch-settings.test.jsx | 設定画面: PermissionControl 4状態 |
+| latch-shell.test.jsx | シェル: 条件マウント・popover・トースト・a11y |
+
+**backend(pytest)**:
+
+| 種別 | 内容 |
+|---|---|
+| tests/unit(毎コミット・DB不要) | auth/intents/latches/llm/matching/ratelimit/safety/users/worker/geo/cost/obs等・約150ファイル。ASGI in-process+FakeClock+スタブ |
+| tests/integration(compose常設前提・marker=integration) | API実証: 認証3endpoint・CRUD・latches応答系17・チャット+attendance・safety 9・レート制限4種・マッチング各層・G3受け入れE2E・縮退E2E等 |
+| tests/contracts | **HTTP契約の正本**: 参照実装133ケース(test_api_parity)+ Cloudflare130(test_cloudflare_parity)。13領域のroute・status・error code・応答形状を固定 |
+| tests/cloudflare | Workers/D1/Queues資産の単体+probe(cf-unit / cf-probe=実測8787) |
+| staging_tests*(testpaths外・明示実行) | M4受け入れハーネス(S0〜S5機能・obs・NFR)。nginx:18000経由の実API全試験 |
+
+**手動実機E2E(証跡のみ・自動化コードなし)**: `docs/plans/ui-v2/phase7-report.md` §3の26操作(01入力→02→03→04の4状態→05チャット/leave/attendance/通報→390px)。持ち帰りとして「attendance二重回答のUI再POST経路・safety 429・popover既読化」が実機未再確認(phase7-report L93-96)= **E2Eギャップ候補**
+
+### 1.9 E2E設計への制約(要約)
+
+1. レート制限60req/分/user → テストごとに別subjectのユーザー払い出し。429が観測されたらテスト側の設計ミス
+2. ci DBはリセットされない(残存users 53行)→ 一意プレフィックス+自己データのみassert
+3. Intent作成の地名は既存7地物(天文館等)の範囲で
+4. latch(04/05画面)は同期APIで作れない → fixture戦略が必要(API直作成 or 残存利用)
+5. 未同意ユーザーはparse/保存が422 → ユーザー払い出し時にconsentまで実施
+6. 時刻はJST依存表示(「今日 22:00」等)→ アサーションは時刻非依存で書くか許容幅を持たせる
+7. アクセストークン1時間・E2E実行中の切れは実質なし(1suite<1分)
+
+---
+
+## Phase 0 完了チェックリスト
+
+- [x] 起動コマンド既知・実機検証済み(make up+migrate+health 200+vite 200・2026-10-12)
+- [x] Playwright存在(ブートストラップ実施)・baseline記録(スペック0件・exit 0)
+- [x] 全画面(8ルート)と全エンドポイント(v1 32+ops 2)を認証要件付きで列挙
+- [x] 認証モデルとロール(なし=全ユーザー同権)を文書化
+- [x] データ・永続化・シード(なし・ci DB実態・リセット戦略なし)を文書化
+- [x] 既存テストのカタログ(frontend 29+backend 5種+手動E2E証跡)
+
+## 2. 振る舞い行列(Phase 1 — 2026-10-12)
+
+### 2.1 Actor定義(ロールは存在しないため状態別)
+
+| Actor | 意味 |
+|---|---|
+| 訪問者 | トークンなしで開いた未認証ブラウザ(開発用トークンパネルが出る) |
+| 未登録者 | IdPトークン交換済みだが users 行なし(**登録UIは存在せずAPI専用**のため通常到達しない) |
+| 未同意ユーザー | 登録済み・LLM同意なし(#/onboarding誘導対象) |
+| ユーザー | 登録済み・同意済みの標準actor(全ユーザー同権) |
+| 他ユーザー | 横断アクセス検証用のもう一人のユーザー |
+
+### 2.2 振る舞い一覧(actor + action + 適用次元 + リスク)
+
+次元は happy / validation / authz / error / state / persist の6種。`n/a` 判断は行列(§2.3)に反映済み。
+
+**A. 認証・セッション**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| A1 | 訪問者が任意画面を開く → シェルは描画・APIは401で開発用トークンパネル表示 | state | 低(開発導線。本番IdP導線の代替入口) |
+| A2 | 訪問者が有効IdPトークンをパネルに入力し接続 → 交換成功・パネル閉鎖・データ表示 | happy | 中(入口が壊れると全機能到達不能) |
+| A3 | 無効IdPトークンで接続 → 「トークンが無効です…」再入力促し | validation | 低 |
+| A4 | API停止中に接続 → 「接続できませんでした…」 | error | 低 |
+| A5 | ユーザーが再訪(access切れ・refresh保持) → 自動refreshでAPI継続 | happy, persist | 中(継続性。access期限1時間をE2Eで切らせる工夫が必要) |
+| A6 | refresh無効/期限切れ → session破棄・パネル再表示 | error, state | 中 |
+| A7 | 未登録者が画面を開く → 期待挙動未定義(登録UIなし・内部α段階) | state | 低(通常到達しない。要仕様確認→waive候補) |
+
+**B. LLM同意**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| B1 | 未同意ユーザーがアプリを開く → #/onboardingへ誘導 | state | 高(コンプライアンスゲート) |
+| B2 | 未同意ユーザーがparse/保存を試みる → 422 CONSENT_REQUIRED横断検出→トースト+誘導 | error, state | 高 |
+| B3 | 未同意ユーザーがオンボーディングで同意する → POST同意→通常画面へ | happy, persist | 高 |
+
+**C. 01 預ける(ホーム)**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| C1 | ユーザーが条件文を入力 → 1秒debounceでparse→読み取りchips・「読み解く」CTA有効化 | happy | 最高(サービス主幹の入口) |
+| C2 | 空テキスト/300字超 → CTA無効・送信なし | validation | 低 |
+| C3 | parse失敗(429/503) → 専用文言・retryable表示 | error | 中 |
+| C4 | 例文chip選択 → textareaへ挿入 | happy | 低 |
+| C5 | 下書き保存 → POST draft→トースト・二重送信防止 | happy, persist | 中 |
+| C6 | 待機中の意思カード表示(active) | happy | 中(読取) |
+| C7 | 候補対応づけ確定時の強調カード+04直結導線 | happy, state | 中 |
+
+**D. 02 読み解き確認**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| D1 | parse結果表示(原文ハイライト・5条件行) | happy | 高(誤表示=誤条件で公開) |
+| D2 | 5条件の行編集 → 行テキスト解析で書き戻し | happy, validation | 高 |
+| D3 | 人数seg変更(D-04 +1換算) | happy | 中 |
+| D4 | 期限3択取得・選択(expiry-options) | happy | 高(期限誤り=誤マッチ) |
+| D5 | 「預ける」保存 → POST active→03着地(deposited=1) | happy, state, persist | 最高 |
+| D6 | 保存422 GEOCODING_FAILED → 場所行エラー表示 | validation | 高 |
+| D7 | 保存429/503 → 文言・再試行 | error | 中 |
+| D8 | 編集モード(#/confirm?intent=) → GET復元→PATCH | happy, state, persist | 高 |
+| D9 | 編集復元404 → 03へ戻す | error, state | 低 |
+| D10 | 02直接訪問(state空) → 01へ戻す | state | 低 |
+
+**E. 03 待機中**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| E1 | メイン条件カード表示・残時間タイマー1秒更新 | happy | 中(読取) |
+| E2 | 「条件を直す」→ #/confirm?intent=へ | state | 中 |
+| E3 | 「取り下げる」→dialog確認→DELETE → カード消滅・バッジ更新 | happy, state, persist | 高(意思の撤回) |
+| E4 | 取り下げdialogキャンセル → 状態保持 | validation | 低(破壊操作の誤発動防止) |
+| E5 | 下書き行からの編集導線(draft→confirm) | state | 低 |
+| E6 | 候補トースト表示(右上) | happy | 低 |
+
+**F. 簡易一覧(D-11)**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| F1 | #/proposals 候補一覧・空状態 | happy | 中 |
+| F2 | #/matched 成立一覧・空状態 | happy | 中 |
+| F3 | 行クリック → #/latches/{id} 導線 | state | 中 |
+| F4 | 追頁(cursor) | happy | 低 |
+
+**G. 04 候補(提案姿)**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| G1 | 提案表示(4情報カード・照合表・回答期限timer) | happy | 最高(提案内容の正しい可視化) |
+| G2 | YES回答 → joined/allIn状態遷移 | happy, state, persist | 最高(相互YES=サービス核心) |
+| G3 | my_response=no(辞退)の受信表示(現行の回答2択はYES/見送りのみ・D-05で辞退導線は廃止) | happy | 中(Phase 2で行定義を現行仕様へ修正) |
+| G4 | 見送り(defer+理由chips) → 見送り表示 | happy, state, persist | 中 |
+| G5 | undo → open復帰 | happy, state | 中 |
+| G6 | undo 409(期限切れ) → 収束表示 | error | 低 |
+| G7 | 他ユーザーのlatch URL直叩き → 404「提案が見つかりません」+home導線 | authz | 最高(横断アクセス防止) |
+| G8 | 不正uuid→home戻し/整形式だが存在しないlatch→404表示 | error | 低 |
+
+**H. 05 成立(成立姿)**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| H1 | 成立ヒーロー・メンバー・内容表示 | happy | 高 |
+| H2 | .icsカレンダーダウンロード | happy | 低 |
+| H3 | チャット送信 → 投稿反映 | happy, persist | 高(成立後の唯一の対話手段) |
+| H4 | チャット読取専用(3形態) | state | 中 |
+| H5 | チャット30秒ポーリング・追頁 | happy | 低 |
+| H6 | leave(参加取り消し) → 確認→POST→状態変化 | happy, state, persist | 高 |
+| H7 | attendance自己申告 → 済み表示 | happy, persist | 中 |
+| H8 | attendance 409(二重) → 収束 | error | 低 |
+| H9 | 通報 dialog(対象選択→理由)→POST | happy | 高(安全機能) |
+| H10 | ブロック dialog → POST | happy, persist | 高(安全機能。一覧での確認はI3) |
+
+**I. 設定**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| I1 | 3セクション表示(通知許可/ブロック/LLM同意) | happy | 低 |
+| I2 | 通知許可トグル(権限4状態) | state | 低 |
+| I3 | ブロック一覧・解除(204→行除去・404収束) | happy, error, persist | 中 |
+| I4 | LLM同意状態の表示 | happy | 低 |
+
+**J. シェル共通**
+
+| # | 振る舞い | 適用次元 | リスク注記 |
+|---|---|---|---|
+| J1 | nav4項目・aria-current・countsバッジ | happy | 低 |
+| J2 | 未知ルート → homeへ | state | 低 |
+| J3 | ≤720pxでtabbar表示(実装は720pxブレークポイント・「390px」は実装に存在せず検証ビューポート名) | happy | 低 |
+| J4 | お知らせpopover(一覧・既読化・導線) | happy, persist, state | 中 |
+
+**意図的な重複・統合の記録**: B4(設定での同意表示)はI4へ統合。429共通文言は各画面行(C3/D7/G6/H8等)で観測するため独立行なし。pause/resume・logout・登録(POST /v1/users)は**UIが存在しない**ため行なし(API契約は契約試験が担保)。
+
+### 2.3 Behavior × Dimension matrix — BEFORE(Phase 2で証拠マッピング済み・2026-10-12)
+
+セル: `✅(file:line)`=アサーションが結果を証明 / `◐(file:line)`=partial(不足点はgaps.md) / `—`=未カバー / `n/a`=不適用。証拠は frontend/tests/ 基準の相対パス。
+
+| # | 振る舞い(短縮名) | happy | validation | authz | error | state | persist |
+|---|---|---|---|---|---|---|---|
+| A1 | 訪問者→トークンパネル | n/a | n/a | n/a | n/a | ✅ smoke.test.js:159-165, latch-shell.test.jsx:122-131 | n/a |
+| A2 | 有効トークン接続 | ◐ session.test.js:40-47 | n/a | n/a | n/a | n/a | n/a(A5) |
+| A3 | 無効トークン接続 | n/a | ◐ session.test.js:49-59 | n/a | n/a | n/a | n/a |
+| A4 | API停止中接続 | n/a | n/a | n/a | — | n/a | n/a |
+| A5 | 再訪・自動refresh | ◐ client.test.js:65-80 | n/a | n/a | n/a | n/a | ◐ client.test.js:65-80 |
+| A6 | refresh失効→パネル | n/a | n/a | n/a | ◐ client.test.js:82-98 | ◐ client.test.js:82-98 | n/a |
+| A7 | 未登録者の挙動 | n/a | n/a | n/a | n/a | —(期待挙動未定義) | n/a |
+| B1 | 未同意→onboarding誘導 | n/a | n/a | n/a | n/a | ◐ latch-consent.test.jsx:146-157 | n/a |
+| B2 | 422 CONSENT_REQUIRED検出 | n/a | n/a | n/a | ◐ latch-consent.test.jsx:159-164 | ◐ latch-consent.test.jsx:159-164 | n/a |
+| B3 | オンボーディング同意 | ◐ latch-consent.test.jsx:102-114 | n/a | n/a | n/a | n/a | ◐ latch-consent.test.jsx:95-100 |
+| C1 | 入力→parseプレビュー | ◐ parseFlow.test.js:22-43 | n/a | n/a | n/a | n/a | n/a(読取) |
+| C2 | 空/300字超→CTA無効 | n/a | ◐ state.test.js:26-27,101-102 | n/a | n/a | n/a | n/a |
+| C3 | parse失敗文言 | n/a | n/a | n/a | ◐ parseFlow.test.js:106-119 | n/a | n/a |
+| C4 | 例文chip挿入 | ◐ smoke.test.js:129-132 | n/a | n/a | n/a | n/a | n/a(読取) |
+| C5 | 下書き保存 | ◐ save.test.js:116-123 | n/a | n/a | n/a | n/a | ◐ save.test.js:116-123 |
+| C6 | 待機中カード表示 | ✅ latch-home.test.jsx:170-191 | n/a | n/a | n/a | n/a | n/a(読取) |
+| C7 | 候補強調+04直結 | ✅ latch-home.test.jsx:206-218 | n/a | n/a | n/a | ✅ latch-home.test.jsx:142-149 | n/a(読取) |
+| D1 | parse結果表示 | ✅ highlight.test.js:29-41, confirm.test.jsx:81-93 | n/a | n/a | n/a | n/a | n/a(読取) |
+| D2 | 5条件行編集 | ✅ conditions.test.jsx:211-273 | ✅ conditions.test.jsx:211-273 | n/a | n/a | n/a | n/a(読取) |
+| D3 | 人数seg | ✅ conditions.test.jsx:150-169 | n/a | n/a | n/a | n/a | n/a |
+| D4 | 期限3択 | ✅ expiry.test.js:22-80 | n/a | n/a | n/a | n/a | n/a(読取) |
+| D5 | 預ける→03着地 | ✅ confirm.test.jsx:119-135 | n/a | n/a | n/a | ✅ confirm.test.jsx:122-135 | ◐ save.test.js:92-97 |
+| D6 | GEOCODING_FAILED | n/a | ✅ save.test.js:45-48, confirm.test.jsx:219-225 | n/a | n/a | n/a | n/a |
+| D7 | 保存429/503 | n/a | n/a | n/a | ◐ save.test.js:68-80 | n/a | n/a |
+| D8 | 編集モード復元→PATCH | ✅ confirm.test.jsx:265-311 | n/a | n/a | n/a | ✅ confirm.test.jsx:265-276 | ◐ confirm.test.jsx:308-311 |
+| D9 | 復元404→03戻し | n/a | n/a | n/a | ✅ confirm.test.jsx:315-318 | ✅ confirm.test.jsx:315-318 | n/a |
+| D10 | 02直接訪問→01戻し | n/a | n/a | n/a | n/a | ✅ confirm.test.jsx:100-103 | n/a |
+| E1 | メインカード+タイマー | ✅ latch-standby.test.jsx:85-101, 340-342 | n/a | n/a | n/a | n/a | n/a(読取) |
+| E2 | 条件を直す導線 | n/a | n/a | n/a | n/a | ✅ latch-standby.test.jsx:97-99 | n/a |
+| E3 | 取り下げ→バッジ更新 | ✅ latch-standby.test.jsx:148-170 | n/a | n/a | n/a | ✅ latch-standby.test.jsx:184-191 | ◐ latch-standby.test.jsx:371-378 |
+| E4 | 取り下げキャンセル | n/a | ✅ latch-standby.test.jsx:366-369 | n/a | n/a | n/a | n/a |
+| E5 | 下書き行編集導線 | n/a | n/a | n/a | n/a | ✅ latch-standby.test.jsx:269-274 | n/a |
+| E6 | 候補トースト | ✅ latch-standby.test.jsx:387-401 | n/a | n/a | n/a | n/a | n/a |
+| F1 | 候補一覧・空状態 | ✅ latch-lists.test.jsx:94-129 | n/a | n/a | n/a | n/a | n/a(読取) |
+| F2 | 成立一覧・空状態 | ✅ latch-lists.test.jsx:111-140 | n/a | n/a | n/a | n/a | n/a(読取) |
+| F3 | 行→詳細導線 | n/a | n/a | n/a | n/a | ✅ latch-lists.test.jsx:46-47 | n/a |
+| F4 | 追頁 | ✅ latch-lists.test.jsx:148-161 | n/a | n/a | n/a | n/a | n/a |
+| G1 | 提案表示 | ✅ latch-detail.test.jsx:118-167 | n/a | n/a | n/a | n/a | n/a(読取) |
+| G2 | YES回答→allIn/joined | ✅ latch-detail.test.jsx:177-184 | n/a | n/a | n/a | ✅ latch-detail.test.jsx:302-313 | ✅ latch-detail.test.jsx:609-613 |
+| G3 | 辞退(no)の受信表示 | ✅ latch-detail.test.jsx:381-385 | n/a | n/a | n/a | n/a(受信表示のみ) | n/a(読取) |
+| G4 | 見送り+理由 | ✅ latch-detail.test.jsx:228-267 | n/a | n/a | n/a | ✅ latch-detail.test.jsx:228-231 | ✅ latch-detail.test.jsx:269-283 |
+| G5 | undo→open復帰 | ◐ latch-respond.test.js:80-86 | n/a | n/a | n/a | ◐ latch-detail.test.jsx:199-202 | n/a |
+| G6 | undo 409収束 | n/a | n/a | n/a | ✅ latch-detail.test.jsx:400-404 | n/a | n/a |
+| G7 | 他ユーザーlatch URL→404 | n/a | n/a | ✅ latch-detail.test.jsx:411-420 | n/a | n/a | n/a |
+| G8 | 不正uuid/存在なし | n/a | n/a | n/a | ✅ router.test.js:32-34, latch-detail.test.jsx:408-412 | n/a | n/a |
+| H1 | 成立ヒーロー表示 | ✅ latch-detail.test.jsx:464-502 | n/a | n/a | n/a | n/a | n/a(読取) |
+| H2 | .icsダウンロード | ✅ latch-detail.test.jsx:526-527, latch-calendar.test.js:20-54 | n/a | n/a | n/a | n/a | n/a |
+| H3 | チャット送信 | ✅ latch-chat.test.jsx:141-148 | n/a | n/a | n/a | n/a | ✅ latch-chat.test.jsx:141-148 |
+| H4 | チャット読取専用3形 | n/a | n/a | n/a | n/a | ✅ latch-chat.test.jsx:196-226 | n/a |
+| H5 | ポーリング・追頁 | ✅ latch-chat.test.jsx:84-123 | n/a | n/a | n/a | n/a | n/a |
+| H6 | leave | ✅ latch-detail.test.jsx:541-573 | n/a | n/a | n/a | ✅ latch-detail.test.jsx:563-573 | ◐(設計上H4①へ転嫁) |
+| H7 | attendance申告 | ✅ latch-attendance.test.jsx:48-80 | n/a | n/a | n/a | n/a | ◐(設計上H8へ転嫁) |
+| H8 | attendance 409 | n/a | n/a | n/a | ✅ latch-attendance.test.jsx:87-101 | n/a | n/a |
+| H9 | 通報dialog→POST | ✅ latch-safety.test.jsx:96-111 | n/a | n/a | n/a | n/a | n/a(受付のみ) |
+| H10 | ブロックdialog→POST | ✅ latch-safety.test.jsx:60-67 | n/a | n/a | n/a | n/a | ◐ latch-safety.test.jsx:72-73 |
+| I1 | 設定3セクション | ✅ latch-settings.test.jsx:139-159 | n/a | n/a | n/a | n/a | n/a(読取) |
+| I2 | 通知許可トグル4状態 | n/a | n/a | n/a | n/a | ✅ latch-settings.test.jsx:31-122 | n/a |
+| I3 | ブロック一覧・解除 | ✅ latch-blocks.test.jsx:38-98 | n/a | n/a | ✅ latch-blocks.test.jsx:129-157 | n/a | ◐ latch-blocks.test.jsx:93-95 |
+| I4 | 同意状態表示 | ✅ latch-consent.test.jsx:131-142 | n/a | n/a | n/a | n/a | n/a(読取) |
+| J1 | nav・バッジ | ◐ latch-shell.test.jsx:49-66, 188-193 | n/a | n/a | n/a | n/a | n/a(読取) |
+| J2 | 未知ルート→home | n/a | n/a | n/a | n/a | ✅ router.test.js:17-73 | n/a |
+| J3 | ≤720px tabbar | ◐ smoke.test.js:208-213 | n/a | n/a | n/a | n/a | n/a |
+| J4 | お知らせpopover | ◐ latch-notice.test.jsx:195-274 | n/a | n/a | n/a | ◐ latch-notice.test.jsx:239-256 | ◐ latch-notice.test.jsx:258-274 |
+
+**集計(Phase 2時点)**: 適用セル91のうち ✅57 / ◐32 / —2(A4・A7)。ただし✅・◐はすべて**モックfetchのコンポーネント試験**としての証明であり、実ブラウザ×実API結合のE2E証明はゼロ(Playwright spec 0件)。E2Eレベルで価値のある結合ギャップは gaps.md にcluster化済み。
+
+※ authz列が実質G7のみなのはロールが存在しないため(全ユーザー同権・横断は404で隠蔽)。未認証応答(401)はA1のstateで観測する。
+
+### 2.4 Behavior × Dimension matrix — AFTER(Phase 3以降で更新)
+
+Phase 3でimplementしたセルを `implemented(file:line)` / `known-failure(findings#N)` / `waived(reason)` で記録する。
+
+### Phase 1 完了チェックリスト
+
+- [x] 全振る舞いがactor+actionの行を持つ(63行・§2.2)
+- [x] 振る舞いごとにリスク注記(§2.2)
+- [x] 近重複行の意図的な統合を記録(B4→I4・429文言の画面行分散・UIなしAPIの除外)
+- [x] セルがPhase 2評価可能な状態(n/a判断済み・残りは—)
+
+## 3. ギャップ分析(Phase 2 — 2026-10-12完了)
+
+- マッピング方法: 4並列エージェントでvitest全29ファイルの**テスト本文**を読み、アサーション単位でセルへ証拠づけ(§2.3)。タイトルは証拠に使っていない
+- 結果: 適用セル91のうち ✅57 / ◐32 / —2。ただし**すべてモックfetchコンポーネント試験**としての証明で、実ブラウザ×実APIのE2E証明はゼロ
+- False-green 7件(FG-01〜07)・重複クラスタ10件・観察6件 → `findings.md`
+- ギャップ: P0×1 / P1×7 / P2×9 / waived×4 → `gaps.md`(各行にテストアプローチ案つき)
+- 行定義の修正: G3は現行仕様(D-05・回答2択=YES/見送り)へ・G8/J3表記を原本実装に合わせ修正
+
+### Phase 2 exit checklist
+
+- [x] 全cellにステータスと証拠(covered/partialはfile:line)
+- [x] false-greenヒットを findings.md へ記録
+- [x] gaps.md 優先度つき・重複除去・アプローチ案つき
+
+## 4. 実装と再分析ループ(Phase 3/4 — 未実施)
+
+Phase 3は gaps.md のP0→P1→P2順にPlaywrightスペックを小バッチで実装(frontend/tests/e2e/)。Phase 4は再分析(最大3パス)。
+
+## 5. 最終報告(Phase 5 — 未実施)
