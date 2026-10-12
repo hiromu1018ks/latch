@@ -1,10 +1,11 @@
 # LATCH データモデル・API仕様書
 
-- 文書バージョン: v0.8
+- 文書バージョン: v0.9
 - ステータス: Draft
 - プロダクト名: LATCH
-- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28。v0.6更新: 2026-10-10。v0.7更新: 2026-10-12。v0.8更新: 2026-10-12)
+- 作成日: 2026-09-27(v0.3・v0.4更新: 同日。v0.5更新: 2026-09-28。v0.6更新: 2026-10-10。v0.7更新: 2026-10-12。v0.8更新: 2026-10-12。v0.9更新: 2026-10-12)
 - 前提文書: 01 要件定義書 v0.7 / 02 スコープ合意書 v0.4 / 03 UX仕様書 v0.5 / 04 システムアーキテクチャ設計書 v0.5
+- v0.9の変更点(プッシュ通知の登録経路): 08 §2.6・03 D-18の通知基盤(FCM統一)のうち、**トークン登録のAPI契約と保存表**を規定した(13最終目的地ロードマップ V1-P5・backlog V-01)。新表**push_tokens**(第2節)と**POST / GET / DELETE /v1/users/me/push-token**(第5節)を追加。実FCM送信(サーバー認証情報・VAPID鍵を使うFirebasePushSender)は資材待ちの別単位(ws-9・人間領域)であり、**送信側はpush_mode=stub(ドライラン)のまま契約のみを確定させる**のが本改版の位置づけである。error codeの追加なし(422 VALIDATION_ERROR・404 NOT_FOUNDは既存)
 - v0.8の変更点(A/B基盤・MLRベースライン): 09 §5(A/B Test計画の共通規定=仕様正本)を実装に載せるためのデータモデル・適用規則・観測APIを規定した(13最終目的地ロードマップ V1-P4・A-05/A-03)。新表**ab_experiments / ab_assignments**(第2節)・**mlr_baselines**(第2節)・**GET /v1/users/me/ab**(第5節・割付の観測点)を追加。割付の算法(ユーザーIDハッシュ+Active Intent数層化)・割付時点(初回適用時)・ペア適用規則(混在ペアは対照値・FR-25)の実装規定・適用点(D-01閾値・D-08通知上限)・停止ルールと判定不能時の持続規定(09 §5)の表現を第2節に固定した。error codeの追加なし(新APIは読み取り専用で401のみ)
 - v0.7の変更点(体感アンケート): 09 §2.3の体験アンケート(仮説1・5の判定材料・13 §3表2のPhase 1開始前要件)をデータモデル・APIとして規定した。新表**survey_responses**(第2節)・**GET / POST /v1/users/me/survey**(第5節)・error code 2件(SURVEY_ALREADY_ANSWERED / SURVEY_NOT_DUE)・配信契機の実装方式(アクセス時判定・通知typeなし)と集計(`python -m latch.obs.survey`)を追加。回答データはユーザー単位とし、**個別Intentとの紐付け列を持たない**(08 §2.4・09 §2.3)
 - v0.6の変更点(UI v2基準切替): プロトタイプv2「夜と翡翠」への基準切替に伴うAPI改版(決定記録はdocs/plans/ui-v2/phase0-decisions.md)。主要変更は次のとおり。
@@ -69,6 +70,8 @@ users ──1:N── survey_responses(体感アンケート回答・Intentと�
 
 users ──1:N── ab_assignments ──N:1── ab_experiments(A/B割付・v0.8)
 mlr_baselines(MLR週次中央値ベースラインの記録・v0.8・usersと紐付かない)
+
+users ──1:N── push_tokens(プッシュ通知トークン登録・v0.9・退会で消える)
 ```
 
 01第17節の5 Entity(User, Intent, MatchCandidate, Latch, MatchEvent)に、D-06中間表現のgroup_candidates、そして第25節Safetyと03 D-18の実装に必要なblocks / reports / notifications / messagesを加える。friendshipsは02 D-03由来だが、**v0.4でMVP実装から外れた(将来版としてEntity定義のみ残置。MVPの参照経路は存在しない)**(02 v0.3 D-03再決定)。
@@ -306,6 +309,26 @@ calibration_records.proposal_snapshotはこのproposalと同形とする(09 D-09
 | recorded_at | timestamptz | NOT NULL | 記録時刻(Clock由来) |
 
 行は追記のみ(再ベースライン〔A/B採用後の4週間再計測〕のたびに行を追加)。**判定はrecorded_at最新行を用いる**。記録・判定はCLI(`python -m latch.obs.mlr`のbaseline/show/check)。週次MLRの導出はkpi_dailyのmlr行(日次の分子/分母)を週へ集約した値(比率は保存しない規律どおり集計時に計算)。
+
+### push_tokens(プッシュ通知トークン登録・v0.9新設)
+
+03 D-18・04第2節の通知基盤(FCM統一)のうち、クライアントが取得したFCMトークン(Web Push)を受け取り保存する表。実FCMでの送信はws-9(資材待ち・人間領域)であり、**保存と送信の契約を分離する**(本表の登録は送信手段の実装状態と独立に成立する)。
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | uuid | PK | |
+| user_id | uuid | FK→users ON DELETE CASCADE, NOT NULL | 退会でトークンも消える(送信先の自動失効) |
+| token | text | NOT NULL, UNIQUE | FCMトークン(端末+ブラウザ単位の一意文字列)。**UNIQUE(token)=トークンは端末に束ねる**(下記の実装規定1) |
+| platform | text | NOT NULL, CHECK IN ('web'), DEFAULT 'web' | 配信経路。MVPはWeb Pushのみ('android'/'ios'はモバイル段階で値域追加) |
+| created_at / updated_at | timestamptz | NOT NULL | |
+| last_seen_at | timestamptz | NULL | 最終登録(更新)時刻。FCMのトークンローテーションで新しいトークンが来たかの観察用 |
+
+**実装規定(v0.9)。**
+
+1. **同一トークンの別ユーザーによる再登録は所有権の移動(upsert)として受理する。** FCMトークンは端末+ブラウザ単位で発行されるため、同一端末での再ログイン・アカウント切り替えで同一トークンが別ユーザーから登録され得る。UNIQUE(token)へのON CONFLICTでuser_idを登録者へ置換する(409にしない)。旧ユーザーへの送信は以後行われない
+2. **トークン値をログ・応答へ出さない(08第2.4節と同じ規律)。** API応答は下位4文字のみ(`token_last4`)。構造化ログは登録・削除のイベント名とuser_id有無のみ
+3. **送信側のトークン解決はreal実装(FirebasePushSender)の内部。** push_mode=stub(ドライラン)の間は本表を参照しない。real化の際はuser_id → push_tokens(platform='web')の順に解決する
+4. **D-08(通知上限)・FR-21(表示規制)は登録と独立に適用される。** トークン登録の有無は通知の内容・頻度の規制を変えない(08 §2.6「プッシュ許可の有無と独立に適用」の実装側の対応)
 
 ## 3. Index設計
 
@@ -591,7 +614,40 @@ errors:   401(認証欠落・既定の認証エラー)
 
 **集計・運用の経路。** 実験の開始/停止・一覧は`python -m latch.obs.ab`(latch/obs/ab.py)が担う。MLRベースラインの記録と前期比判定は`python -m latch.obs.mlr`(latch/obs/mlr.py)。D-02警報線(YES率10%未満・通知オフ率週比2倍)とA/B有害シグナル(通報率急増)の自動検知は週次警報ジョブ(latch/obs/kpi_alert.py・M4 ws-4のkpi_daily集計に乗る拡張)。いずれも判定の実施はPhase 2以降の運用であり、本実装は装置とその試験まで(09 §5/§6は仕様正本のまま)。
 
+### POST / GET / DELETE /v1/users/me/push-token — プッシュ通知トークン登録(v0.9新設・08 §2.6)
 
+**POST /v1/users/me/push-token — 登録(upsert)**
+
+```json
+request:  {"token": "<FCMトークン(1〜4096字)>", "platform": "web"}
+response: 201 {"push_token": {"token_last4": "ab3f", "platform": "web",
+                              "registered_at": "2026-10-12T09:00:00+09:00"}}
+errors:   422 VALIDATION_ERROR(token空・4096字超過・platform値外)
+          404 NOT_FOUND(未登録JWT)
+```
+
+登録はupsert(第2節push_tokensの実装規定1)。同一トークンの再登録は`last_seen_at`/`updated_at`を更新し201を返す(冪等)。別ユーザーによる再登録は所有権を移動する。応答にトークン全文を含めない(規定2)。
+
+**GET /v1/users/me/push-token — 登録済みトークン一覧(マスク付き)**
+
+```json
+response: 200 {"tokens": [{"token_last4": "ab3f", "platform": "web",
+                            "registered_at": "2026-10-12T09:00:00+09:00"}]}
+```
+
+自分の登録済みトークンを`token_last4`マスク付きで返す(設定画面の登録状態表示用・0件は空配列)。
+
+**DELETE /v1/users/me/push-token — 登録解除**
+
+```json
+request:  {"token": "<FCMトークン>"}
+response: 204
+errors:   404 NOT_FOUND(当該トークンの登録がない)
+```
+
+許可の取り下げ・ログアウト時のクリーンアップ経路。所有者でないトークン(他ユーザーへ移動済み)は404として扱う(存在の探査に使えない形)。
+
+**フロントエンドの登録フロー(実装方式・設計判断)。** Service Worker(`latch-push-sw.js`)を登録し、通知許可(granted)のときトークン取得→POST登録を行う。実FCM資材(VAPID鍵・Firebase構成)が設定されている環境ではFCM SDK経由のトークンを用いる。**資材のない環境(開発・E2E)では`stub-`プレフィックスの疑似トークンを生成してAPI登録往復を完結させる**(登録経路の試験可能性を資材待ちから分離する。送信はstubのまま=ws-9)。許可拒否(denied)では登録を行わず、アプリ内通知(D-18のフォールバック)への到達は registrationsと無関係に保証される。
 
 ### その他のエンドポイント
 
@@ -611,6 +667,9 @@ errors:   401(認証欠落・既定の認証エラー)
 | GET /v1/users/me/survey | 体感アンケートの自分の回答状況(v0.7・09 §2.3) | 本人のみ。round別のdue/answered判定+week4のavailable_at |
 | POST /v1/users/me/survey | 体感アンケートの回答保存(v0.7) | 本人のみ。ラウンド単位・単発(二重は409 SURVEY_ALREADY_ANSWERED)。設問構成と配信契機は上節の規定どおり |
 | GET /v1/users/me/ab | 自分のA/B割付一覧(v0.8・09 §5) | 本人のみ。読み取り専用・割付を作らない(空配列可)。UIなし |
+| POST /v1/users/me/push-token | プッシュトークン登録(upsert・v0.9) | 本人のみ。token_last4マスク付き201。同一トークンは所有権移動(第2節) |
+| GET /v1/users/me/push-token | 登録済みトークン一覧(v0.9) | 本人のみ。token_last4マスク付き(0件は空配列) |
+| DELETE /v1/users/me/push-token | プッシュトークン登録解除(v0.9) | 本人のみ。不在は404 NOT_FOUND |
 | GET /v1/users/me/blocks | ブロック一覧 | 本人のみ。ページネーション共通規定を適用 |
 | POST /v1/users/{id}/block | ブロック | 本人操作 |
 | DELETE /v1/users/{id}/block | ブロック解除 | 本人操作。過去の候補除外・読み取り専用化には遡及しない(08 D-23の「回収しない」と同じ線) |
@@ -669,5 +728,7 @@ errors:   401(認証欠落・既定の認証エラー)
 - 第19節(v0.7追加分): survey 2 API(GET/POST /v1/users/me/survey)の追加(未反映・次回01改版時に反映)
 - 第17節(v0.8追加分): ab_experiments・ab_assignments・mlr_baselinesの追記(未反映・次回01改版時に反映)
 - 第19節(v0.8追加分): GET /v1/users/me/abの追加(未反映・次回01改版時に反映)
+- 第17節(v0.9追加分): push_tokensの追記(未反映・次回01改版時に反映)
+- 第19節(v0.9追加分): push-token 3 API(POST/GET/DELETE)の追加(未反映・次回01改版時に反映)
 - 第19節: API一覧の拡張(parseのwarnings、responseの3値、友人・通知・通報系の追加)。第19節(v0.3追加分): 認証・ユーザー系(auth/token・refresh・logout、users/me、初回登録birth_date・18歳検証、04 D-21)、sessions、attendance(09 D-09)、ブロック一覧・解除、友人拒否・取り消し、ページネーション共通規定、エラーcode列挙。**第19節(v0.4追加分)**: GET /v1/intents(自Intent一覧・statusフィルタ)の追加、friends系の将来版化
 - 第26節: D-06は中間表現のみ解消(残りは06)と記録。**v0.4の反映**は02 v0.3 D-03再決定(visibility 2値の再定義・friendshipsの将来版化・proposal生成分岐)と下書き保存(draftの作成・active化・期限管理)として第26節へ記録済み(01 v0.4)
