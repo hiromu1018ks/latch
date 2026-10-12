@@ -62,6 +62,8 @@ async def build_state(app: FastAPI, env) -> None:
 
     _patch_testkeys_loader()
 
+    llm_mode = _var(env, "LATCH_LLM_MODE", "stub")
+    app.state.llm_mode = llm_mode
     db = RealD1Binding(env.DB)
     clock = SystemClock()
     atomic = D1AtomicRepository(db)
@@ -100,12 +102,34 @@ async def build_state(app: FastAPI, env) -> None:
         limiter=limiter,
     )
     consent_service = build_consent_service(db, clock)
+    if llm_mode == "real":
+        # 実LLM parse(実Anthropic・fetch直書き)。鍵欠落はfail-fast
+        # (静かにstubへ落ちない — build_real_gateway)。llm_attemptsへ
+        # parser試行を記録する(RecordingParser)。
+        from latch.adapters.d1.attempts import D1AttemptRecorder
+        from latch_worker.llm_real import (
+            RecordingParser,
+            build_real_gateway,
+            default_parser_assets,
+            real_env_config,
+        )
+
+        prompt, schema = default_parser_assets()
+        real_gateway = build_real_gateway(
+            clock,
+            parser_system_prompt=prompt,
+            parser_output_schema=schema,
+            **real_env_config(env),
+        )
+        parse_parser = RecordingParser(real_gateway, D1AttemptRecorder(db), clock)
+    else:
+        parse_parser = None
     app.state.users_service = D1UsersFacade(
         clock=clock, db=db, atomic=atomic, sessions=sessions
     )
     app.state.consent_service = consent_service
     app.state.intent_parse_service = build_parse_service(
-        clock, user_lookup, consent_service.consented
+        clock, user_lookup, consent_service.consented, parser=parse_parser
     )
     geo = D1GeoService(db)
     from latch.adapters.d1.schedule import D1ScheduleRepository

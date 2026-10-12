@@ -1,9 +1,10 @@
 """マッチングパイプラインのWorkers組立(非同期処理・2026-10-10)。
 
-意図保存(outbox)→Queues→評価(T4検索+cheap judge+stub jev)→提案
+意図保存(outbox)→Queues→評価(T4検索+cheap judge+jev)→提案
 (atomic.apply_proposal・D-08上限・通知job同時保存)→通知配送→回答成立、
-までの非同期一連をWorkers上で動かす。LLMはstub確定(実LLM呼出しは
-承認待ちのまま・外部送信なし)。
+までの非同期一連をWorkers上で動かす。LLMはLATCH_LLM_MODEで切替
+(stub=決定的スタブ〔ローカル試験経路はこちら固定〕・real=fetch直書きの
+実プロバイダ〔llm_real.py・実配備のみsecretで選択〕・2026-10-12)。
 
 構成(計画§4配送・§5設計規律・実配備probe差異5件へ対応済み):
 - dispatch: apply_intentが書いたoutbox(pending)をQueuesへ。API経路は
@@ -14,9 +15,9 @@
   UNIQUEの3重で自然冪等(追加LLM呼出しもclaimが防ぐ)
 - cron(*/5): ScheduledEvaluator(due回収→評価→完了確定)・jobs lease回収・
   outbox掃き・notify/retention job実行・run_retention
-- 評価の中身: ensure embedding(stub)→D1RetrievalRepository(T4)→
-  layer3 cheap judge→match_candidates→EvaluationJobRunner(stub jev・
-  試行記録)→latch_score→閾値超えをapply_proposal(D-08・通知job込み)
+- 評価の中身: ensure embedding(stub/real)→D1RetrievalRepository(T4)→
+  layer3 cheap judge→match_candidates→EvaluationJobRunner(jev・試行記録)→
+  latch_score→閾値超えをapply_proposal(D-08・通知job込み)
 """
 
 from __future__ import annotations
@@ -36,7 +37,13 @@ from latch.adapters.d1.retrieval import D1RetrievalRepository
 from latch.adapters.d1.schedule import D1ScheduleRepository
 from latch.domain.time import from_micros, micros
 from latch.domain.types import EvaluationKey, IntentSnapshot
-from latch.llm.jev import JevTextInput, build_jev_text, validate_and_normalize
+from latch.llm.jev import (
+    JEV_MODEL,
+    JevJudgment,
+    JevTextInput,
+    build_jev_text,
+    validate_and_normalize,
+)
 from latch.llm.stub import StubLLM
 from latch.runtime.cloudflare.jobs import EvaluationJobRunner, SendResult
 from latch.runtime.cloudflare.retention import run_retention
@@ -47,13 +54,12 @@ from latch.worker.matching.proposal import LatchIntentInputs, build_proposal
 from latch_worker.gjson import loads_json
 
 K_J = 8  # 1評価あたりのJev実行上限(06 §8 D-24・layer4.K_Jと同一)
-JEV_MODEL = "jev-1.13.0"
-PRICE_VERSION = "stub-1"
+PRICE_VERSION = "stub-1"  # stub構成のprice_version(realはllm_real.PRICE_VERSION_REAL)
 
 # stub JEV応答(決定的・実LLMと無関係)。E2Eで提案が成立するよう両方向の
 # 受諾確率を0.9に固定する(score=1.0×min(0.9,0.9)=0.9≥閾値0.60・high)。
-# stubはコンストラクタで応答差替え可能な試験用プロバイダ(10 §1) —
-# 実LLM呼出しは承認待ちのまま、この応答も外部送信なし。
+# stubはコンストラクタで応答差替え可能な試験用プロバイダ(10 §1)。stub
+# 経路の決定性は変わらない(realはllm_real.pyのfetch直書き実プロバイダ)。
 STUB_JEV_RESPONSE: dict = {
     "model": JEV_MODEL,
     "answers": {
@@ -96,7 +102,7 @@ class PipelineServices:
     gateway: D1EvaluationGateway
     delivery: D1NotificationDelivery
     runner: EvaluationJobRunner
-    llm: StubLLM
+    llm: Any  # StubPipelineLLM | RealPipelineLLM(統一IF: embed/judge → JevJudgment)
     clock: Any
     geo: Any = None
 
@@ -104,8 +110,42 @@ class PipelineServices:
         return self.clock.now()
 
 
+class StubPipelineLLM:
+    """stub実装(従来挙動そのまま・llm_attemptsのembedding記録はなし)。
+
+    judgeはstub envelopeをJevJudgment(provider="stub")へ正規化して返す
+    — real(llm_real.RealPipelineLLM)と同じIFで、_evaluate_pairの記録値
+    (fingerprint・actual_provider・cost 0)が従来と一字変わらないことを
+    単体試験が固定する。
+    """
+
+    mode = "stub"
+
+    def __init__(self, stub: StubLLM) -> None:
+        self._stub = stub
+
+    async def embed(self, text: str, *, intent_id: str) -> list[float]:
+        return await self._stub.embed(text)
+
+    async def judge(
+        self, intent_a: str, intent_b: str, *, intent_ids: list[str]
+    ) -> JevJudgment:
+        raw = await self._stub.judge(intent_a, intent_b)
+        return JevJudgment(
+            provider="stub",
+            model=str(raw.get("model") or JEV_MODEL),
+            result=validate_and_normalize(raw),
+            usage=raw.get("usage") if isinstance(raw, dict) else None,
+        )
+
+
 def build_pipeline(env) -> PipelineServices:
-    """env bindings(DB・JOBS)からpipeline service一式を構築する。"""
+    """env bindings(DB・JOBS)からpipeline service一式を構築する。
+
+    LATCH_LLM_MODE(実配備ではsecretがvarsを上書き)がrealのときのみ
+    fetch直書きの実プロバイダを構築する。鍵欠落はfail-fast
+    (build_real_gateway・静かにstubへ落ちない)。
+    """
     from latch.adapters.d1.evaluations import D1EvaluationGateway as GW
     from latch.core.clock import SystemClock
     from latch_worker.d1binding import RealD1Binding
@@ -114,6 +154,13 @@ def build_pipeline(env) -> PipelineServices:
     db = RealD1Binding(env.DB)
     clock = SystemClock()
     gateway = GW(db)
+    mode = str(getattr(env, "LATCH_LLM_MODE", "stub") or "stub")
+    if mode == "real":
+        from latch_worker.llm_real import build_real_pipeline_llm
+
+        llm = build_real_pipeline_llm(env, clock, db)
+    else:
+        llm = StubPipelineLLM(StubLLM(jev_response=STUB_JEV_RESPONSE))
     return PipelineServices(
         db=db,
         atomic=D1AtomicRepository(db),
@@ -123,7 +170,7 @@ def build_pipeline(env) -> PipelineServices:
         gateway=gateway,
         delivery=D1NotificationDelivery(db, push=PushSenderStub()),
         runner=EvaluationJobRunner(gateway, coordinator=D1JobCoordinator(db)),
-        llm=StubLLM(jev_response=STUB_JEV_RESPONSE),
+        llm=llm,
         clock=clock,
         geo=D1GeoService(db),
     )
@@ -242,9 +289,10 @@ class QueueDispatcher:
 
 
 async def _ensure_embedding(services: PipelineServices, origin: dict, *, now) -> bool:
-    """起源Intentのembeddingをstubで生成・保存(embedding worker相当)。
+    """起源Intentのembeddingを生成・保存(embedding worker相当)。
 
-    raw_textは経路に含めない(確定値#10・07 §3)。既存あれば何もしない。
+    stub=決定的スタブ・real=実Gemini(llm_real・embedding試行はllm_attemptsへ
+    記録)。raw_textは経路に含めない(確定値#10・07 §3)。既存あれば何もしない。
     """
     if origin["embedding"]:
         return False
@@ -262,7 +310,7 @@ async def _ensure_embedding(services: PipelineServices, origin: dict, *, now) ->
             time_end=from_micros(origin["time_end"]) if origin["time_end"] else None,
         )
     )
-    vector = await services.llm.embed(text)
+    vector = await services.llm.embed(text, intent_id=str(origin["id"]))
     (
         await services.db.prepare(
             "UPDATE intents SET embedding = ?, updated_at = ?"
@@ -469,36 +517,44 @@ async def _evaluate_pair(
     text_b = build_jev_text(_jev_text_input(b_row), label="B")
     va = int(target["intent_a_version"])
     vb = int(target["intent_b_version"])
-    # fingerprint: 実送信入力+判定規則+provider/model版(§5.3・stub固定)
+    real_mode = getattr(services.llm, "mode", "stub") == "real"
+    # fingerprint: 実送信入力+判定規則+provider/model版(§5.3)。stub構成の値は
+    # 従来と同一(stub|jev-1.13.0|jev-v1)・realは構成区分で始まる(再評価冪等は
+    # match_candidates.jev_result IS NULLガードが担う)
+    fingerprint = (
+        f"real|{JEV_MODEL}|jev-v1" if real_mode else f"stub|{JEV_MODEL}|jev-v1"
+    )
     key = EvaluationKey(
         kind="jev",
         pair_key=f"jev:{a_id}:{b_id}:{va}:{vb}",
-        fingerprint=f"stub|{JEV_MODEL}|jev-v1",
+        fingerprint=fingerprint,
     )
     captured: dict = {}
 
     async def sender(_key: EvaluationKey) -> SendResult:
-        raw = await services.llm.judge(text_a, text_b)
-        normalized = validate_and_normalize(raw)
+        judgment = await services.llm.judge(
+            text_a, text_b, intent_ids=[a_id, b_id]
+        )
         mutual = min(
-            float(normalized["would_a_accept_b"]),
-            float(normalized["would_b_accept_a"]),
+            float(judgment.result["would_a_accept_b"]),
+            float(judgment.result["would_b_accept_a"]),
         )
         score = latch_calc.LATCH_C * mutual
-        usage = raw.get("usage") or {}
+        usage = judgment.usage or {}
         captured["score"] = score
         captured["jev_result"] = {
-            **normalized,
-            "provider": "stub",
-            "model": str(raw.get("model") or JEV_MODEL),
+            **judgment.result,
+            "provider": judgment.provider,
+            "model": judgment.model,
         }
         return SendResult(
             status="succeeded",
-            actual_provider="stub",
-            actual_model=str(raw.get("model") or JEV_MODEL),
+            actual_provider=judgment.provider,
+            actual_model=judgment.model or JEV_MODEL,
             input_tokens=_int(usage.get("input_tokens")),
             output_tokens=_int(usage.get("output_tokens")),
-            cost_confirmed_micros=0,  # stubは実費0円(確定)
+            # stubは実費0円(確定)・realは請求確定前のためNULL(0円として計上しない)
+            cost_confirmed_micros=None if judgment.provider != "stub" else 0,
             payload=captured,
         )
 
@@ -506,9 +562,9 @@ async def _evaluate_pair(
         key,
         owner=owner,
         sender=sender,
-        requested_provider="stub",
+        requested_provider="typesafe" if real_mode else "stub",
         requested_model=JEV_MODEL,
-        price_version=PRICE_VERSION,
+        price_version="real-1" if real_mode else PRICE_VERSION,
         now=now,
     )
     if not out.get("completed") or "score" not in captured:

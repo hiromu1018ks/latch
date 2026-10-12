@@ -16,9 +16,14 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/v1/*", "/health", "/probe/*"]
   },
+  // LATCH_LLM_MODEはここに書かない: 現行wranglerはvarsと同名secretの登録を
+  // 拒否するため(code 10053)、実配備のreal化はwrangler secret
+  // LATCH_LLM_MODE=realでのみ行う。コード既定値が"stub"
+  // (state.build_state・pipeline.build_pipeline)のため、secret未設定の
+  // ローカルdev/miniflare・CIは常にstubのまま。ロールバックは
+  // `wrangler secret delete LATCH_LLM_MODE` + make cf-deploy。
   "vars": {
     "LATCH_ENV": "api",
-    "LATCH_LLM_MODE": "stub",
     "PROBE_TEXT_VAR": "probe-value"
   },
   "d1_databases": [

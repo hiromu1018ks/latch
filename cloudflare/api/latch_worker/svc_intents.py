@@ -5,8 +5,9 @@
 を同じ順序で再現する。書き込みは adapters/d1/atomic.apply_intent
 (command marker・outbox・journalと同じbatch確定)。
 
-parseは本体IntentParseServiceをStubLLMアダプタで構築する
-(実LLM呼出し無し — LATCH_LLM_MODE=stub相当・承認待ちのまま)。
+parseはLATCH_LLM_MODEで切替(2026-10-12): 既定=StubLLMアダプタ(ローカル
+試験経路・決定的)・real=llm_real.RecordingParser(実Anthropic・fetch直書き・
+llm_attempts記録つき。state.pyがmode=realのときのみ注入する)。
 """
 
 from __future__ import annotations
@@ -73,13 +74,17 @@ class _StubParserAdapter:
         return await self._stub.complete_structured(text, current_date)
 
 
-def build_parse_service(clock, user_lookup, consent_lookup) -> IntentParseService:
-    """StubLLMでparseサービスを構築(make_intent_parse_serviceのstub経路)。"""
+def build_parse_service(clock, user_lookup, consent_lookup, *, parser=None):
+    """parseサービスを構築(make_intent_parse_service相当)。
+
+    parser=None(既定)はStubLLM。real時はstate.pyがllm_realの
+    RecordingParserを渡す(LLMGateway.parse_intentとProtocol適合)。
+    """
     from latch.llm.stub import StubLLM
 
     return IntentParseService(
         clock=clock,
-        parser=_StubParserAdapter(StubLLM()),
+        parser=parser if parser is not None else _StubParserAdapter(StubLLM()),
         user_lookup=user_lookup,
         consent_lookup=consent_lookup,
     )

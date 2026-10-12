@@ -4,7 +4,41 @@
 本書は実装セッション横断の作業状態記録。最終報告書は
 docs/reviews/cloudflare-migration-implementation-report.md。
 
-## 現在のフェーズ: フロントエンド配線(Workers Assets配信)完了 ✅(2026-10-10)
+## 現在のフェーズ: 実LLM切替(stub→real)実施 ✅(2026-10-12・V1-P1 A-2)
+
+実配備(https://latch-api.hiromu1018ks.workers.dev)で**Parser=実Anthropic
+(claude-haiku-4-5)・Embedding=実Gemini(gemini-embedding-001)・Jev=実TypeSafe
+(jev-1.13.0・フォールバックAnthropic Haiku)が稼働**。スモーク証拠:
+docs/testassets/results/llm-real-smoke-20261012-060102.yaml
+(parse実応答=stub決定出力と相違〔「明日の夜」を当日基準で解決〕・
+embedding 2件+jev 1件がllm_attemptsへactual_provider=google/typesafe_jev
+で記録・jev_resultへprovider/model入り・実Jevスコア0.95で提案自動生成
+〔25.5秒〕→yes×2→matched〔26.2秒〕・実呼び出し計4件・34秒)。
+
+- **機構**: wrangler.jsoncからLATCH_LLM_MODE varを**削除**(現行wranglerは
+  varsと同名secretの登録を拒否するため・code 10053を実配備で発見)+wrangler
+  secret LATCH_LLM_MODE=real。実装はコード既定値"stub"を読むため、secretを
+  設定しないローカルdev/miniflare・CIは**常にstubのまま**(ci/staging/cf-dev
+  の決定性と課金保護は不変・cf E2E再実施で確認済み)
+- **実装**: cloudflare/api/latch_worker/llm_real.py(fetch直書きtransportの
+  3系統+フォールバック・workers.fetch使用・timeout/フォールバック/breaker/
+  送信記録の規律は本体LLMGatewayをそのまま再利用)。pipeline.build_pipeline
+  とstate.build_stateがLATCH_LLM_MODEで分岐(stub経路はfingerprint・cost・
+  llm_attempts記録を含め従来と一字も変わらない=単体試験で固定)。real時のみ
+  parser/embeddingのllm_attempts記録を追加(jevはEvaluationJobRunnerが従来どおり)
+- 鍵3本(LATCH_ANTHROPIC/GEMINI/TYPESAFE_API_KEY)はwrangler secretへ設定済み
+- **ロールバック手順**: `wrangler secret delete LATCH_LLM_MODE` + `make
+  cf-deploy`(varsはもう無くコード既定stubへ戻る)。加えて設計上の縮退
+  (TypeSafe障害→Haikuフォールバック・双障害→skipped)は組み込み済み
+- **発見(実配備トラブル)**: respond(YES回答)直後の_select_latchが503になる
+  事象=**実D1へ0005_ui_v2_leave.sql(left_user_ids・messages.sender_id NULL
+  許容)が未適用**だったため(ローカルcf-e2eは全マイグレーションを当てるため
+  発現しない)。wrangler d1 execute --remote --fileで適用し解決。以後の
+  教訓: **実D1へcloudflare/migrationsを新人が追加したら実D1へも適用を忘れない**
+- **残るのは別承認待ち項目(実push・本番切替判断・実LLM品質比較)と最終報告書更新**
+  (品質自体はG1/G2ゲートで実API検証済みのため再評価不要)
+
+## 過去のフェーズ: フロントエンド配線(Workers Assets配信)完了 ✅(2026-10-10)
 
 実環境(https://latch-api.hiromu1018ks.workers.dev)で**同一オリジンによる
 フロント配信+APIが稼働**。ブラウザ実機でログイン→同意→意図作成→提案自動
@@ -24,8 +58,7 @@ D1はE2E実施前のbaselineへ復元)。
   gzip 7925KiB不変(assetsはscript上限外)
 - frontend/srcのコード変更ゼロ(ユーザー登録POST /v1/usersはv1フロントにUIが
   ないためAPI直叩きで事前実施 — 記録YAMLに明記)
-- LLMはstubのまま(実LLM呼出しは承認待ち・外部送信なし)
-- 残るのは別承認待ち項目(実LLM品質比較・実push・本番切替)と最終報告書更新
+- LLMはstub(2026-10-12にreal切替実施 — 冒頭節参照)
 
 ## 本体実装の成果(2026-10-09)
 
@@ -120,13 +153,15 @@ LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
 
 - Worker(API本体+probe+フロントassets併設): https://latch-api.hiromu1018ks.workers.dev
   (cloudflare/api — gzip 7925KiB(上限10MB)・cron */5・observability off・
-  vars: LATCH_ENV=api, LATCH_LLM_MODE=stub・queue consumer稼働。
+  vars: LATCH_ENV=api〔LATCH_LLM_MODEは2026-10-12にvarsから削除=secret切替へ〕・
+  queue consumer稼働。
   Workers Assetsでfrontend/dist/clientを同一オリジン配信・API/probe経路は
   run_worker_firstでworker先行)
-  (cloudflare/api — gzip 7925KiB(上限10MB)・cron */5・observability off・
-  vars: LATCH_ENV=api, LATCH_LLM_MODE=stub・queue consumer稼働)
+  secrets(2026-10-12〜): LATCH_LLM_MODE=real・LATCH_ANTHROPIC_API_KEY・
+  LATCH_GEMINI_API_KEY・LATCH_TYPESAFE_API_KEY(鍵値は.env由来・repo外)
 - D1: latch-core(id: f40367ac-7631-4506-a083-c52e7ab51787)
-  マイグレーション0001〜0004適用済み+geofeatures 7行+probe_events表
+  マイグレーション0001〜0005適用済み(0005は2026-10-12に実D1へ適用)+
+  geofeatures 7行+probe_events表
   (cron稼働証跡として継続記録)
 - Queues: latch-jobs-probe(producer=env.JOBS・consumer=パイプライン評価)
 - 認証: .envのCLOUDFLARE_API_TOKEN・アカウント67e928741c8e73415fe206699d0f1667
@@ -153,7 +188,7 @@ LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
   実環境URLへ流す — PostgreSQL用reference_harnessと同型の
   cloudflare_harnessが必要(actor provisioningはデプロイ済みAPI経由。
   認証鍵はwrangler secret/varで同一テスト鍵を設定)
-- 費用: Workers Paid枠内。実LLM呼出しは別承認(未実施のまま)
+- 費用: Workers Paid枠内。実LLM呼出しは2026-10-12に実施(冒頭節参照)
 
 ## 過去の成果(詳細は各節)
 
@@ -272,4 +307,4 @@ LATCH_CF_REMOTE=1 LATCH_CF_API_URL=https://latch-api.hiromu1018ks.workers.dev \
 - 実D1確認: `npx wrangler d1 execute latch-core --remote --command "..."`
 - miniflareのD1は `wrangler d1 execute --local` がdev serverと別sqliteを
   参照する点に注意(devが使う実ファイルへ直接sqlite3でマイグレーションした)
-- **実LLM呼出し・実データ移行はユーザー承認待ちのまま**(実配備・実D1は承認済み)
+- **実LLM呼出しは2026-10-12に実施**(V1-P1 A-2委任・冒頭節)。**実データ移行はユーザー承認待ちのまま**(実配備・実D1は承認済み)

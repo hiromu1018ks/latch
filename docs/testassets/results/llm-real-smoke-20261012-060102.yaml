@@ -1,0 +1,72 @@
+date: '2026-10-12T06:00:28.185203+00:00'
+base_url: https://latch-api.hiromu1018ks.workers.dev
+llm_mode: real
+mechanism: wrangler.jsoncからLATCH_LLM_MODE varを削除(同名secretの登録をwranglerが拒否・code 10053)+wrangler secret LATCH_LLM_MODE=real。コード既定値stubのためsecret未設定のローカルdev/miniflareは常にstub
+cost_estimate:
+  planned_calls:
+    parser_anthropic_haiku45: 1
+    embedding_gemini: 2
+    jev_typesafe: 1
+    jev_fallback_anthropic_haiku: 0〜1(429/529/timeout時のみ)
+  estimate_usd_upper: 0.1
+actors:
+  alpha:
+    subject: llm-smoke-alpha-cf237668
+    user_id: bf01df90-4f70-40f7-90bb-5f47801d3760
+  beta:
+    subject: llm-smoke-beta-1a84839c
+    user_id: dbcce69c-6b08-4eff-bac3-c5b9b246157a
+timings_s:
+  parse_done: 4.0
+  intents_created: 5.1
+  proposal_generated: 25.5
+  matched: 26.2
+  total: 34.0
+checks:
+  proposal_auto_generated: true
+  matched: true
+  llm_attempts_real_providers:
+    parser: anthropic
+    embedding: google
+    jev:
+    - typesafe_jev
+  jev_result_provider_recorded: true
+parse:
+  input_text_head: 明日の夜、天文館近くで海鮮系の食事に行きたい。予
+  category_primary: meal
+  time_start: '2026-10-13T19:00:00+09:00'
+  location_name: 天文館
+  budget_max: 8000
+  alcohol_involved: false
+  differs_from_stub: true
+intent_ids:
+  alpha: bd516402-d0d7-4893-ab54-dd37414dc273
+  beta: b5a0f0c5-ac22-4687-8b14-3bb91d695c13
+llm_attempts_window:
+- system: embedding
+  status: succeeded
+  actual_provider: google
+  actual_model: gemini-embedding-001
+  in_tok: null
+  out_tok: null
+  c: 2
+- system: jev
+  status: succeeded
+  actual_provider: typesafe_jev
+  actual_model: jev-1.13.0
+  in_tok: 1369
+  out_tok: 117
+  c: 1
+- system: parser
+  status: succeeded
+  actual_provider: anthropic
+  actual_model: claude-haiku-4-5
+  in_tok: null
+  out_tok: null
+  c: 1
+jev_result:
+  provider: typesafe_jev
+  model: jev-1.13.0
+  would_a_accept_b: 0.95
+  would_b_accept_a: 0.95
+  latch_score: 0.95
